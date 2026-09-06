@@ -706,7 +706,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   const backFarL = cam.project(-HALF_CORRIDOR, -backDist);
   const backFarR = cam.project(HALF_CORRIDOR, -backDist);
 
-  ctx.fillStyle = "#14181e";
+  ctx.fillStyle = "#0e1016";
   ctx.beginPath();
   ctx.moveTo(backFarL.x, backFarL.y);
   ctx.lineTo(backFarR.x, backFarR.y);
@@ -715,60 +715,12 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   ctx.closePath();
   ctx.fill();
 
-  for (let gy = 0; gy < 6; gy++) {
-    const d0 = -(gy + 1) * cell;
-    const d1 = -gy * cell;
-    if (gy % 2 === 0) {
-      const l0 = cam.project(-HALF_CORRIDOR, d0);
-      const r0 = cam.project(HALF_CORRIDOR, d0);
-      const l1 = cam.project(-HALF_CORRIDOR, d1);
-      const r1 = cam.project(HALF_CORRIDOR, d1);
-      ctx.fillStyle = "rgba(255,255,255,0.02)";
-      ctx.beginPath();
-      ctx.moveTo(l0.x, l0.y);
-      ctx.lineTo(r0.x, r0.y);
-      ctx.lineTo(r1.x, r1.y);
-      ctx.lineTo(l1.x, l1.y);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  ctx.strokeStyle = "rgba(50, 60, 72, 0.3)";
-  ctx.lineWidth = 0.5;
-  for (let gy = 0; gy <= 6; gy++) {
-    const d = -gy * cell;
-    const pL = cam.project(-HALF_CORRIDOR, d);
-    const pR = cam.project(HALF_CORRIDOR, d);
-    ctx.beginPath();
-    ctx.moveTo(pL.x, pL.y);
-    ctx.lineTo(pR.x, pR.y);
-    ctx.stroke();
-  }
-
-  const backWallW = 10;
-  ctx.fillStyle = "rgba(16, 20, 28, 0.7)";
-  ctx.beginPath();
-  ctx.moveTo(backFarL.x - backWallW, backFarL.y);
-  ctx.lineTo(backFarL.x, backFarL.y);
-  ctx.lineTo(backLeft.x, backLeft.y);
-  ctx.lineTo(backLeft.x - backWallW, backLeft.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(backFarR.x, backFarR.y);
-  ctx.lineTo(backFarR.x + backWallW, backFarR.y);
-  ctx.lineTo(backRight.x + backWallW, backRight.y);
-  ctx.lineTo(backRight.x, backRight.y);
-  ctx.closePath();
-  ctx.fill();
-
   const nearLeft = cam.project(-HALF_CORRIDOR, 0);
   const nearRight = cam.project(HALF_CORRIDOR, 0);
   const farLeft = cam.project(-HALF_CORRIDOR, maxDist);
   const farRight = cam.project(HALF_CORRIDOR, maxDist);
 
-  ctx.fillStyle = "#151a22";
+  ctx.fillStyle = "#12161e";
   ctx.beginPath();
   ctx.moveTo(nearLeft.x, nearLeft.y);
   ctx.lineTo(nearRight.x, nearRight.y);
@@ -793,7 +745,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
       const rightNear = cam.project(HALF_CORRIDOR, rowDist);
       const leftFar = cam.project(-HALF_CORRIDOR, rowBot);
       const rightFar = cam.project(HALF_CORRIDOR, rowBot);
-      ctx.fillStyle = "rgba(255,255,255,0.03)";
+      ctx.fillStyle = "rgba(255,255,255,0.025)";
       ctx.beginPath();
       ctx.moveTo(leftNear.x, yNear);
       ctx.lineTo(rightNear.x, yNear);
@@ -804,7 +756,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
     }
   }
 
-  ctx.strokeStyle = "rgba(70, 82, 96, 0.2)";
+  ctx.strokeStyle = "rgba(50, 60, 72, 0.15)";
   ctx.lineWidth = 0.5;
   for (let gy = 0; gy <= endRow; gy++) {
     const rowDist = gy * cell - scrollOffset;
@@ -828,90 +780,105 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
     ctx.stroke();
   }
 
-  const wallW = 14;
+  const wallW = 16;
   const wTop = cam.project(-HALF_CORRIDOR, maxDist);
   const wBot = cam.project(-HALF_CORRIDOR, 0);
   const wTopR = cam.project(HALF_CORRIDOR, maxDist);
   const wBotR = cam.project(HALF_CORRIDOR, 0);
 
-  ctx.fillStyle = "rgba(14, 18, 26, 0.7)";
+  ctx.fillStyle = "rgba(8, 10, 14, 0.85)";
   ctx.beginPath();
-  ctx.moveTo(wTop.x - wallW, wTop.y);
+  ctx.moveTo(wTop.x - wallW * 1.5, wTop.y);
   ctx.lineTo(wTop.x, wTop.y);
   ctx.lineTo(wBot.x, wBot.y);
-  ctx.lineTo(wBot.x - wallW, wBot.y);
+  ctx.lineTo(wBot.x - wallW * 1.5, wBot.y);
   ctx.closePath();
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(wTopR.x, wTopR.y);
-  ctx.lineTo(wTopR.x + wallW, wTopR.y);
-  ctx.lineTo(wBotR.x + wallW, wBotR.y);
+  ctx.lineTo(wTopR.x + wallW * 1.5, wTopR.y);
+  ctx.lineTo(wBotR.x + wallW * 1.5, wBotR.y);
   ctx.lineTo(wBotR.x, wBotR.y);
   ctx.closePath();
   ctx.fill();
 
-  for (let i = 1; i <= 6; i++) {
-    const td = i * 350 - scrollOffset;
-    if (td > maxDist || td < 0) continue;
+  ctx.strokeStyle = "rgba(80, 90, 105, 0.4)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(wTop.x, wTop.y);
+  ctx.lineTo(wBot.x, wBot.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(wTopR.x, wTopR.y);
+  ctx.lineTo(wBotR.x, wBotR.y);
+  ctx.stroke();
+
+  for (let i = 1; i <= 8; i++) {
+    const td = i * 280 - scrollOffset;
+    if (td > maxDist || td < 20) continue;
     const torchL = cam.project(-HALF_CORRIDOR, td);
     const torchR = cam.project(HALF_CORRIDOR, td);
-    const torchS = Math.max(8, 80 * torchL.s);
+    const torchS = Math.max(10, 100 * torchL.s);
 
-    const flicker = 0.5 + Math.sin(sim.runTime * 3 + i * 1.7) * 0.15;
+    const flicker = 0.6 + Math.sin(sim.runTime * 4 + i * 2.1) * 0.2;
 
     const gL = ctx.createRadialGradient(
-      torchL.x - wallW, torchL.y, 0,
-      torchL.x - wallW, torchL.y, torchS
+      torchL.x - wallW * 0.8, torchL.y, 0,
+      torchL.x - wallW * 0.8, torchL.y, torchS
     );
-    gL.addColorStop(0, `rgba(255, 170, 60, ${0.5 * flicker})`);
-    gL.addColorStop(0.3, `rgba(212, 120, 40, ${0.25 * flicker})`);
-    gL.addColorStop(0.7, `rgba(140, 60, 15, ${0.08 * flicker})`);
+    gL.addColorStop(0, `rgba(255, 180, 60, ${0.6 * flicker})`);
+    gL.addColorStop(0.2, `rgba(255, 140, 40, ${0.35 * flicker})`);
+    gL.addColorStop(0.5, `rgba(180, 80, 20, ${0.12 * flicker})`);
     gL.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gL;
     ctx.beginPath();
-    ctx.arc(torchL.x - wallW, torchL.y, torchS, 0, Math.PI * 2);
+    ctx.arc(torchL.x - wallW * 0.8, torchL.y, torchS, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = `rgba(255, 200, 80, ${0.8 * flicker})`;
+    ctx.fillStyle = `rgba(255, 220, 100, ${0.9 * flicker})`;
     ctx.beginPath();
-    ctx.arc(torchL.x - wallW, torchL.y, Math.max(2, torchS * 0.08), 0, Math.PI * 2);
+    ctx.arc(torchL.x - wallW * 0.8, torchL.y, Math.max(3, torchS * 0.06), 0, Math.PI * 2);
     ctx.fill();
 
     const gR = ctx.createRadialGradient(
-      torchR.x + wallW, torchR.y, 0,
-      torchR.x + wallW, torchR.y, torchS
+      torchR.x + wallW * 0.8, torchR.y, 0,
+      torchR.x + wallW * 0.8, torchR.y, torchS
     );
-    gR.addColorStop(0, `rgba(255, 170, 60, ${0.5 * flicker})`);
-    gR.addColorStop(0.3, `rgba(212, 120, 40, ${0.25 * flicker})`);
-    gR.addColorStop(0.7, `rgba(140, 60, 15, ${0.08 * flicker})`);
+    gR.addColorStop(0, `rgba(255, 180, 60, ${0.6 * flicker})`);
+    gR.addColorStop(0.2, `rgba(255, 140, 40, ${0.35 * flicker})`);
+    gR.addColorStop(0.5, `rgba(180, 80, 20, ${0.12 * flicker})`);
     gR.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gR;
     ctx.beginPath();
-    ctx.arc(torchR.x + wallW, torchR.y, torchS, 0, Math.PI * 2);
+    ctx.arc(torchR.x + wallW * 0.8, torchR.y, torchS, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = `rgba(255, 200, 80, ${0.8 * flicker})`;
+    ctx.fillStyle = `rgba(255, 220, 100, ${0.9 * flicker})`;
     ctx.beginPath();
-    ctx.arc(torchR.x + wallW, torchR.y, Math.max(2, torchS * 0.08), 0, Math.PI * 2);
+    ctx.arc(torchR.x + wallW * 0.8, torchR.y, Math.max(3, torchS * 0.06), 0, Math.PI * 2);
     ctx.fill();
   }
 
-  for (let i = 1; i <= 4; i++) {
-    const ad = i * 700;
-    if (ad > maxDist) break;
-    const archL = cam.project(-HALF_CORRIDOR, ad);
-    const archR = cam.project(HALF_CORRIDOR, ad);
-    const archH = Math.max(4, 60 * archL.s);
-    const archW = Math.max(2, 8 * archL.s);
+  const gateDist = maxDist * 0.85;
+  const gateL = cam.project(-HALF_CORRIDOR, gateDist);
+  const gateR = cam.project(HALF_CORRIDOR, gateDist);
+  const gateH = Math.max(12, 120 * gateL.s);
+  const gateW = Math.max(3, 10 * gateL.s);
 
-    ctx.fillStyle = "rgba(40, 48, 58, 0.5)";
-    ctx.fillRect(archL.x - archW, archL.y - archH, archW * 2, archH);
-    ctx.fillRect(archR.x - archW, archR.y - archH, archW * 2, archH);
+  ctx.fillStyle = "rgba(50, 58, 68, 0.6)";
+  ctx.fillRect(gateL.x - gateW, gateL.y - gateH, gateW * 2, gateH);
+  ctx.fillRect(gateR.x - gateW, gateR.y - gateH, gateW * 2, gateH);
 
-    ctx.fillStyle = "rgba(60, 50, 40, 0.3)";
-    ctx.fillRect(archL.x - archW * 2.5, archL.y - archH * 0.15, archW * 5, archH * 0.15);
-    ctx.fillRect(archR.x - archW * 2.5, archR.y - archH * 0.15, archW * 5, archH * 0.15);
-  }
+  ctx.fillStyle = "rgba(70, 60, 50, 0.4)";
+  ctx.fillRect(gateL.x - gateW * 3, gateL.y - gateH * 0.12, gateW * 6, gateH * 0.12);
+  ctx.fillRect(gateR.x - gateW * 3, gateR.y - gateH * 0.12, gateW * 6, gateH * 0.12);
+
+  ctx.strokeStyle = "rgba(90, 100, 115, 0.3)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(gateL.x - gateW * 3, gateL.y - gateH);
+  ctx.lineTo(gateR.x + gateW * 3, gateR.y - gateH);
+  ctx.stroke();
 
   drawDepthFog(ctx, cam, wTop.y, wBot.y);
 }
