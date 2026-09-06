@@ -252,7 +252,7 @@ const EQUIP_SLOTS = [
   { id: "head", name: "Head",   icon: "🪖" },
   { id: "body", name: "Body",   icon: "🛡️" },
   { id: "feet", name: "Feet",   icon: "👢" },
-  { id: "ammo", name: "Ammo",   icon: "🏹" },
+  { id: "arrows", name: "Arrows", icon: "🏹" },
   { id: "misc", name: "Misc",   icon: "💍" },
 ];
 
@@ -365,7 +365,9 @@ function populateHub() {
   const equipDetail = document.getElementById("equip-detail");
   if (equipSlotsEl) {
     const equipped = state.equipped || {};
-    const arrowStorage = state.arrowStorage || [];
+    const quiverData = sim.quiver;
+    const quiverCount = quiverData ? quiverData.quiverCount : 0;
+    const storageCount = quiverData ? quiverData.storageCount : 0;
 
     function findItem(id) {
       return SHOP_CONSUMABLES.find(i => i.id === id)
@@ -378,28 +380,25 @@ function populateHub() {
     equipSlotsEl.innerHTML = EQUIP_SLOTS.map(slot => {
       const itemId = equipped[slot.id];
       const item = itemId ? findItem(itemId) : null;
+      let extra = "";
+      if (slot.id === "arrows") {
+        extra = ` (${quiverCount}/${quiverData?.capacity || 8} + ${storageCount} spares)`;
+      }
       return `<div class="equip-slot" data-slot="${slot.id}">
         <div class="equip-slot-icon">${item ? item.icon : slot.icon}</div>
         <div class="equip-slot-info">
           <div class="equip-slot-name">${slot.name}</div>
-          <div class="equip-slot-item">${item ? item.name : "Empty"}</div>
+          <div class="equip-slot-item">${item ? item.name + extra : "Empty" + extra}</div>
         </div>
       </div>`;
     }).join("");
 
     equipSlotsEl.innerHTML += `
-      <div class="equip-slot" data-slot="quiver">
-        <div class="equip-slot-icon">🏹</div>
-        <div class="equip-slot-info">
-          <div class="equip-slot-name">Quiver</div>
-          <div class="equip-slot-item">${equipped.quiver ? findItem(equipped.quiver)?.name || "Equipped" : "Basic Quiver"}</div>
-        </div>
-      </div>
-      <div class="equip-slot" data-slot="arrow_storage">
+      <div class="equip-slot" data-slot="quiver_item">
         <div class="equip-slot-icon">📦</div>
         <div class="equip-slot-info">
-          <div class="equip-slot-name">Arrow Storage</div>
-          <div class="equip-slot-item">${arrowStorage.length} arrows</div>
+          <div class="equip-slot-name">Quiver Type</div>
+          <div class="equip-slot-item">${equipped.quiver ? findItem(equipped.quiver)?.name || "Equipped" : "Basic Quiver"}</div>
         </div>
       </div>
     `;
@@ -409,13 +408,54 @@ function populateHub() {
         const slotId = el.dataset.slot;
         const owned = state.ownedItems || [];
 
-        if (slotId === "quiver") {
+        if (slotId === "arrows") {
+          const quiver = sim.quiver;
+          if (!quiver) {
+            equipDetail.innerHTML = `<div class="equip-detail-empty">No quiver available.</div>`;
+          } else {
+            const qArr = quiver.peekQuiver();
+            const sArr = quiver.peekStorage();
+            equipDetail.innerHTML = `
+              <div style="display:flex;gap:16px;height:100%">
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                  <h3 style="margin:0">Storage (${sArr.length})</h3>
+                  <div style="color:#6a7a8a;font-size:0.75em">Click to move to quiver</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:4px;overflow-y:auto;flex:1">
+                    ${sArr.length === 0 ? '<div style="color:#4a5a6a;font-size:0.8em">Empty</div>' : ''}
+                    ${sArr.map((a, i) => `<div class="arrow-card ${a.type}" data-storage="${i}" style="cursor:pointer" title="Move to quiver">${a.type.slice(0,3).toUpperCase()} L${a.level}</div>`).join("")}
+                  </div>
+                </div>
+                <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                  <h3 style="margin:0">Quiver (${qArr.length}/${quiver.capacity})</h3>
+                  <div style="color:#6a7a8a;font-size:0.75em">Click to move to storage</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:4px;overflow-y:auto;flex:1">
+                    ${qArr.map((a, i) => `<div class="arrow-card ${a.type}" data-quiver="${i}" style="cursor:pointer" title="Move to storage">${a.type.slice(0,3).toUpperCase()} L${a.level}</div>`).join("")}
+                  </div>
+                </div>
+              </div>`;
+            equipDetail.querySelectorAll("[data-storage]").forEach(el => {
+              el.addEventListener("click", () => {
+                quiver.moveArrowToQuiver(parseInt(el.dataset.storage));
+                populateHub();
+                equipSlotsEl.querySelector('[data-slot="arrows"]').click();
+              });
+            });
+            equipDetail.querySelectorAll("[data-quiver]").forEach(el => {
+              el.addEventListener("click", () => {
+                quiver.moveArrowToStorage(parseInt(el.dataset.quiver));
+                populateHub();
+                equipSlotsEl.querySelector('[data-slot="arrows"]').click();
+              });
+            });
+          }
+        } else if (slotId === "quiver_item") {
           const quiverItems = SHOP_QUIVERS;
           const ownedQuivers = quiverItems.filter(i => owned.includes(i.id));
           if (ownedQuivers.length === 0) {
             equipDetail.innerHTML = `<div class="equip-detail-empty">No quivers owned.<br>Visit the Shop to buy one.</div>`;
           } else {
-            equipDetail.innerHTML = `<h3>Quiver</h3>` +
+            equipDetail.innerHTML = `<h3>Quiver Type</h3>` +
               ownedQuivers.map(item => {
                 const isEquipped = equipped.quiver === item.id;
                 return `<div class="equip-detail">
@@ -435,27 +475,10 @@ function populateHub() {
               });
             });
           }
-        } else if (slotId === "arrow_storage") {
-          if (arrowStorage.length === 0) {
-            equipDetail.innerHTML = `<div class="equip-detail-empty">No arrows in storage.<br>Arrows are recovered after waves.</div>`;
-          } else {
-            const arrowCounts = {};
-            arrowStorage.forEach(a => {
-              const key = a.type || "normal";
-              arrowCounts[key] = (arrowCounts[key] || 0) + 1;
-            });
-            equipDetail.innerHTML = `<h3>Arrow Storage</h3>` +
-              Object.entries(arrowCounts).map(([type, count]) => {
-                return `<div class="equip-detail">
-                  <div style="color:#e8e4dc;font-weight:600">${type.toUpperCase()} x${count}</div>
-                </div>`;
-              }).join("");
-          }
         } else {
           const allEquipItems = [
             ...ARMOUR_ITEMS.filter(i => i.slot === slotId),
             ...SHOP_CONSUMABLES.filter(i => i.slot === slotId),
-            ...SHOP_ARROWS.filter(i => i.slot === slotId),
           ];
           const ownedInSlot = allEquipItems.filter(i => owned.includes(i.id));
           const currentlyEquipped = equipped[slotId];

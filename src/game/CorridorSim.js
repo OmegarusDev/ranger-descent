@@ -343,7 +343,7 @@ export class CorridorSim {
     const arrowsUsed = this.state.arrowsFired;
     for (let i = 0; i < arrowsUsed; i++) {
       if (Math.random() < lootChance) {
-        this.state.arrowStorage.push({ type: "normal", level: 1 });
+        this.quiver.addToStorage({ type: "normal", level: 1 });
       }
     }
   }
