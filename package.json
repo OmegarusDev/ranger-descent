@@ -1,0 +1,10 @@
+{
+  "name": "ranger-defense",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx serve .",
+    "typecheck": "npx tsc --noEmit"
+  }
+}
