@@ -706,7 +706,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   const backFarL = cam.project(-HALF_CORRIDOR, -backDist);
   const backFarR = cam.project(HALF_CORRIDOR, -backDist);
 
-  ctx.fillStyle = "#0e1016";
+  ctx.fillStyle = "#0e1218";
   ctx.beginPath();
   ctx.moveTo(backFarL.x, backFarL.y);
   ctx.lineTo(backFarR.x, backFarR.y);
@@ -720,7 +720,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   const farLeft = cam.project(-HALF_CORRIDOR, maxDist);
   const farRight = cam.project(HALF_CORRIDOR, maxDist);
 
-  ctx.fillStyle = "#12161e";
+  ctx.fillStyle = "#1a2030";
   ctx.beginPath();
   ctx.moveTo(nearLeft.x, nearLeft.y);
   ctx.lineTo(nearRight.x, nearRight.y);
@@ -745,7 +745,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
       const rightNear = cam.project(HALF_CORRIDOR, rowDist);
       const leftFar = cam.project(-HALF_CORRIDOR, rowBot);
       const rightFar = cam.project(HALF_CORRIDOR, rowBot);
-      ctx.fillStyle = "rgba(255,255,255,0.025)";
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
       ctx.beginPath();
       ctx.moveTo(leftNear.x, yNear);
       ctx.lineTo(rightNear.x, yNear);
@@ -756,7 +756,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
     }
   }
 
-  ctx.strokeStyle = "rgba(50, 60, 72, 0.15)";
+  ctx.strokeStyle = "rgba(80, 95, 120, 0.25)";
   ctx.lineWidth = 0.5;
   for (let gy = 0; gy <= endRow; gy++) {
     const rowDist = gy * cell - scrollOffset;
@@ -774,6 +774,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
     const worldX = (gx - corridorW / 2) * cell;
     const pNear = cam.project(worldX, 0);
     const pFar = cam.project(worldX, maxDist);
+    ctx.strokeStyle = "rgba(80, 95, 120, 0.2)";
     ctx.beginPath();
     ctx.moveTo(pNear.x, pNear.y);
     ctx.lineTo(pFar.x, pFar.y);
@@ -786,23 +787,23 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   const wTopR = cam.project(HALF_CORRIDOR, maxDist);
   const wBotR = cam.project(HALF_CORRIDOR, 0);
 
-  ctx.fillStyle = "rgba(8, 10, 14, 0.85)";
+  ctx.fillStyle = "#0c1018";
   ctx.beginPath();
-  ctx.moveTo(wTop.x - wallW * 1.5, wTop.y);
+  ctx.moveTo(wTop.x - wallW * 2, wTop.y);
   ctx.lineTo(wTop.x, wTop.y);
   ctx.lineTo(wBot.x, wBot.y);
-  ctx.lineTo(wBot.x - wallW * 1.5, wBot.y);
+  ctx.lineTo(wBot.x - wallW * 2, wBot.y);
   ctx.closePath();
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(wTopR.x, wTopR.y);
-  ctx.lineTo(wTopR.x + wallW * 1.5, wTopR.y);
-  ctx.lineTo(wBotR.x + wallW * 1.5, wBotR.y);
+  ctx.lineTo(wTopR.x + wallW * 2, wTopR.y);
+  ctx.lineTo(wBotR.x + wallW * 2, wBotR.y);
   ctx.lineTo(wBotR.x, wBotR.y);
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(80, 90, 105, 0.4)";
+  ctx.strokeStyle = "rgba(100, 115, 140, 0.5)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(wTop.x, wTop.y);
@@ -818,7 +819,7 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
     if (td > maxDist || td < 20) continue;
     const torchL = cam.project(-HALF_CORRIDOR, td);
     const torchR = cam.project(HALF_CORRIDOR, td);
-    const torchS = Math.max(10, 100 * torchL.s);
+    const torchS = Math.max(12, 120 * torchL.s);
 
     const flicker = 0.6 + Math.sin(sim.runTime * 4 + i * 2.1) * 0.2;
 
@@ -826,54 +827,54 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
       torchL.x - wallW * 0.8, torchL.y, 0,
       torchL.x - wallW * 0.8, torchL.y, torchS
     );
-    gL.addColorStop(0, `rgba(255, 180, 60, ${0.6 * flicker})`);
-    gL.addColorStop(0.2, `rgba(255, 140, 40, ${0.35 * flicker})`);
-    gL.addColorStop(0.5, `rgba(180, 80, 20, ${0.12 * flicker})`);
+    gL.addColorStop(0, `rgba(255, 190, 70, ${0.7 * flicker})`);
+    gL.addColorStop(0.15, `rgba(255, 150, 50, ${0.45 * flicker})`);
+    gL.addColorStop(0.4, `rgba(200, 90, 25, ${0.15 * flicker})`);
     gL.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gL;
     ctx.beginPath();
     ctx.arc(torchL.x - wallW * 0.8, torchL.y, torchS, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = `rgba(255, 220, 100, ${0.9 * flicker})`;
+    ctx.fillStyle = `rgba(255, 230, 120, ${0.9 * flicker})`;
     ctx.beginPath();
-    ctx.arc(torchL.x - wallW * 0.8, torchL.y, Math.max(3, torchS * 0.06), 0, Math.PI * 2);
+    ctx.arc(torchL.x - wallW * 0.8, torchL.y, Math.max(3, torchS * 0.05), 0, Math.PI * 2);
     ctx.fill();
 
     const gR = ctx.createRadialGradient(
       torchR.x + wallW * 0.8, torchR.y, 0,
       torchR.x + wallW * 0.8, torchR.y, torchS
     );
-    gR.addColorStop(0, `rgba(255, 180, 60, ${0.6 * flicker})`);
-    gR.addColorStop(0.2, `rgba(255, 140, 40, ${0.35 * flicker})`);
-    gR.addColorStop(0.5, `rgba(180, 80, 20, ${0.12 * flicker})`);
+    gR.addColorStop(0, `rgba(255, 190, 70, ${0.7 * flicker})`);
+    gR.addColorStop(0.15, `rgba(255, 150, 50, ${0.45 * flicker})`);
+    gR.addColorStop(0.4, `rgba(200, 90, 25, ${0.15 * flicker})`);
     gR.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = gR;
     ctx.beginPath();
     ctx.arc(torchR.x + wallW * 0.8, torchR.y, torchS, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = `rgba(255, 220, 100, ${0.9 * flicker})`;
+    ctx.fillStyle = `rgba(255, 230, 120, ${0.9 * flicker})`;
     ctx.beginPath();
-    ctx.arc(torchR.x + wallW * 0.8, torchR.y, Math.max(3, torchS * 0.06), 0, Math.PI * 2);
+    ctx.arc(torchR.x + wallW * 0.8, torchR.y, Math.max(3, torchS * 0.05), 0, Math.PI * 2);
     ctx.fill();
   }
 
   const gateDist = maxDist * 0.85;
   const gateL = cam.project(-HALF_CORRIDOR, gateDist);
   const gateR = cam.project(HALF_CORRIDOR, gateDist);
-  const gateH = Math.max(12, 120 * gateL.s);
-  const gateW = Math.max(3, 10 * gateL.s);
+  const gateH = Math.max(12, 140 * gateL.s);
+  const gateW = Math.max(3, 12 * gateL.s);
 
-  ctx.fillStyle = "rgba(50, 58, 68, 0.6)";
+  ctx.fillStyle = "#2a3040";
   ctx.fillRect(gateL.x - gateW, gateL.y - gateH, gateW * 2, gateH);
   ctx.fillRect(gateR.x - gateW, gateR.y - gateH, gateW * 2, gateH);
 
-  ctx.fillStyle = "rgba(70, 60, 50, 0.4)";
+  ctx.fillStyle = "#3a3530";
   ctx.fillRect(gateL.x - gateW * 3, gateL.y - gateH * 0.12, gateW * 6, gateH * 0.12);
   ctx.fillRect(gateR.x - gateW * 3, gateR.y - gateH * 0.12, gateW * 6, gateH * 0.12);
 
-  ctx.strokeStyle = "rgba(90, 100, 115, 0.3)";
+  ctx.strokeStyle = "rgba(120, 130, 150, 0.4)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(gateL.x - gateW * 3, gateL.y - gateH);
