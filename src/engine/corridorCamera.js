@@ -18,6 +18,8 @@ export const CAMERA = {
   nearScale: 1,
   deckRatio: 0.79,
   depthFog: 0.22,
+  boxSkew: 0.3,
+  vExag: 0.8,
 };
 
 export function setCameraPitch(deg) {

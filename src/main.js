@@ -29,9 +29,8 @@ const hpText = $("#hp-text");
 const waveEl = $("#wave-display");
 const distEl = $("#distance-display");
 const timerEl = $("#timer-display");
-const queueEl = $("#queue-display");
-const hexBar = $("#hex-bar");
-const prayerBar = $("#prayer-bar");
+const cooldownRing = $("#cooldown-ring");
+const cooldownLabel = $("#cooldown-label");
 const minimapCanvas = $("#minimap");
 const deathStats = $("#death-stats");
 const debugPanel = $("#debug-panel");
@@ -590,45 +589,13 @@ function updateUI() {
     timerEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
   }
 
-  if (queueEl) {
-    const queue = sim.quiver.peekQuiver();
-    queueEl.innerHTML = queue.map(a =>
-      `<span class="arrow-card ${a.type}">${a.type.slice(0, 3).toUpperCase()} L${a.level}</span>`
-    ).join("");
-  }
-
-  if (hexBar) {
-    const hexes = sim.autoMagic.hexes.filter(h => h.unlocked);
-    hexBar.innerHTML = hexes.map(h => {
-      const pct = Math.floor(h.cooldownProgress * 100);
-      const ready = h.isReady;
-      return `<div class="magic-icon ${ready ? 'ready' : ''}" title="${h.def.name}">
-        <svg viewBox="0 0 32 32" width="32" height="32">
-          <circle cx="16" cy="16" r="14" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
-          <circle cx="16" cy="16" r="14" fill="none" stroke="${h.def.color}" stroke-width="2"
-            stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25"
-            style="transform:rotate(-90deg);transform-origin:center"/>
-        </svg>
-        <span class="magic-label">${h.def.name.split(' ').pop().slice(0,4)}</span>
-      </div>`;
-    }).join("");
-  }
-
-  if (prayerBar) {
-    const prayers = sim.autoMagic.prayers.filter(p => p.unlocked);
-    prayerBar.innerHTML = prayers.map(p => {
-      const pct = Math.floor(p.cooldownProgress * 100);
-      const ready = p.isReady;
-      return `<div class="magic-icon ${ready ? 'ready' : ''}" title="${p.def.name}">
-        <svg viewBox="0 0 32 32" width="32" height="32">
-          <circle cx="16" cy="16" r="14" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
-          <circle cx="16" cy="16" r="14" fill="none" stroke="${p.def.color}" stroke-width="2"
-            stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="25"
-            style="transform:rotate(-90deg);transform-origin:center"/>
-        </svg>
-        <span class="magic-label">${p.def.name.split(' ').pop().slice(0,4)}</span>
-      </div>`;
-    }).join("");
+  if (cooldownRing && cooldownLabel) {
+    const cd = sim.state.arrowCooldown || 0;
+    const maxCd = sim.state.getArrowCooldown();
+    const pct = maxCd > 0 ? (1 - cd / maxCd) : 1;
+    const circ = 2 * Math.PI * 17;
+    cooldownRing.setAttribute("stroke-dasharray", `${pct * circ} ${circ}`);
+    cooldownLabel.style.opacity = pct >= 1 ? "1" : "0.4";
   }
 
   drawMinimap();
@@ -936,28 +903,28 @@ function drawDepthFog(ctx, cam, topY, botY) {
 // ─── Player ──────────────────────────────────────────────────
 function drawPlayer(ctx, cam) {
   const px = cam.project(0, 0);
-  const s = cam.cell * 0.9 * px.s;
+  const s = cam.cell * 1.4 * px.s;
 
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
   ctx.beginPath();
-  ctx.ellipse(px.x + 1, px.y + s * 0.22, s * 0.3, deckRy(s * 0.3), 0, 0, Math.PI * 2);
+  ctx.ellipse(px.x + 2, px.y + s * 0.22, s * 0.35, deckRy(s * 0.35), 0, 0, Math.PI * 2);
   ctx.fill();
 
   const m = matsFrom("#4f7eb0");
-  box25(ctx, px.x, px.y - s * 0.35, s * 0.5, s * 0.35, s * 0.6, m);
+  box25(ctx, px.x, px.y - s * 0.4, s * 0.55, s * 0.35, s * 0.7, m);
 
   const hpRatio = sim.state.playerHp / sim.state.playerMaxHp;
-  ctx.strokeStyle = hpRatio > 0.5 ? "rgba(100, 200, 100, 0.5)" : "rgba(200, 80, 80, 0.5)";
+  ctx.strokeStyle = hpRatio > 0.5 ? "rgba(100, 200, 100, 0.6)" : "rgba(200, 80, 80, 0.6)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.ellipse(px.x, px.y + s * 0.15, s * 0.4, deckRy(s * 0.4), 0, 0, Math.PI * 2);
+  ctx.ellipse(px.x, px.y + s * 0.15, s * 0.45, deckRy(s * 0.45), 0, 0, Math.PI * 2);
   ctx.stroke();
 
   if (sim.state.runBonuses.shieldActive && sim.state.runBonuses.shieldHp > 0) {
     ctx.strokeStyle = "rgba(158, 200, 232, 0.6)";
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.ellipse(px.x, px.y + s * 0.15, s * 0.5, deckRy(s * 0.5), 0, 0, Math.PI * 2);
+    ctx.ellipse(px.x, px.y + s * 0.15, s * 0.55, deckRy(s * 0.55), 0, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
@@ -1112,7 +1079,7 @@ function drawArrowQueue(ctx) {
   const allArrows = sim.quiver.peekQuiver();
   const queue = allArrows.slice(0, 4);
   const startX = 20;
-  const y = canvas.clientHeight - 60;
+  const y = canvas.clientHeight - 50;
   const spacing = 52;
 
   ctx.font = '600 11px "Chakra Petch", sans-serif';
