@@ -35,6 +35,7 @@ export class GameStateManager {
     this.equipped = {};
     this.ownedItems = [];
     this.arrowStorage = [];
+    this.hubVisits = 0;
 
     // Active run bonuses
     this.runBonuses = {
@@ -249,6 +250,7 @@ export class GameStateManager {
       ownedItems: [...(this.ownedItems || [])],
       arrowStorage: [...(this.arrowStorage || [])],
       playerMaxHp: this.playerMaxHp,
+      hubVisits: this.hubVisits,
     };
   }
 
@@ -262,5 +264,6 @@ export class GameStateManager {
     this.ownedItems = [...(data.ownedItems || [])];
     this.arrowStorage = [...(data.arrowStorage || [])];
     this.playerMaxHp = data.playerMaxHp || 10;
+    this.hubVisits = data.hubVisits || 0;
   }
 }

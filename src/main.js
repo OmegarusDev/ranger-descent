@@ -50,6 +50,7 @@ sim.state.onPhaseChange = (phase) => {
   phaseDeath.style.display = (phase === "death" || phase === "victory") ? "flex" : "none";
 
   if (phase === "hub") {
+    sim.state.hubVisits++;
     populateHub();
   }
 
@@ -146,22 +147,106 @@ const ENEMY_DEFS_BESTIARY = [
   { id: "troll",          name: "Troll",           hp: 50,  dmg: 8,  speed: 35,  souls: 4, armor: "None",   color: "#4a6a3a", behavior: "Regenerates HP while alive" },
 ];
 
-const SHOP_ITEMS = [
-  { id: "iron_helm",    name: "Iron Helm",       slot: "head",  cost: 30,  desc: "Basic head protection", stats: "Armor +2", icon: "🪖", section: "armour" },
-  { id: "chain_mail",   name: "Chain Mail",      slot: "body",  cost: 50,  desc: "Decent body armor",     stats: "Armor +4", icon: "🛡️", section: "armour" },
-  { id: "leather_boots",name: "Leather Boots",   slot: "feet",  cost: 20,  desc: "Light foot protection",  stats: "Speed +5%", icon: "👢", section: "armour" },
-  { id: "steel_helm",   name: "Steel Helm",      slot: "head",  cost: 80,  desc: "Solid steel protection", stats: "Armor +5", icon: "🪖", section: "armour" },
-  { id: "plate_mail",   name: "Plate Mail",      slot: "body",  cost: 120, desc: "Heavy plate armor",      stats: "Armor +8", icon: "🛡️", section: "armour" },
-  { id: "fire_arrows",  name: "Fire Arrows",     slot: "ammo",  cost: 60,  desc: "10 burning arrows",      stats: "Burn DOT", icon: "🔥", section: "arrows" },
-  { id: "ice_arrows",   name: "Ice Arrows",      slot: "ammo",  cost: 60,  desc: "10 freezing arrows",     stats: "Slow",     icon: "❄️", section: "arrows" },
-  { id: "poison_arrows",name: "Poison Arrows",   slot: "ammo",  cost: 50,  desc: "10 toxic arrows",        stats: "Poison",   icon: "☠️", section: "arrows" },
-  { id: "quiver_small", name: "Small Quiver",    slot: "misc",  cost: 40,  desc: "Holds 12 arrows",        stats: "12 Capacity", icon: "🏹", section: "quivers" },
-  { id: "quiver_medium",name: "Medium Quiver",   slot: "misc",  cost: 80,  desc: "Holds 16 arrows",        stats: "16 Capacity", icon: "🏹", section: "quivers" },
-  { id: "quiver_large", name: "Large Quiver",    slot: "misc",  cost: 150, desc: "Holds 20 arrows",        stats: "20 Capacity", icon: "🏹", section: "quivers" },
-  { id: "health_potion",name: "Health Potion",   slot: "item",  cost: 30,  desc: "Restore 5 HP",           stats: "Heal 5 HP", icon: "🧪", section: "items" },
-  { id: "damage_scroll",name: "Damage Scroll",   slot: "item",  cost: 50,  desc: "+50% damage for 10s",    stats: "Buff",     icon: "📜", section: "items" },
-  { id: "speed_charm",  name: "Speed Charm",     slot: "item",  cost: 40,  desc: "Move faster for 15s",    stats: "Buff",     icon: "✨", section: "items" },
+const ARMOUR_MATERIALS = [
+  { id: "cloth",   name: "Cloth",           color: "#a09080", tier: 1,  head: 1, body: 2, feet: 1 },
+  { id: "fur",     name: "Fur",             color: "#8a7060", tier: 2,  head: 2, body: 3, feet: 1 },
+  { id: "leather", name: "Leather",         color: "#7a5a3a", tier: 3,  head: 2, body: 4, feet: 2 },
+  { id: "hardened_leather", name: "Hardened Leather", color: "#6a4a2a", tier: 4, head: 3, body: 5, feet: 2 },
+  { id: "reinforced_leather", name: "Reinforced Leather", color: "#5a3a1a", tier: 5, head: 4, body: 6, feet: 3 },
+  { id: "bronze",  name: "Bronze",          color: "#b87333", tier: 6,  head: 4, body: 7, feet: 3 },
+  { id: "iron",    name: "Iron",            color: "#8a8a8a", tier: 7,  head: 5, body: 8, feet: 4 },
+  { id: "steel",   name: "Steel",           color: "#6a6a7a", tier: 8,  head: 6, body: 10, feet: 4 },
+  { id: "hardened_steel", name: "Hardened Steel", color: "#4a4a5a", tier: 9, head: 7, body: 12, feet: 5 },
+  { id: "tempered", name: "Tempered",       color: "#3a4a5a", tier: 10, head: 8, body: 14, feet: 5 },
+  { id: "mithril", name: "Mithril",         color: "#8ab8d0", tier: 11, head: 9, body: 16, feet: 6 },
+  { id: "elven",   name: "Elven",           color: "#60a070", tier: 12, head: 10, body: 18, feet: 7 },
+  { id: "dragon",  name: "Dragon",          color: "#c03030", tier: 13, head: 12, body: 22, feet: 8 },
 ];
+
+const ARMOUR_QUALITIES = [
+  { id: "battered",   name: "Battered",   mult: 0.6, color: "#8a7a6a" },
+  { id: "old",        name: "Old",        mult: 0.8, color: "#7a8a6a" },
+  { id: "standard",   name: "",           mult: 1.0, color: "#e8e4dc" },
+  { id: "fine",       name: "Fine",       mult: 1.3, color: "#5a9ad0" },
+  { id: "masterwork", name: "Masterwork", mult: 1.6, color: "#c9a227" },
+  { id: "legendary",  name: "Legendary",  mult: 2.0, color: "#d4783a" },
+];
+
+const SLOT_ICONS = { head: "🪖", body: "🛡️", feet: "👢" };
+const SLOTS = ["head", "body", "feet"];
+
+function generateArmourItem(material, quality, slot) {
+  const baseArmor = slot === "body" ? material.body : slot === "head" ? material.head : material.feet;
+  const armor = Math.max(1, Math.floor(baseArmor * quality.mult));
+  const cost = Math.floor(10 + material.tier * 8 + (ARMOUR_QUALITIES.indexOf(quality)) * 15);
+  const prefix = quality.name ? quality.name + " " : "";
+  const name = `${prefix}${material.name} ${slot.charAt(0).toUpperCase() + slot.slice(1)}`;
+  return {
+    id: `${quality.id}_${material.id}_${slot}`,
+    name,
+    slot,
+    cost,
+    desc: `${material.name} ${slot} armor`,
+    stats: `Armor ${armor}`,
+    icon: SLOT_ICONS[slot],
+    section: "armour",
+    armor,
+    material: material.id,
+    quality: quality.id,
+    tier: material.tier,
+  };
+}
+
+const ARMOUR_ITEMS = [];
+for (const mat of ARMOUR_MATERIALS) {
+  for (const qual of ARMOUR_QUALITIES) {
+    for (const slot of SLOTS) {
+      ARMOUR_ITEMS.push(generateArmourItem(mat, qual, slot));
+    }
+  }
+}
+
+const SHOP_CONSUMABLES = [
+  { id: "health_potion", name: "Health Potion", slot: "item", cost: 25, desc: "Restore 5 HP", stats: "Heal 5 HP", icon: "🧪", section: "items" },
+  { id: "damage_scroll", name: "Damage Scroll", slot: "item", cost: 40, desc: "+50% damage for 10s", stats: "Buff", icon: "📜", section: "items" },
+  { id: "speed_charm",   name: "Speed Charm",   slot: "item", cost: 30, desc: "Move faster for 15s", stats: "Buff", icon: "✨", section: "items" },
+];
+
+const SHOP_ARROWS = [
+  { id: "fire_arrows",   name: "Fire Arrow",    slot: "ammo", cost: 30, desc: "1 fire arrow", stats: "Burn DOT", icon: "🔥", section: "arrows", element: "fire" },
+  { id: "ice_arrows",    name: "Ice Arrow",     slot: "ammo", cost: 30, desc: "1 ice arrow",  stats: "Slow",     icon: "❄️", section: "arrows", element: "ice" },
+  { id: "poison_arrows", name: "Poison Arrow",  slot: "ammo", cost: 30, desc: "1 poison arrow", stats: "Poison", icon: "☠️", section: "arrows", element: "poison" },
+];
+
+const SHOP_QUIVERS = [
+  { id: "quiver_small",  name: "Small Quiver",  slot: "misc", cost: 40,  desc: "Holds 12 arrows",  stats: "12 Capacity", icon: "🏹", section: "quivers" },
+  { id: "quiver_medium", name: "Medium Quiver", slot: "misc", cost: 80,  desc: "Holds 16 arrows",  stats: "16 Capacity", icon: "🏹", section: "quivers" },
+  { id: "quiver_large",  name: "Large Quiver",  slot: "misc", cost: 150, desc: "Holds 20 arrows",  stats: "20 Capacity", icon: "🏹", section: "quivers" },
+];
+
+function rollShopArmour() {
+  const pool = [];
+  for (const mat of ARMOUR_MATERIALS) {
+    for (const slot of SLOTS) {
+      const qual = ARMOUR_QUALITIES[Math.floor(Math.random() * ARMOUR_QUALITIES.length)];
+      pool.push(generateArmourItem(mat, qual, slot));
+    }
+  }
+  const shuffled = pool.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3);
+}
+
+let _shopArmourCache = null;
+let _shopHubVisit = -1;
+
+function getShopArmour(state) {
+  const visit = state.hubVisits || 0;
+  if (_shopHubVisit !== visit || !_shopArmourCache) {
+    _shopArmourCache = rollShopArmour();
+    _shopHubVisit = visit;
+  }
+  return _shopArmourCache;
+}
 
 const EQUIP_SLOTS = [
   { id: "head", name: "Head",   icon: "🪖" },
@@ -216,24 +301,31 @@ function populateHub() {
   const shopList = document.getElementById("shop-list");
   if (shopList) {
     const owned = state.ownedItems || [];
+    const armourItems = getShopArmour(state);
+    const allItems = [
+      ...SHOP_CONSUMABLES,
+      ...SHOP_ARROWS,
+      ...SHOP_QUIVERS,
+      ...armourItems,
+    ];
     const sections = [
-      { id: "items", label: "Items" },
-      { id: "arrows", label: "Arrows" },
-      { id: "quivers", label: "Quivers" },
-      { id: "armour", label: "Armour" },
+      { id: "items",   label: "Items",   items: SHOP_CONSUMABLES },
+      { id: "arrows",  label: "Arrows",  items: SHOP_ARROWS },
+      { id: "quivers", label: "Quivers", items: SHOP_QUIVERS },
+      { id: "armour",  label: "Armour",  items: armourItems },
     ];
     shopList.innerHTML = sections.map(section => {
-      const items = SHOP_ITEMS.filter(i => i.section === section.id);
-      if (items.length === 0) return "";
       return `<div class="shop-section">
-        <div class="shop-section-title">${section.label}</div>
-        <div class="shop-section-items">
-          ${items.map(item => {
+        <div class="shop-section-title" data-toggle="${section.id}">${section.label} ▾</div>
+        <div class="shop-section-items" id="shop-section-${section.id}">
+          ${section.items.map(item => {
             const isOwned = owned.includes(item.id);
             const afford = state.souls >= item.cost;
+            const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
+            const qualColor = qual ? qual.color : "#e8e4dc";
             return `<div class="shop-item">
               <div class="shop-icon">${item.icon}</div>
-              <div class="shop-name">${item.name}</div>
+              <div class="shop-name" style="color:${qualColor}">${item.name}</div>
               <div class="shop-desc">${item.desc}<br><span style="color:#9aa8b8">${item.stats}</span></div>
               <div class="shop-bottom">
                 <span class="shop-cost">${isOwned ? "Owned" : item.cost + " souls"}</span>
@@ -244,10 +336,22 @@ function populateHub() {
         </div>
       </div>`;
     }).join("");
+
+    shopList.querySelectorAll(".shop-section-title[data-toggle]").forEach(el => {
+      el.addEventListener("click", () => {
+        const sectionId = el.dataset.toggle;
+        const itemsEl = document.getElementById(`shop-section-${sectionId}`);
+        if (itemsEl) {
+          itemsEl.style.display = itemsEl.style.display === "none" ? "" : "none";
+          el.textContent = el.textContent.includes("▾") ? el.textContent.replace("▾", "▸") : el.textContent.replace("▸", "▾");
+        }
+      });
+    });
+
     shopList.querySelectorAll(".shop-buy").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.item;
-        const item = SHOP_ITEMS.find(i => i.id === id);
+        const item = allItems.find(i => i.id === id);
         if (!item || !state.spendSouls(item.cost)) return;
         if (!state.ownedItems) state.ownedItems = [];
         state.ownedItems.push(id);
@@ -263,9 +367,17 @@ function populateHub() {
     const equipped = state.equipped || {};
     const arrowStorage = state.arrowStorage || [];
 
+    function findItem(id) {
+      return SHOP_CONSUMABLES.find(i => i.id === id)
+        || SHOP_ARROWS.find(i => i.id === id)
+        || SHOP_QUIVERS.find(i => i.id === id)
+        || ARMOUR_ITEMS.find(i => i.id === id)
+        || null;
+    }
+
     equipSlotsEl.innerHTML = EQUIP_SLOTS.map(slot => {
       const itemId = equipped[slot.id];
-      const item = itemId ? SHOP_ITEMS.find(i => i.id === itemId) : null;
+      const item = itemId ? findItem(itemId) : null;
       return `<div class="equip-slot" data-slot="${slot.id}">
         <div class="equip-slot-icon">${item ? item.icon : slot.icon}</div>
         <div class="equip-slot-info">
@@ -280,7 +392,7 @@ function populateHub() {
         <div class="equip-slot-icon">🏹</div>
         <div class="equip-slot-info">
           <div class="equip-slot-name">Quiver</div>
-          <div class="equip-slot-item">${equipped.quiver ? SHOP_ITEMS.find(i => i.id === equipped.quiver)?.name || "Equipped" : "Basic Quiver"}</div>
+          <div class="equip-slot-item">${equipped.quiver ? findItem(equipped.quiver)?.name || "Equipped" : "Basic Quiver"}</div>
         </div>
       </div>
       <div class="equip-slot" data-slot="arrow_storage">
@@ -298,7 +410,7 @@ function populateHub() {
         const owned = state.ownedItems || [];
 
         if (slotId === "quiver") {
-          const quiverItems = SHOP_ITEMS.filter(i => i.section === "quivers");
+          const quiverItems = SHOP_QUIVERS;
           const ownedQuivers = quiverItems.filter(i => owned.includes(i.id));
           if (ownedQuivers.length === 0) {
             equipDetail.innerHTML = `<div class="equip-detail-empty">No quivers owned.<br>Visit the Shop to buy one.</div>`;
@@ -340,8 +452,12 @@ function populateHub() {
               }).join("");
           }
         } else {
-          const slotItems = SHOP_ITEMS.filter(i => i.slot === slotId);
-          const ownedInSlot = slotItems.filter(i => owned.includes(i.id));
+          const allEquipItems = [
+            ...ARMOUR_ITEMS.filter(i => i.slot === slotId),
+            ...SHOP_CONSUMABLES.filter(i => i.slot === slotId),
+            ...SHOP_ARROWS.filter(i => i.slot === slotId),
+          ];
+          const ownedInSlot = allEquipItems.filter(i => owned.includes(i.id));
           const currentlyEquipped = equipped[slotId];
 
           if (ownedInSlot.length === 0) {
@@ -350,9 +466,11 @@ function populateHub() {
             equipDetail.innerHTML = `<h3>${EQUIP_SLOTS.find(s => s.id === slotId)?.name || slotId} Items</h3>` +
               ownedInSlot.map(item => {
                 const isEquipped = currentlyEquipped === item.id;
+                const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
+                const qualColor = qual ? qual.color : "#e8e4dc";
                 return `<div class="equip-detail">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <span style="color:#e8e4dc;font-weight:600">${item.icon} ${item.name}</span>
+                    <span style="color:${qualColor};font-weight:600">${item.icon} ${item.name}</span>
                     <button class="train-buy ${isEquipped ? 'maxed' : ''}" data-equip="${item.id}" data-slot="${slotId}">${isEquipped ? "Equipped" : "Equip"}</button>
                   </div>
                   <div class="stat">${item.desc}</div>
