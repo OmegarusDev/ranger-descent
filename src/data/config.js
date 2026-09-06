@@ -13,7 +13,7 @@ export const CONFIG = {
   CELL_SIZE: 40,
 
   // On-rails movement
-  PLAYER_SPEED: 4.5,
+  PLAYER_SPEED: 1.0,
 
   // Slingshot
   SLINGSHOT_MAX_POWER: 24,

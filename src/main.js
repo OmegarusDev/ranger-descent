@@ -881,6 +881,43 @@ function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
   ctx.lineTo(gateR.x + gateW * 3, gateR.y - gateH);
   ctx.stroke();
 
+  if (sim.junctionPending || sim.junctionChoices) {
+    const choices = sim.junctionChoices || [];
+    const branchLen = 600;
+    const branchW = HALF_CORRIDOR;
+    const jDist = gateDist;
+
+    for (const choice of choices) {
+      if (choice.direction === "left" || choice.direction === "right") {
+        const sign = choice.direction === "left" ? -1 : 1;
+        const jL = cam.project(sign * branchW * 0.3, jDist);
+        const jR = cam.project(sign * branchW * 1.8, jDist);
+        const jLF = cam.project(sign * branchW * 0.3 - sign * branchW, jDist + branchLen);
+        const jRF = cam.project(sign * branchW * 1.8 - sign * branchW, jDist + branchLen);
+
+        ctx.fillStyle = "#1a2030";
+        ctx.beginPath();
+        ctx.moveTo(jL.x, jL.y);
+        ctx.lineTo(jR.x, jR.y);
+        ctx.lineTo(jRF.x, jRF.y);
+        ctx.lineTo(jLF.x, jLF.y);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(100, 115, 140, 0.5)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(jL.x, jL.y);
+        ctx.lineTo(jLF.x, jLF.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(jR.x, jR.y);
+        ctx.lineTo(jRF.x, jRF.y);
+        ctx.stroke();
+      }
+    }
+  }
+
   drawDepthFog(ctx, cam, wTop.y, wBot.y);
 }
 
@@ -1072,7 +1109,8 @@ function drawEnemyProjectile(ctx, cam, p) {
 
 // ─── Arrow Queue ─────────────────────────────────────────────
 function drawArrowQueue(ctx) {
-  const queue = sim.quiver.peekQuiver();
+  const allArrows = sim.quiver.peekQuiver();
+  const queue = allArrows.slice(0, 4);
   const startX = 20;
   const y = canvas.clientHeight - 60;
   const spacing = 52;
