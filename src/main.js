@@ -591,7 +591,7 @@ function updateUI() {
   }
 
   if (queueEl) {
-    const queue = sim.quiver.peekQueue();
+    const queue = sim.quiver.peekQuiver();
     queueEl.innerHTML = queue.map(a =>
       `<span class="arrow-card ${a.type}">${a.type.slice(0, 3).toUpperCase()} L${a.level}</span>`
     ).join("");
@@ -1072,7 +1072,7 @@ function drawEnemyProjectile(ctx, cam, p) {
 
 // ─── Arrow Queue ─────────────────────────────────────────────
 function drawArrowQueue(ctx) {
-  const queue = sim.quiver.peekQueue();
+  const queue = sim.quiver.peekQuiver();
   const startX = 20;
   const y = canvas.clientHeight - 60;
   const spacing = 52;
