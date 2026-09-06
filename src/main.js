@@ -440,10 +440,10 @@ function updateUI() {
   if (hpFill) hpFill.style.width = `${(sim.state.playerHp / sim.state.playerMaxHp) * 100}%`;
   if (hpText) hpText.textContent = `${Math.ceil(sim.state.playerHp)} / ${sim.state.playerMaxHp}`;
   if (waveEl) waveEl.textContent = `Wave ${sim.waveIndex}`;
-  if (distEl) distEl.textContent = `${Math.floor(sim.state.playerZ / CONFIG.CELL_SIZE)}m  [run=${sim.running} tick=${sim.tickIndex} en=${sim.enemies.length}]`;
+  if (distEl) distEl.textContent = `${sim.enemies.length} enemies`;
 
   if (timerEl) {
-    const t = Math.floor(sim.runTime);
+    const t = Math.floor(sim.runTime || 0);
     const m = Math.floor(t / 60);
     const s = t % 60;
     timerEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
@@ -493,7 +493,7 @@ function updateUI() {
   drawMinimap();
 
   if (debugPanel) {
-    debugPanel.textContent = `phase=${sim.state.phase} run=${sim.running} wave=${sim.waveIndex} tick=${sim.tickIndex} t=${sim.runTime.toFixed(1)} en=${sim.enemies.length} projs=${sim.projectiles.length}`;
+    debugPanel.textContent = `wave=${sim.waveIndex} en=${sim.enemies.length} projs=${sim.projectiles.length}`;
   }
 }
 
