@@ -7,7 +7,7 @@ import { withAlpha } from "./engine/drawUtil.js";
 import { CorridorSim } from "./game/CorridorSim.js?v=43";
 import { InputHandler } from "./game/InputHandler.js?v=14";
 import { CONFIG } from "./data/config.js?v=26";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=30";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=31";
 import { STAT_INFO } from "./game/GameStateManager.js?v=34";
 
 // ─── Bootstrap ────────────────────────────────────────────────
@@ -240,6 +240,7 @@ $("#btn-hub").addEventListener("click", () => {
 // ─── Hub sheets ───────────────────────────────────────────────
 function closeHubSheets() {
   document.querySelectorAll(".hub-sheet").forEach((el) => el.classList.remove("open"));
+  hidePackOverlays();
 }
 function openHubSheet(id) {
   closeHubSheets();
@@ -251,14 +252,50 @@ $("#btn-hub-train").addEventListener("click", () => openHubSheet("sheet-training
 $("#btn-hub-shop").addEventListener("click", () => openHubSheet("sheet-shop"));
 $("#btn-pack-bag").addEventListener("click", () => openHubSheet("sheet-pack"));
 $("#btn-bestiary").addEventListener("click", () => openHubSheet("sheet-bestiary"));
+$("#btn-hub-options").addEventListener("click", () => openHubSheet("sheet-options"));
 $("#btn-shop-chest").addEventListener("click", () => openHubSheet("sheet-pack"));
 document.querySelectorAll("[data-close-sheet]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const sheet = btn.closest(".hub-sheet");
-    if (sheet && sheet.id === "sheet-bestiary") openHubSheet("sheet-pack");
-    else closeHubSheets();
-  });
+  btn.addEventListener("click", () => closeHubSheets());
 });
+
+(function bindHoldReset() {
+  const btn = $("#btn-reset-save");
+  const fill = $("#btn-reset-fill");
+  if (!btn || !fill) return;
+  const HOLD_MS = 1400;
+  let timer = null;
+  let start = 0;
+  let raf = 0;
+  const stop = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    cancelAnimationFrame(raf);
+    btn.classList.remove("holding");
+    fill.style.width = "0%";
+  };
+  const tick = () => {
+    const p = Math.min(1, (performance.now() - start) / HOLD_MS);
+    fill.style.width = `${p * 100}%`;
+    if (p < 1) raf = requestAnimationFrame(tick);
+  };
+  const begin = (e) => {
+    e.preventDefault();
+    stop();
+    start = performance.now();
+    btn.classList.add("holding");
+    raf = requestAnimationFrame(tick);
+    timer = setTimeout(() => {
+      stop();
+      try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* ignore */ }
+      location.reload();
+    }, HOLD_MS);
+  };
+  btn.addEventListener("pointerdown", begin);
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointerleave", stop);
+  btn.addEventListener("pointercancel", stop);
+  btn.addEventListener("click", (e) => e.preventDefault());
+})();
 
 const ENEMY_DEFS_BESTIARY = [
   { id: "slime",          name: "Slime",           hp: 5,   dmg: 4,  speed: 9,   souls: 1, armor: "None",   color: "#b84a55", behavior: "Oozes forward with a slow, wet pulse" },
@@ -366,25 +403,24 @@ const STARTER_GEAR = [
   { id: "bow_hunting", name: "Hunting Bow", slot: "bow", desc: "Your constant. Always strung.", stats: "Starter bow", icon: "🏹", section: "weapons" },
   { id: "dagger_iron", name: "Iron Dagger", slot: "dagger", desc: "When they reach you, you trade blows.", stats: "Close work", icon: "🗡", section: "weapons" },
   { id: "amulet_greenhorn", name: "Greenhorn Charm", slot: "amulet", desc: "A luck-stone for the unblooded.", stats: "+2 HP while worn", icon: "◆", section: "jewels" },
-  { id: "potion_salve", name: "Field Salve", slot: "potion", desc: "A smear of balm. Fits the pouch.", stats: "Consumable", icon: "✚", section: "potions" },
+  { id: "potion_salve", name: "Herbal Remedy", slot: "potion", desc: "A bitter draught of crushed herbs. Fits the pouch.", stats: "Consumable", icon: "✚", section: "potions" },
 ];
 
 const DOLL_SLOTS = [
   { id: "cape", name: "Cape" },
   { id: "head", name: "Head" },
   { id: "amulet", name: "Amulet" },
-  { id: "arms", name: "Arms" },
+  { id: "bow", name: "Bow" },
   { id: "body", name: "Torso" },
+  { id: "dagger", name: "Dagger" },
+  { id: "arms", name: "Arms" },
   { id: "belt", name: "Belt" },
+  { id: "quiver", name: "Quiver" },
   { id: "legs", name: "Legs" },
   { id: "feet", name: "Feet" },
 ];
 
-const WEAPON_SLOTS = [
-  { id: "bow", name: "Bow" },
-  { id: "dagger", name: "Dagger" },
-  { id: "quiver", name: "Quiver" },
-];
+const GEAR_PICK_SLOTS = new Set(DOLL_SLOTS.map((s) => s.id));
 
 function allGearItems() {
   return [...STARTER_GEAR, ...SHOP_QUIVERS, ...ARMOUR_ITEMS];
@@ -497,29 +533,82 @@ function equippedIds(state) {
   return new Set(Object.values(state.equipped || {}).filter(Boolean));
 }
 
-function pouchIds(state) {
-  return (state.pouch || []).filter(Boolean);
-}
-
 function inspectItem(item, extra = "") {
   const el = document.getElementById("pack-inspect");
   if (!el) return;
   if (!item) {
-    el.textContent = extra || "Tap a shaft or a slot.";
+    el.textContent = extra || "Tap a slot to change it.";
     return;
   }
   el.innerHTML = `<b>${item.name}</b> — ${item.desc || ""} ${item.stats ? `<span>${item.stats}</span>` : ""}`;
+}
+
+function hidePackOverlays() {
+  const picker = document.getElementById("pack-picker");
+  const tip = document.getElementById("pack-tip");
+  if (picker) {
+    picker.hidden = true;
+    picker.innerHTML = "";
+  }
+  if (tip) tip.hidden = true;
+}
+
+function placeNear(el, anchorEl, clientX, clientY) {
+  const root = document.getElementById("pack-root") || document.getElementById("sheet-pack");
+  if (!root || !el) return;
+  const rr = root.getBoundingClientRect();
+  let x = (clientX != null ? clientX : (anchorEl?.getBoundingClientRect().left || rr.left)) - rr.left;
+  let y = (clientY != null ? clientY : (anchorEl?.getBoundingClientRect().bottom || rr.top)) - rr.top + 8;
+  el.hidden = false;
+  el.style.left = "0px";
+  el.style.top = "0px";
+  const w = el.offsetWidth || 220;
+  const h = el.offsetHeight || 120;
+  x = Math.max(6, Math.min(x, rr.width - w - 6));
+  y = Math.max(6, Math.min(y, rr.height - h - 6));
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+function showPackTip(item, anchorEl, clientX, clientY) {
+  const tip = document.getElementById("pack-tip");
+  if (!tip || !item) return;
+  hidePackOverlays();
+  tip.innerHTML = `<b>${item.name}</b>${item.desc || ""}${item.stats ? `<span>${item.stats}</span>` : ""}`;
+  placeNear(tip, anchorEl, clientX, clientY);
+}
+
+function openPackPicker(title, options, anchorEl, evt) {
+  const picker = document.getElementById("pack-picker");
+  if (!picker) return;
+  const tip = document.getElementById("pack-tip");
+  if (tip) tip.hidden = true;
+  picker.innerHTML = `<div class="pack-picker-title">${title}</div>` + options.map((opt, i) =>
+    `<button type="button" class="${opt.current ? "current" : ""}" data-pick="${i}">
+      <span>${opt.label}</span>
+      ${opt.sub ? `<small>${opt.sub}</small>` : ""}
+    </button>`
+  ).join("");
+  placeNear(picker, anchorEl, evt?.clientX, evt?.clientY);
+  picker.querySelectorAll("[data-pick]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const opt = options[parseInt(btn.dataset.pick, 10)];
+      hidePackOverlays();
+      if (opt && opt.onPick) opt.onPick();
+    });
+  });
 }
 
 function populatePack(state) {
   const quiverSlots = document.getElementById("pack-quiver-slots");
   const quiverCount = document.getElementById("pack-quiver-count");
   const dollEl = document.getElementById("pack-doll");
-  const weaponsEl = document.getElementById("pack-weapons");
   const pouchEl = document.getElementById("pack-pouch-slots");
   const chestEl = document.getElementById("pack-chest-grid");
-  if (!quiverSlots || !dollEl || !weaponsEl || !pouchEl || !chestEl) return;
+  if (!quiverSlots || !dollEl || !pouchEl || !chestEl) return;
 
+  hidePackOverlays();
   const q = sim.quiver;
   const loaded = q.peekQuiver();
   const cap = q.capacity;
@@ -534,7 +623,7 @@ function populatePack(state) {
     const a = loaded[i];
     if (a) {
       const def = getArrowDef(a.type);
-      cells.push(`<button type="button" class="pack-cell pack-cell-arrow ${packSel && packSel.kind === "q" && packSel.i === i ? "sel" : ""}" data-q="${i}" style="border-color:${def.color}" title="${def.name}">
+      cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}" title="${def.name}">
         <span class="pack-cell-mark">${arrowShort(a.type)}</span>
         <span class="pack-cell-sub">${def.name.replace(" Arrow", "")}</span>
         <span class="pack-cell-sub">L${a.level}</span>
@@ -544,28 +633,20 @@ function populatePack(state) {
     }
   }
   quiverSlots.innerHTML = cells.join("");
-  quiverSlots.style.gridTemplateColumns = `repeat(${Math.min(cap, 6)}, minmax(0, 1fr))`;
+  quiverSlots.style.gridTemplateColumns = `repeat(${Math.min(cap, 5)}, minmax(0, 1fr))`;
 
   dollEl.innerHTML = DOLL_SLOTS.map((slot) => {
     const item = findItem(state.equipped?.[slot.id]);
     const rare = slot.id === "cape" || slot.id === "amulet";
-    return `<button type="button" class="pack-slot pack-slot-${slot.id}${item ? " filled" : ""}${rare && !item ? " rare" : ""}${packSel && packSel.kind === "slot" && packSel.id === slot.id ? " sel" : ""}" data-slot="${slot.id}">
+    return `<button type="button" class="pack-slot pack-slot-${slot.id}${item ? " filled" : ""}${rare && !item ? " rare" : ""}" data-slot="${slot.id}">
       <span class="pack-slot-lab">${slot.name}</span>
       <span class="pack-slot-name">${item ? item.name : rare ? "—" : "Empty"}</span>
     </button>`;
   }).join("");
 
-  weaponsEl.innerHTML = WEAPON_SLOTS.map((slot) => {
-    const item = findItem(state.equipped?.[slot.id]);
-    return `<button type="button" class="pack-slot pack-wep${item ? " filled" : ""}${packSel && packSel.kind === "slot" && packSel.id === slot.id ? " sel" : ""}" data-slot="${slot.id}">
-      <span class="pack-slot-lab">${slot.name}</span>
-      <span class="pack-slot-name">${item ? item.name : "Empty"}</span>
-    </button>`;
-  }).join("");
-
   pouchEl.innerHTML = [0, 1].map((i) => {
     const item = findItem(pouch[i]);
-    return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}${packSel && packSel.kind === "pouch" && packSel.i === i ? " sel" : ""}" data-pouch="${i}">
+    return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
       ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
     </button>`;
   }).join("");
@@ -582,12 +663,12 @@ function populatePack(state) {
     ? chestItems.map((c) => {
       if (c.kind === "arrow") {
         const def = getArrowDef(c.arrow.type);
-        return `<button type="button" class="pack-cell pack-cell-arrow ${packSel && packSel.kind === "chest-a" && packSel.i === c.i ? "sel" : ""}" data-chest-a="${c.i}" style="border-color:${def.color}">
+        return `<button type="button" class="pack-cell pack-cell-arrow" data-chest-a="${c.i}" style="border-color:${def.color}">
           <span class="pack-cell-mark">${arrowShort(c.arrow.type)}</span>
           <span class="pack-cell-sub">${def.name.replace(" Arrow", "")}</span>
         </button>`;
       }
-      return `<button type="button" class="pack-cell filled ${packSel && packSel.kind === "chest-g" && packSel.id === c.id ? "sel" : ""}" data-chest-g="${c.id}">
+      return `<button type="button" class="pack-cell filled" data-chest-g="${c.id}">
         <span class="pack-cell-mark">${c.item.icon || "•"}</span>
         <span class="pack-cell-sub">${c.item.name}</span>
       </button>`;
@@ -606,118 +687,202 @@ function populatePack(state) {
     inspectItem(null, packNote);
     packNote = null;
   } else if (!packSel) {
-    inspectItem(null, "Tap a shaft in the chest to load the quiver.");
+    inspectItem(null, "Tap a slot to change it.");
   }
 
-  quiverSlots.querySelectorAll("[data-q]").forEach((el) => {
-    el.addEventListener("click", () => {
-      q.moveArrowToStorage(parseInt(el.dataset.q, 10));
-      packSel = null;
-      packNote = "Stored in the chest.";
-      saveGame();
-      populateHub();
+  const openQuiverPicker = (slotIndex, el, evt) => {
+    const current = loaded[slotIndex];
+    const options = [];
+    if (current) {
+      const def = getArrowDef(current.type);
+      options.push({
+        label: def.name,
+        sub: `Equipped · L${current.level}`,
+        current: true,
+        onPick: () => {},
+      });
+      options.push({
+        label: "Store in chest",
+        sub: "Clear this slot",
+        onPick: () => {
+          q.setQuiverSlot(slotIndex, null);
+          saveGame();
+          populateHub();
+        },
+      });
+    } else {
+      options.push({ label: "Empty", sub: "No shaft here", current: true, onPick: () => {} });
+    }
+    stored.forEach((a, si) => {
+      const def = getArrowDef(a.type);
+      options.push({
+        label: def.name,
+        sub: `Chest · L${a.level}`,
+        onPick: () => {
+          q.setQuiverSlot(current ? slotIndex : loaded.length, si);
+          saveGame();
+          populateHub();
+        },
+      });
+    });
+    if (stored.length === 0 && !current) {
+      options.push({ label: "No spare shafts", sub: "Buy arrows in the shop", onPick: () => {} });
+    }
+    openPackPicker(current ? "Change shaft" : "Load shaft", options, el, evt);
+  };
+
+  quiverSlots.querySelectorAll("[data-q], [data-q-empty]").forEach((el) => {
+    el.addEventListener("click", (evt) => {
+      const i = parseInt(el.dataset.q != null ? el.dataset.q : el.dataset.qEmpty, 10);
+      openQuiverPicker(i, el, evt);
     });
   });
-  quiverSlots.querySelectorAll("[data-q-empty]").forEach((el) => {
-    el.addEventListener("click", () => {
-      if (packSel && packSel.kind === "chest-a") {
-        q.moveArrowToQuiver(packSel.i);
-        packSel = null;
-        saveGame();
-        populateHub();
-      }
-    });
-  });
+
   chestEl.querySelectorAll("[data-chest-a]").forEach((el) => {
+    const i = parseInt(el.dataset.chestA, 10);
+    const def = getArrowDef(stored[i].type);
+    const tipItem = { name: def.name, desc: def.desc, stats: def.stats };
+    el.addEventListener("pointerenter", (evt) => showPackTip(tipItem, el, evt.clientX, evt.clientY));
+    el.addEventListener("pointerleave", () => {
+      const tip = document.getElementById("pack-tip");
+      if (tip) tip.hidden = true;
+    });
     el.addEventListener("click", () => {
-      const i = parseInt(el.dataset.chestA, 10);
       if (q.moveArrowToQuiver(i)) {
-        packSel = null;
         packNote = "Loaded into the quiver.";
         saveGame();
         populateHub();
       } else {
-        packSel = { kind: "chest-a", i };
-        inspectItem(getArrowDef(stored[i].type), "Quiver is full. Tap a loaded shaft to store it first.");
+        inspectItem(def, "Quiver is full. Tap a quiver slot to swap.");
       }
     });
   });
+
   chestEl.querySelectorAll("[data-chest-g]").forEach((el) => {
+    const item = findItem(el.dataset.chestG);
+    if (!item) return;
+    el.addEventListener("pointerenter", (evt) => showPackTip(item, el, evt.clientX, evt.clientY));
+    el.addEventListener("pointerleave", () => {
+      const tip = document.getElementById("pack-tip");
+      if (tip) tip.hidden = true;
+    });
     el.addEventListener("click", () => {
-      const item = findItem(el.dataset.chestG);
-      if (!item) return;
       inspectItem(item);
       if (item.slot === "potion") {
         const empty = pouch.findIndex((x) => !x);
         if (empty >= 0) {
           state.pouch[empty] = item.id;
-          packSel = null;
           saveGame();
           populateHub();
           return;
         }
-        packSel = { kind: "chest-g", id: item.id };
-        inspectItem(item, "Pouch is full. Tap a vial to put it back.");
+        inspectItem(item, "Pouch is full. Tap a pouch slot to swap.");
         return;
       }
-      if (item.slot && item.slot !== "ammo") {
+      if (item.slot && GEAR_PICK_SLOTS.has(item.slot)) {
         state.equipped[item.slot] = item.id;
         if (item.slot === "quiver") syncQuiverCap(state);
-        packSel = null;
         saveGame();
         populateHub();
       }
     });
   });
-  dollEl.querySelectorAll("[data-slot]").forEach((el) => bindGearSlot(el, state));
-  weaponsEl.querySelectorAll("[data-slot]").forEach((el) => bindGearSlot(el, state));
-  pouchEl.querySelectorAll("[data-pouch]").forEach((el) => {
-    el.addEventListener("click", () => {
-      const i = parseInt(el.dataset.pouch, 10);
-      if (pouch[i]) {
-        state.pouch[i] = null;
-        packSel = null;
-        saveGame();
-        populateHub();
-        return;
-      }
-      if (packSel && packSel.kind === "chest-g") {
-        const item = findItem(packSel.id);
-        if (item && item.slot === "potion") {
-          state.pouch[i] = item.id;
-          packSel = null;
-          saveGame();
-          populateHub();
-        }
-      }
-    });
-  });
-}
 
-function bindGearSlot(el, state) {
-  el.addEventListener("click", () => {
-    const slot = el.dataset.slot;
-    const worn = findItem(state.equipped?.[slot]);
-    inspectItem(worn, worn ? "Tap again to unequip (bow stays)." : "Tap matching kit in the chest to wear it.");
-    if (worn && slot !== "bow") {
-      if (packSel && packSel.kind === "slot" && packSel.id === slot) {
-        state.equipped[slot] = null;
-        if (slot === "dagger") state.equipped.dagger = "dagger_iron";
-        if (slot === "quiver") {
-          state.equipped.quiver = "quiver_basic";
-          syncQuiverCap(state);
+  dollEl.querySelectorAll("[data-slot]").forEach((el) => {
+    el.addEventListener("click", (evt) => {
+      const slot = el.dataset.slot;
+      const current = findItem(state.equipped?.[slot]);
+      const options = [];
+      if (current) {
+        options.push({
+          label: current.name,
+          sub: current.stats || "Equipped",
+          current: true,
+          onPick: () => inspectItem(current),
+        });
+        if (slot !== "bow") {
+          options.push({
+            label: slot === "dagger" || slot === "quiver" ? "Revert to starter" : "Unequip",
+            sub: "Clear this slot",
+            onPick: () => {
+              if (slot === "dagger") state.equipped.dagger = "dagger_iron";
+              else if (slot === "quiver") {
+                state.equipped.quiver = "quiver_basic";
+                syncQuiverCap(state);
+              } else state.equipped[slot] = null;
+              saveGame();
+              populateHub();
+            },
+          });
         }
-        packSel = null;
-        saveGame();
-        populateHub();
-        return;
+      } else {
+        options.push({ label: "Empty", sub: "Nothing equipped", current: true, onPick: () => {} });
       }
-      packSel = { kind: "slot", id: slot };
-      populatePack(state);
-      return;
-    }
-    packSel = { kind: "slot", id: slot };
-    populatePack(state);
+      const candidates = (state.ownedItems || [])
+        .map(findItem)
+        .filter((it) => it && it.slot === slot && it.id !== state.equipped?.[slot]);
+      for (const it of candidates) {
+        options.push({
+          label: it.name,
+          sub: it.stats || it.desc || "",
+          onPick: () => {
+            state.equipped[slot] = it.id;
+            if (slot === "quiver") syncQuiverCap(state);
+            saveGame();
+            populateHub();
+          },
+        });
+      }
+      if (candidates.length === 0 && !current) {
+        options.push({ label: "Nothing in chest", sub: "Buy gear in the shop", onPick: () => {} });
+      }
+      openPackPicker(slot, options, el, evt);
+    });
+  });
+
+  pouchEl.querySelectorAll("[data-pouch]").forEach((el) => {
+    el.addEventListener("click", (evt) => {
+      const i = parseInt(el.dataset.pouch, 10);
+      const current = findItem(pouch[i]);
+      const options = [];
+      if (current) {
+        options.push({
+          label: current.name,
+          sub: current.stats || "In pouch",
+          current: true,
+          onPick: () => inspectItem(current),
+        });
+        options.push({
+          label: "Put back in chest",
+          sub: "Clear this cell",
+          onPick: () => {
+            state.pouch[i] = null;
+            saveGame();
+            populateHub();
+          },
+        });
+      } else {
+        options.push({ label: "Empty", sub: "No vial here", current: true, onPick: () => {} });
+      }
+      const potions = (state.ownedItems || [])
+        .map(findItem)
+        .filter((it) => it && it.slot === "potion" && !pouch.includes(it.id));
+      for (const it of potions) {
+        options.push({
+          label: it.name,
+          sub: it.stats || "From chest",
+          onPick: () => {
+            state.pouch[i] = it.id;
+            saveGame();
+            populateHub();
+          },
+        });
+      }
+      if (!current && potions.length === 0) {
+        options.push({ label: "No potions", sub: "Buy one in the shop", onPick: () => {} });
+      }
+      openPackPicker("Pouch", options, el, evt);
+    });
   });
 }
 
@@ -884,7 +1049,7 @@ function updateUI() {
   if (quiverEl) {
     const q = sim.quiver;
     quiverEl.textContent = sim.state.phase === "run"
-      ? `Queue ${q.queueCount} · Deck ${q.deckCount}`
+      ? `Arrows ${q.quiverCount}`
       : `Deck ${q.quiverCount}/${q.capacity}`;
   }
   if (hpFill) hpFill.style.width = `${(sim.state.playerHp / sim.state.playerMaxHp) * 100}%`;
@@ -906,6 +1071,22 @@ function updateUI() {
     const circ = 2 * Math.PI * 17;
     cooldownRing.setAttribute("stroke-dasharray", `${pct * circ} ${circ}`);
     cooldownLabel.style.opacity = pct >= 1 ? "1" : "0.4";
+  }
+
+  const runQuiver = document.getElementById("run-quiver");
+  if (runQuiver) {
+    if (sim.state.phase === "run") {
+      const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);
+      runQuiver.innerHTML = queue.map((a, i) => {
+        const def = getArrowDef(a.type);
+        return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="border-color:${def.color}">
+          <div class="rq-mark">${arrowShort(a.type)}</div>
+          <div class="rq-tag">${i === 0 ? "Ready" : "Next"}</div>
+        </div>`;
+      }).join("") || `<div class="run-quiver-card"><div class="rq-mark">—</div><div class="rq-tag">Empty</div></div>`;
+    } else {
+      runQuiver.innerHTML = "";
+    }
   }
 
   drawMinimap();
@@ -1018,41 +1199,46 @@ function drawCorridor(ctx) {
 }
 
 
-// ─── Arrow Queue ─────────────────────────────────────────────
+// ─── Arrow Queue (canvas backup; DOM strip is primary) ───────
 function drawArrowQueue(ctx) {
-  const queue = sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver().slice(0, 4);
-  const startX = 16;
-  const y = canvas.clientHeight * (canvas.clientWidth / Math.max(1, canvas.clientHeight) < 0.85 ? 0.86 : 0.92);
-  const spacing = 64;
+  if (sim.state.phase !== "run") return;
+  const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);
+  if (!queue.length) return;
+  const startX = 14;
+  const y = canvas.clientHeight - 118;
+  const spacing = 58;
 
-  ctx.font = '600 14px "Chakra Petch", sans-serif';
+  ctx.save();
+  ctx.font = '700 13px "Chakra Petch", sans-serif';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
   for (let i = 0; i < queue.length; i++) {
     const a = queue[i];
-    const x = startX + i * spacing + 20;
+    const x = startX + i * spacing + 24;
     const def = getArrowDef(a.type);
     const col = def.color || "#d8d2c4";
+    const ready = i === 0;
 
-    ctx.fillStyle = "rgba(20, 16, 12, 0.8)";
-    ctx.fillRect(x - 26, y - 24, 52, 48);
-    ctx.strokeStyle = withAlpha(col, 0.6);
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x - 26, y - 24, 52, 48);
+    ctx.fillStyle = "rgba(12, 8, 5, 0.78)";
+    ctx.fillRect(x - 24, y - 22, 48, 44);
+    ctx.strokeStyle = ready ? "#e8c56a" : withAlpha(col, 0.7);
+    ctx.lineWidth = ready ? 2.2 : 1.5;
+    ctx.strokeRect(x - 24, y - 22, 48, 44);
 
     ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.moveTo(x, y - 10);
-    ctx.lineTo(x + 6, y);
+    ctx.moveTo(x, y - 8);
+    ctx.lineTo(x + 5, y + 2);
     ctx.lineTo(x, y + 10);
-    ctx.lineTo(x - 6, y);
+    ctx.lineTo(x - 5, y + 2);
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = withAlpha("#ebe6d8", 0.85);
-    ctx.fillText(def.short, x, y + 30);
+    ctx.fillStyle = "#f3ead4";
+    ctx.fillText(def.short, x, y + 28);
   }
+  ctx.restore();
 }
 
 // ─── Game Loop ────────────────────────────────────────────────

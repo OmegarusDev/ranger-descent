@@ -1,5 +1,5 @@
 import { CONFIG } from "../data/config.js?v=26";
-import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=30";
+import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=31";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js?v=34";

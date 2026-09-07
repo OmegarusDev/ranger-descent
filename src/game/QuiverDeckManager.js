@@ -242,6 +242,35 @@ export class QuiverDeckManager {
     return true;
   }
 
+  /** Put a storage arrow into a quiver slot, or clear the slot when storageIndex is null. */
+  setQuiverSlot(quiverIndex, storageIndex = null) {
+    const loaded = this.peekQuiver();
+    if (storageIndex == null) {
+      return this.moveArrowToStorage(quiverIndex);
+    }
+    if (storageIndex < 0 || storageIndex >= this.storage.length) return false;
+    const incoming = this.storage.splice(storageIndex, 1)[0];
+    if (quiverIndex >= 0 && quiverIndex < loaded.length) {
+      let old;
+      if (quiverIndex < this.queue.length) {
+        old = this.queue[quiverIndex];
+        this.queue[quiverIndex] = incoming;
+      } else {
+        const di = quiverIndex - this.queue.length;
+        old = this.deck[di];
+        this.deck[di] = incoming;
+      }
+      this.storage.push(old);
+      return true;
+    }
+    if (loaded.length >= this.capacity) {
+      this.storage.splice(storageIndex, 0, incoming);
+      return false;
+    }
+    this.deck.push(incoming);
+    return true;
+  }
+
   tick() {
     return null;
   }
