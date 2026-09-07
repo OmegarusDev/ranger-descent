@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 720" preserveAspectRatio="xMidYMax slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7eb6d9"/>
+      <stop offset="0.45" stop-color="#a8cce6"/>
+      <stop offset="1" stop-color="#c5d8a8"/>
+    </linearGradient>
+    <linearGradient id="plankL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a2210"/>
+      <stop offset="0.35" stop-color="#7a4e28"/>
+      <stop offset="0.7" stop-color="#5a381c"/>
+      <stop offset="1" stop-color="#2e1a0c"/>
+    </linearGradient>
+    <linearGradient id="plankR" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2e1a0c"/>
+      <stop offset="0.3" stop-color="#8a5a30"/>
+      <stop offset="0.75" stop-color="#5a381c"/>
+      <stop offset="1" stop-color="#3a2210"/>
+    </linearGradient>
+    <pattern id="ashlar" width="56" height="36" patternUnits="userSpaceOnUse">
+      <rect width="56" height="36" fill="#6a6256"/>
+      <rect x="0.6" y="0.6" width="26.8" height="16.6" fill="#8a7e6e"/>
+      <rect x="28.2" y="0.6" width="26.8" height="16.6" fill="#74685c"/>
+      <rect x="0.6" y="18.4" width="18" height="16.8" fill="#6e6458"/>
+      <rect x="19.4" y="18.4" width="36" height="16.8" fill="#84786a"/>
+      <path d="M1 1 H27 M29 1 H55 M1 18 H55 M1 35 H55 M28 1 V18 M20 18 V35" stroke="#3a3228" stroke-width="1.1" fill="none"/>
+    </pattern>
+    <pattern id="grass" width="28" height="18" patternUnits="userSpaceOnUse">
+      <rect width="28" height="18" fill="#4a7a32"/>
+      <path d="M2 18 C3 8 1 6 4 2" stroke="#6aaa44" stroke-width="1.3" fill="none"/>
+      <path d="M8 18 C7 10 9 7 7 3" stroke="#3d6a28" stroke-width="1.2" fill="none"/>
+      <path d="M14 18 C15 9 13 5 16 1" stroke="#5a9240" stroke-width="1.4" fill="none"/>
+      <path d="M20 18 C19 11 21 8 19 4" stroke="#3a6826" stroke-width="1.1" fill="none"/>
+      <path d="M25 18 C26 10 24 7 27 3" stroke="#6aaa44" stroke-width="1.2" fill="none"/>
+    </pattern>
+    <pattern id="dirt" width="22" height="14" patternUnits="userSpaceOnUse">
+      <rect width="22" height="14" fill="#7a5a32"/>
+      <ellipse cx="6" cy="5" rx="5" ry="3" fill="#8a6a3c"/>
+      <ellipse cx="16" cy="9" rx="4" ry="2.5" fill="#6a4a28"/>
+    </pattern>
+    <pattern id="grain" width="11" height="48" patternUnits="userSpaceOnUse">
+      <path d="M2 0 C4 12 1 24 3 48" stroke="#1a1008" stroke-width="0.7" fill="none" opacity="0.45"/>
+      <path d="M7 0 C6 16 9 30 6 48" stroke="#c4a070" stroke-width="0.4" fill="none" opacity="0.16"/>
+    </pattern>
+    <clipPath id="leftLeaf">
+      <path d="M246 588 L246 348 Q400 228 400 292 L400 588 Z"/>
+    </clipPath>
+    <clipPath id="rightLeaf">
+      <path d="M400 292 Q400 228 554 348 L554 588 L400 588 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="800" height="720" fill="url(#sky)"/>
+  <!-- sun -->
+  <circle cx="640" cy="88" r="36" fill="#ffe08a"/>
+  <circle cx="640" cy="88" r="22" fill="#fff3c0"/>
+  <ellipse cx="180" cy="96" rx="70" ry="18" fill="#fff" opacity="0.45"/>
+  <ellipse cx="210" cy="88" rx="40" ry="14" fill="#fff" opacity="0.35"/>
+  <ellipse cx="520" cy="70" rx="56" ry="14" fill="#fff" opacity="0.3"/>
+
+  <!-- distant hills -->
+  <path d="M0 230 C80 200 140 214 220 198 C300 184 360 210 460 196 C560 182 640 208 800 190 L800 280 L0 280 Z" fill="#6a8a4a"/>
+  <path d="M0 248 C120 228 200 246 320 232 C440 218 560 244 800 226 L800 280 L0 280 Z" fill="#5a7a3c"/>
+
+  <!-- trees on the flanks (visible on wide screens) -->
+  <g fill="#2e5a22">
+    <ellipse cx="56" cy="268" rx="38" ry="52"/>
+    <ellipse cx="86" cy="250" rx="28" ry="40"/>
+    <ellipse cx="744" cy="262" rx="40" ry="56"/>
+    <ellipse cx="708" cy="248" rx="26" ry="38"/>
+  </g>
+  <rect x="50" y="300" width="10" height="36" fill="#5a381c"/>
+  <rect x="738" y="300" width="10" height="36" fill="#5a381c"/>
+
+  <!-- battlements -->
+  <rect x="0" y="248" width="800" height="26" fill="#6a6256"/>
+  <g fill="#8a7e6e" stroke="#3a3228" stroke-width="1">
+    <rect x="10" y="226" width="36" height="30"/>
+    <rect x="62" y="222" width="34" height="34"/>
+    <rect x="114" y="226" width="32" height="30"/>
+    <rect x="164" y="220" width="38" height="36"/>
+    <rect x="220" y="224" width="34" height="32"/>
+    <rect x="274" y="221" width="36" height="35"/>
+    <rect x="330" y="226" width="32" height="30"/>
+    <rect x="380" y="220" width="38" height="36"/>
+    <rect x="436" y="224" width="34" height="32"/>
+    <rect x="490" y="221" width="36" height="35"/>
+    <rect x="546" y="226" width="32" height="30"/>
+    <rect x="596" y="220" width="38" height="36"/>
+    <rect x="652" y="224" width="34" height="32"/>
+    <rect x="704" y="221" width="36" height="35"/>
+    <rect x="756" y="226" width="34" height="30"/>
+  </g>
+
+  <!-- sunlit wall -->
+  <rect x="0" y="258" width="800" height="340" fill="url(#ashlar)"/>
+  <rect x="0" y="258" width="800" height="340" fill="#c4a060" opacity="0.08"/>
+  <path d="M90 280 C110 360 70 440 120 560" stroke="#4a4238" stroke-width="8" opacity="0.18" fill="none"/>
+  <path d="M710 270 C690 360 740 450 700 560" stroke="#4a4238" stroke-width="10" opacity="0.16" fill="none"/>
+  <ellipse cx="40" cy="560" rx="36" ry="16" fill="#3d6a32" opacity="0.45"/>
+  <ellipse cx="760" cy="548" rx="30" ry="14" fill="#3d6a32" opacity="0.4"/>
+
+  <!-- thick stone doorframe -->
+  <g stroke="#2a241c" stroke-width="1.3">
+    <rect x="204" y="348" width="42" height="58" fill="#8a7e6e"/>
+    <rect x="202" y="406" width="44" height="56" fill="#6e6458"/>
+    <rect x="205" y="462" width="41" height="60" fill="#84786a"/>
+    <rect x="203" y="522" width="43" height="66" fill="#74685c"/>
+    <rect x="554" y="348" width="42" height="58" fill="#84786a"/>
+    <rect x="556" y="406" width="42" height="56" fill="#8a7e6e"/>
+    <rect x="553" y="462" width="44" height="60" fill="#6e6458"/>
+    <rect x="555" y="522" width="42" height="66" fill="#8a7e6e"/>
+    <rect x="204" y="582" width="392" height="20" fill="#5a5046"/>
+    <rect x="210" y="584" width="120" height="14" fill="#6a6056"/>
+    <rect x="340" y="583" width="130" height="15" fill="#52483e"/>
+    <rect x="478" y="584" width="112" height="14" fill="#6a6056"/>
+    <path d="M204 348 L246 348 L246 292 Q320 236 400 228 L400 292 Q330 304 246 348 Z" fill="#84786a"/>
+    <path d="M596 348 L554 348 L554 292 Q480 236 400 228 L400 292 Q470 304 554 348 Z" fill="#6e6458"/>
+    <path d="M246 292 Q400 210 554 292 L524 304 Q400 242 276 304 Z" fill="#8a7e6e"/>
+    <path d="M286 268 Q400 224 514 268 L496 280 Q400 246 304 280 Z" fill="#74685c"/>
+    <rect x="384" y="214" width="32" height="28" fill="#9a8e80" transform="rotate(-2 400 228)"/>
+  </g>
+  <path d="M400 216 L405 248" stroke="#2a241c" stroke-width="1.5" fill="none"/>
+
+  <!-- hall beyond -->
+  <path d="M246 588 L246 348 Q400 228 554 348 L554 588 Z" fill="#1a120c"/>
+  <path d="M310 390 Q400 310 490 390 L490 560 L310 560 Z" fill="#120c08"/>
+
+  <!-- doors -->
+  <g clip-path="url(#leftLeaf)">
+    <rect x="246" y="220" width="156" height="380" fill="url(#plankL)"/>
+    <rect x="246" y="220" width="22" height="380" fill="#4a2e16"/>
+    <rect x="268" y="220" width="22" height="380" fill="#7a4e28"/>
+    <rect x="290" y="220" width="20" height="380" fill="#5a381c"/>
+    <rect x="310" y="220" width="24" height="380" fill="#8a5a30"/>
+    <rect x="334" y="220" width="20" height="380" fill="#4a2a12"/>
+    <rect x="354" y="220" width="22" height="380" fill="#6b4424"/>
+    <rect x="376" y="220" width="24" height="380" fill="#3a2210"/>
+    <rect x="246" y="220" width="156" height="380" fill="url(#grain)"/>
+    <g stroke="#2a1810" stroke-width="1">
+      <line x1="268" y1="230" x2="268" y2="588"/>
+      <line x1="290" y1="230" x2="290" y2="588"/>
+      <line x1="310" y1="230" x2="310" y2="588"/>
+      <line x1="334" y1="230" x2="334" y2="588"/>
+      <line x1="354" y1="230" x2="354" y2="588"/>
+      <line x1="376" y1="230" x2="376" y2="588"/>
+    </g>
+    <rect x="246" y="372" width="154" height="13" fill="#2a2420"/>
+    <rect x="246" y="498" width="154" height="13" fill="#2a2420"/>
+  </g>
+  <g clip-path="url(#rightLeaf)">
+    <rect x="398" y="220" width="158" height="380" fill="url(#plankR)"/>
+    <rect x="400" y="220" width="22" height="380" fill="#3a2210"/>
+    <rect x="422" y="220" width="22" height="380" fill="#7a4e28"/>
+    <rect x="444" y="220" width="20" height="380" fill="#5a381c"/>
+    <rect x="464" y="220" width="24" height="380" fill="#8a5a30"/>
+    <rect x="488" y="220" width="20" height="380" fill="#4a2a12"/>
+    <rect x="508" y="220" width="22" height="380" fill="#6b4424"/>
+    <rect x="530" y="220" width="24" height="380" fill="#3a2210"/>
+    <rect x="398" y="220" width="158" height="380" fill="url(#grain)"/>
+    <g stroke="#2a1810" stroke-width="1">
+      <line x1="422" y1="230" x2="422" y2="588"/>
+      <line x1="444" y1="230" x2="444" y2="588"/>
+      <line x1="464" y1="230" x2="464" y2="588"/>
+      <line x1="488" y1="230" x2="488" y2="588"/>
+      <line x1="508" y1="230" x2="508" y2="588"/>
+      <line x1="530" y1="230" x2="530" y2="588"/>
+    </g>
+    <rect x="400" y="372" width="154" height="13" fill="#2a2420"/>
+    <rect x="400" y="498" width="154" height="13" fill="#2a2420"/>
+  </g>
+  <line x1="400" y1="292" x2="400" y2="588" stroke="#120c08" stroke-width="3.5"/>
+
+  <!-- ring handles -->
+  <g fill="#2a2420" stroke="#6a5a48" stroke-width="1.6">
+    <rect x="338" y="428" width="22" height="26" rx="2"/>
+    <circle cx="349" cy="460" r="16" fill="none" stroke="#7a6a54" stroke-width="4"/>
+    <rect x="440" y="428" width="22" height="26" rx="2"/>
+    <circle cx="451" cy="460" r="16" fill="none" stroke="#7a6a54" stroke-width="4"/>
+  </g>
+
+  <!-- grass yard -->
+  <rect x="0" y="598" width="800" height="122" fill="url(#grass)"/>
+  <path d="M300 598 Q400 640 500 598 L560 720 L240 720 Z" fill="url(#dirt)" opacity="0.92"/>
+  <path d="M0 598 C80 592 140 606 220 598" stroke="#3d6a32" stroke-width="8" fill="none" opacity="0.35"/>
+  <g fill="#3d6a32">
+    <path d="M30 680 C36 650 22 640 34 618"/>
+    <path d="M70 700 C78 668 58 658 74 632"/>
+    <path d="M760 690 C752 660 770 650 748 628"/>
+    <path d="M720 710 C712 680 728 670 708 648"/>
+  </g>
+
+  <!-- posts -->
+  <rect x="228" y="400" width="16" height="250" fill="#5a381c" stroke="#2a1810" stroke-width="1.4"/>
+  <rect x="230" y="402" width="4" height="246" fill="#8a5a30" opacity="0.4"/>
+  <rect x="556" y="402" width="16" height="248" fill="#5a381c" stroke="#2a1810" stroke-width="1.4"/>
+  <rect x="558" y="404" width="4" height="244" fill="#8a5a30" opacity="0.4"/>
+  <ellipse cx="236" cy="652" rx="18" ry="6" fill="#2a4018" opacity="0.35"/>
+  <ellipse cx="564" cy="652" rx="18" ry="6" fill="#2a4018" opacity="0.35"/>
+</svg>

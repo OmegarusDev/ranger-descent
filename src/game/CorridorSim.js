@@ -1,36 +1,36 @@
 import { CONFIG } from "../data/config.js?v=26";
-import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=29";
+import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=30";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=31";
+import { GameStateManager } from "./GameStateManager.js?v=34";
 
 let _nextId = 1;
 
 const ENEMY_DEFS = {
-  slime:          { hp: 10,  speed: 9,   size: 0.85, color: "#b84a55", souls: 1, armor: "none", contactDmg: 4 },
-  slime_large:    { hp: 30,  speed: 7,   size: 1.3, color: "#c45a65", souls: 2, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
-  slime_huge:     { hp: 60,  speed: 5,   size: 1.75, color: "#d46a75", souls: 4, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
-  goblin_runt:    { hp: 8,   speed: 20,  size: 1.2, color: "#6aaa5a", souls: 1, armor: "none", contactDmg: 3 },
-  goblin_warrior: { hp: 18,  speed: 16,  size: 1.5, color: "#5a9a4a", souls: 2, armor: "none", contactDmg: 5 },
-  goblin_chieftain:{ hp: 40, speed: 13,  size: 2.0, color: "#4a8a3a", souls: 4, armor: "none", contactDmg: 7 },
-  imp:            { hp: 6,   speed: 24,  size: 1.1, color: "#d4892a", souls: 1, armor: "none", contactDmg: 3 },
+  slime:          { hp: 5,   speed: 9,   size: 0.85, color: "#b84a55", souls: 1, armor: "none", contactDmg: 4 },
+  slime_large:    { hp: 14,  speed: 7,   size: 1.3, color: "#c45a65", souls: 2, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
+  slime_huge:     { hp: 28,  speed: 5,   size: 1.75, color: "#d46a75", souls: 4, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
+  goblin_runt:    { hp: 7,   speed: 20,  size: 1.2, color: "#6aaa5a", souls: 1, armor: "none", contactDmg: 3 },
+  goblin_warrior: { hp: 14,  speed: 16,  size: 1.5, color: "#5a9a4a", souls: 2, armor: "none", contactDmg: 5 },
+  goblin_chieftain:{ hp: 22, speed: 13,  size: 2.0, color: "#4a8a3a", souls: 4, armor: "none", contactDmg: 7 },
+  imp:            { hp: 8,   speed: 24,  size: 1.1, color: "#d4892a", souls: 1, armor: "none", contactDmg: 3 },
   scamp:          { hp: 12,  speed: 22,  size: 1.2, color: "#e0a030", souls: 2, armor: "none", contactDmg: 4 },
-  demon:          { hp: 35,  speed: 16,  size: 1.8, color: "#c04040", souls: 4, armor: "none", contactDmg: 7 },
-  skeleton:       { hp: 50,  speed: 11,  size: 2.1, color: "#c8c0b0", souls: 3, armor: "none", contactDmg: 7 },
-  skeleton_archer:{ hp: 25,  speed: 12,  size: 1.8, color: "#b0a898", souls: 2, armor: "none", contactDmg: 4 },
-  hauler:         { hp: 80,  speed: 8,   size: 2.4, color: "#8a96a0", souls: 4, armor: "heavy", contactDmg: 10 },
-  ghoul:          { hp: 15,  speed: 15,  size: 1.4, color: "#7a6a5a", souls: 1, armor: "none", contactDmg: 4 },
-  wight:          { hp: 30,  speed: 13,  size: 1.7, color: "#6a5a4a", souls: 2, armor: "none", contactDmg: 6 },
-  wraith:         { hp: 18,  speed: 18,  size: 1.3, color: "#8a7ab8", souls: 2, armor: "energy", contactDmg: 5 },
-  vampire:        { hp: 35,  speed: 17,  size: 1.5, color: "#a02020", souls: 3, armor: "none", contactDmg: 6, lifeSteal: true },
-  vampire_lord:   { hp: 60,  speed: 19,  size: 2.0, color: "#801010", souls: 5, armor: "none", contactDmg: 8, lifeSteal: true },
-  lich:           { hp: 50,  speed: 10,  size: 1.8, color: "#6040a0", souls: 4, armor: "none", summonRate: 5, contactDmg: 5 },
-  bat:            { hp: 6,   speed: 28,  size: 0.6, color: "#4a3a5a", souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
-  spider:         { hp: 8,   speed: 20,  size: 0.9, color: "#5a4a3a", souls: 1, armor: "none", contactDmg: 3, poison: 1 },
-  giant_spider:   { hp: 25,  speed: 16,  size: 1.5, color: "#4a3a2a", souls: 2, armor: "none", contactDmg: 5, poison: 3 },
-  orc:            { hp: 35,  speed: 14,  size: 1.7, color: "#5a7a4a", souls: 3, armor: "none", contactDmg: 7 },
-  ogre:           { hp: 70,  speed: 9,   size: 2.3, color: "#6a8a5a", souls: 5, armor: "heavy", contactDmg: 10 },
-  troll:          { hp: 50,  speed: 12,  size: 2.0, color: "#4a6a3a", souls: 4, armor: "none", contactDmg: 8, regen: 2 },
+  demon:          { hp: 20,  speed: 16,  size: 1.8, color: "#c04040", souls: 4, armor: "none", contactDmg: 7 },
+  skeleton:       { hp: 18,  speed: 11,  size: 2.1, color: "#c8c0b0", souls: 3, armor: "none", contactDmg: 7 },
+  skeleton_archer:{ hp: 12,  speed: 12,  size: 1.8, color: "#b0a898", souls: 2, armor: "none", contactDmg: 4 },
+  hauler:         { hp: 32,  speed: 8,   size: 2.4, color: "#8a96a0", souls: 4, armor: "heavy", contactDmg: 10 },
+  ghoul:          { hp: 10,  speed: 15,  size: 1.4, color: "#7a6a5a", souls: 1, armor: "none", contactDmg: 4 },
+  wight:          { hp: 16,  speed: 13,  size: 1.7, color: "#6a5a4a", souls: 2, armor: "none", contactDmg: 6 },
+  wraith:         { hp: 12,  speed: 18,  size: 1.3, color: "#8a7ab8", souls: 2, armor: "energy", contactDmg: 5 },
+  vampire:        { hp: 18,  speed: 17,  size: 1.5, color: "#a02020", souls: 3, armor: "none", contactDmg: 6, lifeSteal: true },
+  vampire_lord:   { hp: 28,  speed: 19,  size: 2.0, color: "#801010", souls: 5, armor: "none", contactDmg: 8, lifeSteal: true },
+  lich:           { hp: 22,  speed: 10,  size: 1.8, color: "#6040a0", souls: 4, armor: "none", summonRate: 5, contactDmg: 5 },
+  bat:            { hp: 4,   speed: 28,  size: 0.6, color: "#4a3a5a", souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
+  spider:         { hp: 6,   speed: 20,  size: 0.9, color: "#5a4a3a", souls: 1, armor: "none", contactDmg: 3, poison: 1 },
+  giant_spider:   { hp: 16,  speed: 16,  size: 1.5, color: "#4a3a2a", souls: 2, armor: "none", contactDmg: 5, poison: 3 },
+  orc:            { hp: 18,  speed: 14,  size: 1.7, color: "#5a7a4a", souls: 3, armor: "none", contactDmg: 7 },
+  ogre:           { hp: 28,  speed: 9,   size: 2.3, color: "#6a8a5a", souls: 5, armor: "heavy", contactDmg: 10 },
+  troll:          { hp: 22,  speed: 12,  size: 2.0, color: "#4a6a3a", souls: 4, armor: "none", contactDmg: 8, regen: 2 },
   boss_grunt:     { hp: 200, speed: 10,  size: 3.3, color: "#c4305a", souls: 20, armor: "heavy", contactDmg: 12 },
   boss_warden:    { hp: 250, speed: 8,   size: 3.3, color: "#3d9a8e", souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
   boss_wraith:    { hp: 180, speed: 14,  size: 3.0, color: "#c9a227", souls: 30, armor: "energy", contactDmg: 15 },
@@ -52,9 +52,17 @@ const BEHAVIOR_MAP = {
   boss_death_knight: "charge", boss_lich_king: "summoner", boss_spider_queen: "swarm_slow",
 };
 
-function createEnemy(type, worldX, worldZ, scale = 1) {
+/** Shot-economy HP: fodder gains +1 every 2 floors, elites +2. Elevators add 25%. */
+function scaleEnemyHp(base, floorIndex, elevatorIndex) {
+  const step = Math.floor((floorIndex || 0) / 2);
+  const per = (base || 1) >= 12 ? 2 : 1;
+  const elevMult = 1 + (elevatorIndex || 0) * 0.25;
+  return Math.max(1, Math.round((base + step * per) * elevMult));
+}
+
+function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
   const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
-  const hp = Math.max(1, Math.round((d.hp || 10) * scale));
+  const hp = scaleEnemyHp(d.hp || 10, floorIndex, elevatorIndex);
   return {
     id: _nextId++, type, x: worldX, worldZ,
     behavior: BEHAVIOR_MAP[type] || "advance",
@@ -72,6 +80,9 @@ function createEnemy(type, worldX, worldZ, scale = 1) {
     _summonTimer: 0, _summonRate: d.summonRate || 0,
     _splitDone: false,
     _hitFlash: 0,
+    _hitStun: 0,
+    _squash: 0,
+    _contactCd: 0,
   };
 }
 
@@ -88,13 +99,67 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId) {
 
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
-/** Keep fights in the visible lane — full corridor half is wider than a portrait view. */
-const PLAY_LANE = HALF_CORRIDOR * 0.56;
+/** Visible fight band — full corridor half is wider than a portrait view. */
+const FIGHT_LANE = HALF_CORRIDOR * 0.22;
 const SEGMENT_LENGTH = 800;
 /** Fork sits this far ahead when the wave is over. */
 const JUNCTION_STOP = 180;
 /** Groups appear this far down the hall and walk in. */
 const PACK_NEAR = 420;
+
+export function enemyFamily(type = "") {
+  if (type.includes("slime")) return "slime";
+  if (type.includes("goblin")) return "goblin";
+  if (type.includes("skeleton") || type === "hauler") return "skeleton";
+  if (/ghoul|wight|wraith|lich|vampire/.test(type)) return "undead";
+  if (type.includes("spider")) return "spider";
+  if (type.includes("bat")) return "bat";
+  if (/imp|scamp|demon/.test(type)) return "demon";
+  if (/orc|ogre|troll/.test(type)) return "brute";
+  return "beast";
+}
+
+function enemyThreat(type, floorIndex, elevatorIndex) {
+  const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
+  return scaleEnemyHp(d.hp || 5, floorIndex, elevatorIndex);
+}
+
+function hallBudget(floorIndex, sectionIndex, elevatorIndex) {
+  return 10 + floorIndex * 5 + elevatorIndex * 14 + Math.floor(sectionIndex * 1.5);
+}
+
+function packIntoGroups(types) {
+  const groups = [];
+  for (let i = 0; i < types.length;) {
+    if (i + 1 < types.length && (types.length - i !== 3 || groups.length > 0)) {
+      groups.push([types[i], types[i + 1]]);
+      i += 2;
+    } else {
+      groups.push([types[i]]);
+      i += 1;
+    }
+  }
+  return groups.length ? groups : [["slime"]];
+}
+
+function composeWaveForBudget(roster, target, floorIndex, elevatorIndex) {
+  const pool = roster.length <= 6 ? roster : [roster[0], roster[1], ...roster.slice(-4)];
+  const cost = (t) => enemyThreat(t, floorIndex, elevatorIndex);
+  let best = null;
+  let bestDiff = 999;
+  const walk = (arr, spent) => {
+    if (arr.length && Math.abs(spent - target) < bestDiff) {
+      bestDiff = Math.abs(spent - target);
+      best = arr.slice();
+    }
+    if (arr.length >= 4 || spent >= target + 4) return;
+    for (const t of pool) walk([...arr, t], spent + cost(t));
+  };
+  walk([], 0);
+  const types = best && best.length ? best : [pool[0] || "slime"];
+  const threat = types.reduce((s, t) => s + cost(t), 0);
+  return { groups: packIntoGroups(types), threat, enemyTypes: [...new Set(types)] };
+}
 
 export class CorridorSim {
   constructor() {
@@ -135,9 +200,12 @@ export class CorridorSim {
     this.waveQueue = [];
     this.waveGroups = [];
     this.groupGap = 0;
+    this._pendingEncounter = null;
+    this._waveSoulBonus = 0;
     this.floorIndex = 0;
     this.sectionIndex = 0;
     this.elevatorIndex = 0;
+    this.hitStop = 0;
   }
 
   on(type, fn) {
@@ -164,6 +232,8 @@ export class CorridorSim {
     this.movingForward = true;
     this.junctionChoices = null;
     this.junctionPending = false;
+    this._pendingEncounter = null;
+    this._waveSoulBonus = 0;
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnFrom = 0;
@@ -181,6 +251,7 @@ export class CorridorSim {
     this.floorIndex = 0;
     this.sectionIndex = 0;
     this.elevatorIndex = 0;
+    this.hitStop = 0;
     this.quiver.capacity = this.state.getQuiverCapacity();
     this.quiver.prepareForRun();
     this.substrates.init();
@@ -201,6 +272,10 @@ export class CorridorSim {
     this.tickIndex = (this.tickIndex || 0) + 1;
     this.dt = 1 / 60;
     this.runTime += this.dt;
+    if (this.hitStop > 0) {
+      this.hitStop = Math.max(0, this.hitStop - this.dt);
+      return;
+    }
 
     if (this.turning) {
       this.turnT += this.dt;
@@ -255,11 +330,56 @@ export class CorridorSim {
   // ─── Segment / Junction ──────────────────────────────────
 
   _rollJunction() {
-    this.junctionChoices = ["left", "forward", "right"].map((dir) => ({
-      direction: dir,
-      enemyTypes: this._pickJunctionEnemies(),
-    }));
+    const next = this._peekNextDepth();
+    const roster = this._rosterForFloorAt(next.floorIndex, next.elevatorIndex);
+    const mid = hallBudget(next.floorIndex, next.sectionIndex, next.elevatorIndex);
+    const plans = [
+      this._planEncounter(roster, Math.round(mid * 0.75), next, 0),
+      this._planEncounter(roster, mid, next, 1),
+      this._planEncounter(roster, Math.round(mid * 1.4), next, 2),
+    ];
+    const dirs = ["left", "forward", "right"];
+    for (let i = dirs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = dirs[i];
+      dirs[i] = dirs[j];
+      dirs[j] = t;
+    }
+    this.junctionChoices = dirs.map((direction, i) => ({ direction, ...plans[i] }));
     this.junctionPending = false;
+  }
+
+  _peekNextDepth() {
+    const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+    let sectionIndex = this.sectionIndex + 1;
+    let floorIndex = this.floorIndex;
+    let elevatorIndex = this.elevatorIndex;
+    if (sectionIndex >= halls) {
+      sectionIndex = 0;
+      floorIndex++;
+      if (floorIndex >= floors) {
+        floorIndex = 0;
+        elevatorIndex++;
+      }
+    }
+    return { sectionIndex, floorIndex, elevatorIndex };
+  }
+
+  _planEncounter(roster, target, depth, soulBonus) {
+    const built = composeWaveForBudget(roster, target, depth.floorIndex, depth.elevatorIndex);
+    if (depth.floorIndex === 9 && depth.sectionIndex === 9) {
+      const bosses = ["boss_grunt", "boss_warden", "boss_wraith", "boss_death_knight", "boss_spider_queen", "boss_lich_king"];
+      built.groups.push([bosses[depth.elevatorIndex % bosses.length]]);
+    }
+    const families = [...new Set(built.groups.flat().map(enemyFamily))];
+    return {
+      groups: built.groups,
+      threat: built.threat,
+      enemyTypes: built.enemyTypes,
+      families,
+      soulBonus,
+    };
   }
 
   _showJunction() {
@@ -269,22 +389,13 @@ export class CorridorSim {
     this.emit("junction_show", { choices: this.junctionChoices });
   }
 
-  _pickJunctionEnemies() {
-    const pool = this._rosterForFloor();
-    const count = 1 + Math.floor(Math.random() * 2);
-    const result = [];
-    for (let i = 0; i < count; i++) {
-      result.push(pool[Math.floor(Math.random() * pool.length)]);
-    }
-    return [...new Set(result)];
-  }
-
   chooseJunction(direction) {
     if (!this.junctionPending || !this.junctionChoices || !this.junctionChoices.length) return;
     const choice = this.junctionChoices.find((c) => c.direction === direction);
     if (!choice) return;
     direction = choice.direction;
     this.junctionPending = false;
+    this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
     this.emit("junction_chosen", { direction });
     if (direction === "left" || direction === "right") {
@@ -340,7 +451,14 @@ export class CorridorSim {
     this.waveIndex++;
     this.waveActive = true;
     this.waveQueue = [];
-    this.waveGroups = this._composeWave();
+    if (this._pendingEncounter) {
+      this.waveGroups = this._pendingEncounter.groups;
+      this._waveSoulBonus = this._pendingEncounter.soulBonus || 0;
+      this._pendingEncounter = null;
+    } else {
+      this.waveGroups = this._openingWave();
+      this._waveSoulBonus = 0;
+    }
     this.groupGap = 0.2;
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
@@ -353,13 +471,11 @@ export class CorridorSim {
     });
   }
 
-  _enemyScale() {
-    return (1 + 0.10 * this.floorIndex) * (1 + 0.50 * this.elevatorIndex);
+  _rosterForFloor() {
+    return this._rosterForFloorAt(this.floorIndex, this.elevatorIndex);
   }
 
-  _rosterForFloor() {
-    const f = this.floorIndex;
-    const e = this.elevatorIndex;
+  _rosterForFloorAt(f, e) {
     const r = ["slime", "goblin_runt"];
     if (f >= 1 || e) r.push("imp");
     if (f >= 2) r.push("slime_large", "goblin_warrior", "bat");
@@ -373,46 +489,17 @@ export class CorridorSim {
     return r;
   }
 
-  _composeWave() {
-    const f = this.floorIndex;
-    const s = this.sectionIndex;
-    const el = this.elevatorIndex;
-
-    if (el === 0 && f === 0 && s === 0) {
-      return [
-        ["slime"],
-        ["slime"],
-        ["slime", "slime"],
-        ["slime"],
-        ["goblin_runt"],
-        ["slime", "slime"],
-      ];
+  _openingWave() {
+    if (this.elevatorIndex === 0 && this.floorIndex === 0 && this.sectionIndex === 0) {
+      return [["slime", "slime"]];
     }
-
-    const roster = this._rosterForFloor();
-    const pick = () => roster[Math.floor(Math.random() * roster.length)];
-    const groupCount = 4 + Math.min(5, f + el) + (s >= 8 ? 1 : 0);
-    const maxTogether = f < 2 ? 2 : 1 + Math.min(3, Math.floor(f / 3) + el);
-    const groups = [];
-    for (let i = 0; i < groupCount; i++) {
-      const pairChance = f < 2 ? 0.22 : 0.18 + f * 0.06;
-      let n = 1;
-      if (Math.random() < pairChance) n = 2;
-      if (f >= 5 && Math.random() < 0.18) n = Math.min(maxTogether, 3);
-      const types = [];
-      for (let k = 0; k < n; k++) types.push(pick());
-      groups.push(types);
-    }
-    if (s === 9) {
-      const extra = [pick(), pick()];
-      if (f >= 3) extra.push(pick());
-      groups.push(extra);
-    }
-    if (f === 9 && s === 9) {
-      const bosses = ["boss_grunt", "boss_warden", "boss_wraith", "boss_death_knight", "boss_spider_queen", "boss_lich_king"];
-      groups.push([bosses[el % bosses.length]]);
-    }
-    return groups;
+    const built = composeWaveForBudget(
+      this._rosterForFloor(),
+      hallBudget(this.floorIndex, this.sectionIndex, this.elevatorIndex),
+      this.floorIndex,
+      this.elevatorIndex
+    );
+    return built.groups;
   }
 
   getProgressLabel() {
@@ -428,19 +515,17 @@ export class CorridorSim {
   }
 
   _spawnGroup(types) {
-    const scale = this._enemyScale();
     const z = this.playerWorldZ + PACK_NEAR;
     const n = types.length;
     for (let i = 0; i < n; i++) {
       let ex;
       if (n === 1) {
-        const lane = PLAY_LANE * (0.25 + 0.5 * Math.random());
-        ex = (Math.random() < 0.5 ? -1 : 1) * lane;
+        ex = (Math.random() - 0.5) * FIGHT_LANE;
       } else {
         const t = n === 2 ? (i === 0 ? -1 : 1) : (i / (n - 1) - 0.5) * 2;
-        ex = t * PLAY_LANE * 0.72;
+        ex = t * FIGHT_LANE * 0.85;
       }
-      const enemy = createEnemy(types[i], ex, z + i * 28, scale);
+      const enemy = createEnemy(types[i], ex, z + i * 18, this.floorIndex, this.elevatorIndex);
       this.enemies.push(enemy);
       this.emit("enemy_spawn", { enemy });
     }
@@ -461,6 +546,10 @@ export class CorridorSim {
       this.waveActive = false;
       this._recoverArrows();
       this._closeSegmentToJunction();
+      if (this._waveSoulBonus) {
+        this.state.awardKillSouls(this._waveSoulBonus);
+        this._waveSoulBonus = 0;
+      }
       this.emit("wave_end", { wave: this.waveIndex });
       const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
       const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
@@ -502,8 +591,11 @@ export class CorridorSim {
       const relDist = e.worldZ - this.playerWorldZ;
       e.dist = relDist;
       const spd = e.speed * dt * (e.slowT > 0 ? 0.4 : 1);
+      if (e._hitStun > 0) e._hitStun = Math.max(0, e._hitStun - dt);
+      if (e._squash > 0) e._squash = Math.max(0, e._squash - dt * 5.5);
+      if (e._contactCd > 0) e._contactCd = Math.max(0, e._contactCd - dt);
 
-      switch (e.behavior) {
+      if (e._hitStun <= 0) switch (e.behavior) {
         case "advance":
           e._lurkT = (e._lurkT || 0) + dt;
           if (e._lurkT < 1.4) {
@@ -623,7 +715,7 @@ export class CorridorSim {
           else if (e.worldZ < ideal - 50) e.worldZ += spd * 0.3;
           e._lateralTimer -= dt;
           if (e._lateralTimer <= 0) {
-            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * PLAY_LANE * 1.6;
+            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * FIGHT_LANE * 1.5;
             e._lateralTimer = 1.5 + Math.random();
           }
           const dx = e._lateralTarget - e.x;
@@ -665,7 +757,7 @@ export class CorridorSim {
           if (e._summonTimer <= 0 && this.enemies.length < 30) {
             e._summonTimer = e._summonRate;
             const summonType = this.waveIndex < 5 ? "slime" : this.waveIndex < 10 ? "ghoul" : "wight";
-            const child = createEnemy(summonType, e.x + (Math.random() - 0.5) * 30, e.worldZ + 40, this._enemyScale());
+            const child = createEnemy(summonType, e.x + (Math.random() - 0.5) * 30, e.worldZ + 40, this.floorIndex, this.elevatorIndex);
             child._splitDone = true;
             this.enemies.push(child);
           }
@@ -675,7 +767,7 @@ export class CorridorSim {
           break;
       }
 
-      this._funnelTowardCenter(e, relDist, dt);
+      if (e._hitStun <= 0) this._funnelTowardCenter(e, relDist, dt);
       const dist = e.worldZ - this.playerWorldZ;
       e.dist = dist;
 
@@ -684,7 +776,7 @@ export class CorridorSim {
       if (e.slowT > 0) e.slowT -= dt;
       if (e.shredT > 0) e.shredT -= dt;
       if (e.oiledT > 0) e.oiledT -= dt;
-      if (e._hitFlash > 0) e._hitFlash = Math.max(0, e._hitFlash - 0.05);
+      if (e._hitFlash > 0) e._hitFlash = Math.max(0, e._hitFlash - 0.045);
 
       const def = ENEMY_DEFS[e.type];
       if (def?.regen && e.hp < e.maxHp) {
@@ -700,11 +792,16 @@ export class CorridorSim {
         continue;
       }
 
-      if (!e.flying && dist < CONTACT_DIST && dist > 6 && onAxis) {
+      if (dist < CONTACT_DIST && dist > 6 && onAxis && (e._contactCd || 0) <= 0) {
         const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
         this.state.damagePlayer(dmg);
         this.emit("player_hit", { damage: dmg, enemy: e });
-        this._killEnemy(e, i, def, relDist);
+        e._contactCd = 0.95;
+        e._hitStun = 0.32;
+        e._squash = 1;
+        e.worldZ += e.flying ? 36 : 52;
+        e.x += Math.sign(e.x || (Math.random() - 0.5)) * 6;
+        this.hitStop = Math.max(this.hitStop, 0.07);
         continue;
       }
     }
@@ -716,7 +813,7 @@ export class CorridorSim {
     this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist });
     if (def?.splitTo && !e._splitDone) {
       for (let s = 0; s < (def.splitCount || 2); s++) {
-        const child = createEnemy(def.splitTo, e.x + (s ? 15 : -15), e.worldZ + 10, this._enemyScale());
+        const child = createEnemy(def.splitTo, e.x + (s ? 15 : -15), e.worldZ + 10, this.floorIndex, this.elevatorIndex);
         child._splitDone = true;
         this.enemies.push(child);
       }
@@ -730,8 +827,8 @@ export class CorridorSim {
    */
   _funnelTowardCenter(e, relDist, dt) {
     const px = this.playerWorldX;
-    const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 340));
-    const maxOff = PLAY_LANE * (1 - close * close) * 0.92 + 6;
+    const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 280));
+    const maxOff = FIGHT_LANE * (1.15 - close * 0.55) + 4;
     let dx = e.x - px;
     if (Math.abs(dx) > maxOff) {
       const pull = Math.abs(dx) - maxOff;
@@ -739,7 +836,7 @@ export class CorridorSim {
     } else if (close > 0.2) {
       e.x += (px - e.x) * close * 2.2 * dt;
     }
-    e.x = Math.max(-PLAY_LANE, Math.min(PLAY_LANE, e.x));
+    e.x = Math.max(-FIGHT_LANE * 1.15, Math.min(FIGHT_LANE * 1.15, e.x));
 
     if (e.flying) return;
 
@@ -770,7 +867,7 @@ export class CorridorSim {
         const e = this.enemies[j];
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
-        const hitR = (e.size * CONFIG.CELL_SIZE) * 0.5;
+        const hitR = (e.size * CONFIG.CELL_SIZE) * 0.7;
         if (p._hitIds && p._hitIds.includes(e.id)) continue;
         if (dx * dx + ddist * ddist < hitR * hitR) {
           if (!p._hitIds) p._hitIds = [];
@@ -784,6 +881,11 @@ export class CorridorSim {
           }
           if (dmg > 0) e.hp -= dmg;
           e._hitFlash = 1;
+          e._hitStun = Math.max(e._hitStun || 0, 0.12);
+          e._squash = 1;
+          e.worldZ += 18;
+          e.x += Math.sign(e.x - p.x || 1) * 3;
+          this.hitStop = Math.max(this.hitStop, 0.045);
           this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: raw });
           this._applyStatus(p, e);
           this.substrates.onArrowImpact(

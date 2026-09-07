@@ -73,6 +73,8 @@ export class GameStateManager {
     this.equipped = {};
     this.ownedItems = [];
     this.arrowStorage = [];
+    this.pouch = [null, null];
+    this.pouchCapacity = 2;
     this.hubVisits = 0;
 
     // Active run bonuses
@@ -347,11 +349,12 @@ export class GameStateManager {
     if (id === "quiver_large") return 20;
     if (id === "quiver_medium") return 16;
     if (id === "quiver_small") return 12;
-    return 6;
+    return 10;
   }
 
   applyUpgrades() {
     this.playerMaxHp = 8 + this.getStat("vigor") * 2;
+    if (this.equipped?.amulet === "amulet_greenhorn") this.playerMaxHp += 2;
     this.playerHp = this.playerMaxHp;
     this.arrowCooldown = 0;
   }
@@ -366,6 +369,8 @@ export class GameStateManager {
       equipped: { ...this.equipped },
       ownedItems: [...(this.ownedItems || [])],
       arrowStorage: [...(this.arrowStorage || [])],
+      pouch: [...(this.pouch || [null, null])],
+      pouchCapacity: this.pouchCapacity || 2,
       playerMaxHp: this.playerMaxHp,
       hubVisits: this.hubVisits,
     };
@@ -380,6 +385,9 @@ export class GameStateManager {
     this.equipped = { ...(data.equipped || {}) };
     this.ownedItems = [...(data.ownedItems || [])];
     this.arrowStorage = [...(data.arrowStorage || [])];
+    this.pouch = [...(data.pouch || [null, null])];
+    while (this.pouch.length < 2) this.pouch.push(null);
+    this.pouchCapacity = data.pouchCapacity || 2;
     this.hubVisits = data.hubVisits || 0;
     this.applyUpgrades();
   }
