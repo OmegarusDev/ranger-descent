@@ -11,7 +11,7 @@
  * Adapted from Tower Defense BoardView (boardView.js) and stripped of
  * all sim, game state, and gameplay dependencies.
  */
-import { CorridorCamera, CAMERA, setCameraPitch } from "./corridorCamera.js";
+import { CorridorCamera, CAMERA } from "./corridorCamera.js";
 import { FxSystem } from "./fx.js";
 
 /** Entity render descriptors — what the engine receives for depth sorting. */
@@ -48,6 +48,8 @@ export class RenderEngine2D5 {
 
     // Atmosphere
     this.atmosphereId = "default";
+    this.sceneMode = "dungeon";
+    this.fxCam = null;
     this._motes = Array.from({ length: 14 }, () => ({
       u: Math.random(),
       v: Math.random(),
@@ -59,18 +61,6 @@ export class RenderEngine2D5 {
 
     // Depth-sorted render list (rebuilt each frame)
     this._renderList = [];
-
-    this._bindEvents();
-  }
-
-  _bindEvents() {
-    this.canvas.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const factor = Math.exp(-e.deltaY * 0.0018);
-        this._zoomT = Math.max(0.5, Math.min(2.5, this._zoomT * factor));
-      }
-    }, { passive: false });
   }
 
   _resolveDpr() {
@@ -187,8 +177,7 @@ export class RenderEngine2D5 {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    // Background
-    ctx.fillStyle = "#0a0c10";
+    ctx.fillStyle = this.sceneMode === "dungeon" ? "#080605" : "#0a0c10";
     ctx.fillRect(0, 0, cssW, cssH);
 
     // Apply camera shake
@@ -206,13 +195,30 @@ export class RenderEngine2D5 {
       drawCallback(ctx, this.cam, this);
     }
 
-    // Draw FX on top
-    this.fx.drawProjected(ctx, this.cam, (type) => this._colorForType(type));
+    try {
+      this.fx.drawProjected(ctx, this.fxCam || this.cam, (type) => this._colorForType(type));
+    } catch (_) { /* FX must never kill the frame */ }
 
     ctx.restore();
 
-    // Atmosphere overlay
-    this._drawAtmosphere(cssW, cssH);
+    try {
+      if (this.sceneMode === "dungeon") {
+        this._drawDungeonVignette(cssW, cssH);
+      } else {
+        this._drawAtmosphere(cssW, cssH);
+      }
+    } catch (_) { /* overlay is optional */ }
+  }
+
+  _drawDungeonVignette(cssW, cssH) {
+    const vg = this.ctx.createRadialGradient(
+      cssW * 0.5, cssH * 0.38, cssH * 0.28,
+      cssW * 0.5, cssH * 0.42, cssH * 0.92,
+    );
+    vg.addColorStop(0, "transparent");
+    vg.addColorStop(1, "rgba(4, 2, 2, 0.22)");
+    this.ctx.fillStyle = vg;
+    this.ctx.fillRect(0, 0, cssW, cssH);
   }
 
   /** Add a renderable to the depth-sorted list. Call before drawSorted(). */

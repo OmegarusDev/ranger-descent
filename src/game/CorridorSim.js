@@ -1,42 +1,42 @@
-import { CONFIG } from "../data/config.js";
-import { QuiverDeckManager } from "./QuiverDeckManager.js";
+import { CONFIG } from "../data/config.js?v=26";
+import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=29";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js";
+import { GameStateManager } from "./GameStateManager.js?v=31";
 
 let _nextId = 1;
 
 const ENEMY_DEFS = {
-  slime:          { hp: 10,  speed: 35,  size: 1.8, color: "#b84a55", souls: 1, armor: "none", contactDmg: 4 },
-  slime_large:    { hp: 30,  speed: 25,  size: 2.7, color: "#c45a65", souls: 2, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
-  slime_huge:     { hp: 60,  speed: 18,  size: 3.6, color: "#d46a75", souls: 4, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
-  goblin_runt:    { hp: 8,   speed: 55,  size: 1.2, color: "#6aaa5a", souls: 1, armor: "none", contactDmg: 3 },
-  goblin_warrior: { hp: 18,  speed: 42,  size: 1.5, color: "#5a9a4a", souls: 2, armor: "none", contactDmg: 5 },
-  goblin_chieftain:{ hp: 40, speed: 35,  size: 2.0, color: "#4a8a3a", souls: 4, armor: "none", contactDmg: 7 },
-  imp:            { hp: 6,   speed: 70,  size: 1.1, color: "#d4892a", souls: 1, armor: "none", contactDmg: 3 },
-  scamp:          { hp: 12,  speed: 60,  size: 1.2, color: "#e0a030", souls: 2, armor: "none", contactDmg: 4 },
-  demon:          { hp: 35,  speed: 45,  size: 1.8, color: "#c04040", souls: 4, armor: "none", contactDmg: 7 },
-  skeleton:       { hp: 50,  speed: 22,  size: 2.1, color: "#c8c0b0", souls: 3, armor: "none", contactDmg: 7 },
-  skeleton_archer:{ hp: 25,  speed: 28,  size: 1.8, color: "#b0a898", souls: 2, armor: "none", contactDmg: 4 },
-  hauler:         { hp: 80,  speed: 18,  size: 2.4, color: "#8a96a0", souls: 4, armor: "heavy", contactDmg: 10 },
-  ghoul:          { hp: 15,  speed: 40,  size: 1.4, color: "#7a6a5a", souls: 1, armor: "none", contactDmg: 4 },
-  wight:          { hp: 30,  speed: 35,  size: 1.7, color: "#6a5a4a", souls: 2, armor: "none", contactDmg: 6 },
-  wraith:         { hp: 18,  speed: 55,  size: 1.3, color: "#8a7ab8", souls: 2, armor: "energy", contactDmg: 5 },
-  vampire:        { hp: 35,  speed: 45,  size: 1.5, color: "#a02020", souls: 3, armor: "none", contactDmg: 6, lifeSteal: true },
-  vampire_lord:   { hp: 60,  speed: 50,  size: 2.0, color: "#801010", souls: 5, armor: "none", contactDmg: 8, lifeSteal: true },
-  lich:           { hp: 50,  speed: 30,  size: 1.8, color: "#6040a0", souls: 4, armor: "none", summonRate: 5, contactDmg: 5 },
-  bat:            { hp: 6,   speed: 90,  size: 0.6, color: "#4a3a5a", souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
-  spider:         { hp: 8,   speed: 60,  size: 0.9, color: "#5a4a3a", souls: 1, armor: "none", contactDmg: 3, poison: 1 },
-  giant_spider:   { hp: 25,  speed: 50,  size: 1.5, color: "#4a3a2a", souls: 2, armor: "none", contactDmg: 5, poison: 3 },
-  orc:            { hp: 35,  speed: 40,  size: 1.7, color: "#5a7a4a", souls: 3, armor: "none", contactDmg: 7 },
-  ogre:           { hp: 70,  speed: 25,  size: 2.3, color: "#6a8a5a", souls: 5, armor: "heavy", contactDmg: 10 },
-  troll:          { hp: 50,  speed: 35,  size: 2.0, color: "#4a6a3a", souls: 4, armor: "none", contactDmg: 8, regen: 2 },
-  boss_grunt:     { hp: 200, speed: 18,  size: 3.3, color: "#c4305a", souls: 20, armor: "heavy", contactDmg: 12 },
-  boss_warden:    { hp: 250, speed: 12,  size: 3.3, color: "#3d9a8e", souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
-  boss_wraith:    { hp: 180, speed: 28,  size: 3.0, color: "#c9a227", souls: 30, armor: "energy", contactDmg: 15 },
-  boss_death_knight: { hp: 250, speed: 22, size: 3.6, color: "#2a2a3a", souls: 30, armor: "heavy", contactDmg: 15 },
-  boss_lich_king: { hp: 300, speed: 15, size: 3.3, color: "#4a2a6a", souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
-  boss_spider_queen: { hp: 200, speed: 35, size: 3.0, color: "#3a2a1a", souls: 25, armor: "none", contactDmg: 12, poison: 5 },
+  slime:          { hp: 10,  speed: 9,   size: 0.85, color: "#b84a55", souls: 1, armor: "none", contactDmg: 4 },
+  slime_large:    { hp: 30,  speed: 7,   size: 1.3, color: "#c45a65", souls: 2, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
+  slime_huge:     { hp: 60,  speed: 5,   size: 1.75, color: "#d46a75", souls: 4, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
+  goblin_runt:    { hp: 8,   speed: 20,  size: 1.2, color: "#6aaa5a", souls: 1, armor: "none", contactDmg: 3 },
+  goblin_warrior: { hp: 18,  speed: 16,  size: 1.5, color: "#5a9a4a", souls: 2, armor: "none", contactDmg: 5 },
+  goblin_chieftain:{ hp: 40, speed: 13,  size: 2.0, color: "#4a8a3a", souls: 4, armor: "none", contactDmg: 7 },
+  imp:            { hp: 6,   speed: 24,  size: 1.1, color: "#d4892a", souls: 1, armor: "none", contactDmg: 3 },
+  scamp:          { hp: 12,  speed: 22,  size: 1.2, color: "#e0a030", souls: 2, armor: "none", contactDmg: 4 },
+  demon:          { hp: 35,  speed: 16,  size: 1.8, color: "#c04040", souls: 4, armor: "none", contactDmg: 7 },
+  skeleton:       { hp: 50,  speed: 11,  size: 2.1, color: "#c8c0b0", souls: 3, armor: "none", contactDmg: 7 },
+  skeleton_archer:{ hp: 25,  speed: 12,  size: 1.8, color: "#b0a898", souls: 2, armor: "none", contactDmg: 4 },
+  hauler:         { hp: 80,  speed: 8,   size: 2.4, color: "#8a96a0", souls: 4, armor: "heavy", contactDmg: 10 },
+  ghoul:          { hp: 15,  speed: 15,  size: 1.4, color: "#7a6a5a", souls: 1, armor: "none", contactDmg: 4 },
+  wight:          { hp: 30,  speed: 13,  size: 1.7, color: "#6a5a4a", souls: 2, armor: "none", contactDmg: 6 },
+  wraith:         { hp: 18,  speed: 18,  size: 1.3, color: "#8a7ab8", souls: 2, armor: "energy", contactDmg: 5 },
+  vampire:        { hp: 35,  speed: 17,  size: 1.5, color: "#a02020", souls: 3, armor: "none", contactDmg: 6, lifeSteal: true },
+  vampire_lord:   { hp: 60,  speed: 19,  size: 2.0, color: "#801010", souls: 5, armor: "none", contactDmg: 8, lifeSteal: true },
+  lich:           { hp: 50,  speed: 10,  size: 1.8, color: "#6040a0", souls: 4, armor: "none", summonRate: 5, contactDmg: 5 },
+  bat:            { hp: 6,   speed: 28,  size: 0.6, color: "#4a3a5a", souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
+  spider:         { hp: 8,   speed: 20,  size: 0.9, color: "#5a4a3a", souls: 1, armor: "none", contactDmg: 3, poison: 1 },
+  giant_spider:   { hp: 25,  speed: 16,  size: 1.5, color: "#4a3a2a", souls: 2, armor: "none", contactDmg: 5, poison: 3 },
+  orc:            { hp: 35,  speed: 14,  size: 1.7, color: "#5a7a4a", souls: 3, armor: "none", contactDmg: 7 },
+  ogre:           { hp: 70,  speed: 9,   size: 2.3, color: "#6a8a5a", souls: 5, armor: "heavy", contactDmg: 10 },
+  troll:          { hp: 50,  speed: 12,  size: 2.0, color: "#4a6a3a", souls: 4, armor: "none", contactDmg: 8, regen: 2 },
+  boss_grunt:     { hp: 200, speed: 10,  size: 3.3, color: "#c4305a", souls: 20, armor: "heavy", contactDmg: 12 },
+  boss_warden:    { hp: 250, speed: 8,   size: 3.3, color: "#3d9a8e", souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
+  boss_wraith:    { hp: 180, speed: 14,  size: 3.0, color: "#c9a227", souls: 30, armor: "energy", contactDmg: 15 },
+  boss_death_knight: { hp: 250, speed: 11, size: 3.6, color: "#2a2a3a", souls: 30, armor: "heavy", contactDmg: 15 },
+  boss_lich_king: { hp: 300, speed: 8,  size: 3.3, color: "#4a2a6a", souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
+  boss_spider_queen: { hp: 200, speed: 14, size: 3.0, color: "#3a2a1a", souls: 25, armor: "none", contactDmg: 12, poison: 5 },
 };
 
 const BEHAVIOR_MAP = {
@@ -52,17 +52,18 @@ const BEHAVIOR_MAP = {
   boss_death_knight: "charge", boss_lich_king: "summoner", boss_spider_queen: "swarm_slow",
 };
 
-function createEnemy(type, worldX, worldZ) {
+function createEnemy(type, worldX, worldZ, scale = 1) {
   const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
+  const hp = Math.max(1, Math.round((d.hp || 10) * scale));
   return {
     id: _nextId++, type, x: worldX, worldZ,
     behavior: BEHAVIOR_MAP[type] || "advance",
-    hp: d.hp, maxHp: d.hp, speed: d.speed, size: d.size,
+    hp, maxHp: hp, speed: d.speed, size: d.size,
     color: d.color, souls: d.souls, armor: d.armor,
     flying: d.flying || false,
     shieldHp: d.shieldHp || 0, maxShieldHp: d.shieldHp || 0,
     shieldRegen: d.shieldHp ? 2 : 0,
-    burnT: 0, poisonT: 0, slowT: 0, shredT: 0,
+    burnT: 0, poisonT: 0, slowT: 0, shredT: 0, oiledT: 0,
     _lateralTarget: 0, _lateralTimer: 0,
     _lurkT: 0,
     _chargeTimer: 2, _charging: false,
@@ -79,13 +80,21 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId) {
     id: _nextId++, x: worldX, worldZ, vx, vz,
     damage, element: element || "normal", ownerId,
     life: 4,
+    pierceLeft: element === "piercing" ? 3 : 1,
+    _hitIds: [],
     _trail: [],
   };
 }
 
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
+/** Keep fights in the visible lane — full corridor half is wider than a portrait view. */
+const PLAY_LANE = HALF_CORRIDOR * 0.56;
 const SEGMENT_LENGTH = 800;
+/** Fork sits this far ahead when the wave is over. */
+const JUNCTION_STOP = 180;
+/** Groups appear this far down the hall and walk in. */
+const PACK_NEAR = 420;
 
 export class CorridorSim {
   constructor() {
@@ -98,6 +107,8 @@ export class CorridorSim {
     this.enemyProjectiles = [];
     this.waveIndex = 0;
     this.waveActive = false;
+    this.waveArrowsFired = 0;
+    this.waveSpentArrows = [];
     this.runTime = 0;
     this.running = false;
     this._listeners = new Map();
@@ -112,7 +123,21 @@ export class CorridorSim {
     this.junctionPending = false;
     this.turnAngle = 0;
     this.turnTarget = 0;
+    this.turnFrom = 0;
+    this.turnT = 0;
+    this.turnDur = 0.42;
+    this.turnU = 0;
     this.turning = false;
+    this.heading = 0;
+    this.mapX = 0;
+    this.mapZ = 0;
+    this.pathPts = [{ x: 0, y: 0 }];
+    this.waveQueue = [];
+    this.waveGroups = [];
+    this.groupGap = 0;
+    this.floorIndex = 0;
+    this.sectionIndex = 0;
+    this.elevatorIndex = 0;
   }
 
   on(type, fn) {
@@ -141,11 +166,25 @@ export class CorridorSim {
     this.junctionPending = false;
     this.turnAngle = 0;
     this.turnTarget = 0;
+    this.turnFrom = 0;
+    this.turnT = 0;
+    this.turnU = 0;
     this.turning = false;
-    this.quiver.initStarter();
+    this.heading = 0;
+    this.mapX = 0;
+    this.mapZ = 0;
+    this.pathPts = [{ x: 0, y: 0 }];
+    this.waveArrowsFired = 0;
+    this.waveSpentArrows = [];
+    this.waveGroups = [];
+    this.groupGap = 0;
+    this.floorIndex = 0;
+    this.sectionIndex = 0;
+    this.elevatorIndex = 0;
+    this.quiver.capacity = this.state.getQuiverCapacity();
+    this.quiver.prepareForRun();
     this.substrates.init();
     this.autoMagic.reset();
-    this.autoMagic.unlockAll();
     this.state.startRun();
     this.state.applyUpgrades();
     this.running = true;
@@ -155,14 +194,20 @@ export class CorridorSim {
 
   tick() {
     if (!this.running) return;
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
     this.tickIndex = (this.tickIndex || 0) + 1;
-    this.runTime += this.dt;
     this.dt = 1 / 60;
+    this.runTime += this.dt;
 
     if (this.turning) {
-      const prev = this.turnAngle;
-      this.turnAngle += (this.turnTarget - this.turnAngle) * 0.15;
-      if (Math.abs(this.turnAngle - this.turnTarget) < 0.5) {
+      this.turnT += this.dt;
+      this.turnU = Math.min(1, this.turnT / this.turnDur);
+      const e = this.turnU * this.turnU * (3 - 2 * this.turnU);
+      this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
+      if (this.turnU >= 1) {
         this.turnAngle = this.turnTarget;
         this.turning = false;
         this.turnComplete();
@@ -171,12 +216,24 @@ export class CorridorSim {
 
     if (this.movingForward && !this.junctionPending && !this.turning) {
       this.playerWorldZ += CONFIG.PLAYER_SPEED;
+      const rad = (this.heading * Math.PI) / 180;
+      this.mapX += Math.sin(rad) * CONFIG.PLAYER_SPEED;
+      this.mapZ += Math.cos(rad) * CONFIG.PLAYER_SPEED;
       this.state.playerZ = this.playerWorldZ;
       this.state.runDistance = this.playerWorldZ;
+
+      if (!this._waveCleared() && this.playerWorldZ > this.segmentEndZ - JUNCTION_STOP) {
+        this.playerWorldZ = this.segmentEndZ - JUNCTION_STOP;
+      }
     }
 
     this._tickSpawning();
     this._tickEnemies();
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
+    this.state.tickBonuses(this.dt);
     this._tickProjectiles();
     this._tickEnemyProjectiles();
     this._tickAutoMagic();
@@ -187,39 +244,34 @@ export class CorridorSim {
     if (this.state.arrowCooldown > 0) {
       this.state.arrowCooldown = Math.max(0, this.state.arrowCooldown - this.dt);
     }
+  }
 
-    if (this.movingForward && !this.junctionPending && this.playerWorldZ >= this.segmentEndZ - 100) {
-      this._showJunction();
-    }
+  _waveCleared() {
+    return !this.waveActive
+      && (!this.waveQueue || this.waveQueue.length === 0)
+      && this.enemies.length === 0;
   }
 
   // ─── Segment / Junction ──────────────────────────────────
 
+  _rollJunction() {
+    this.junctionChoices = ["left", "forward", "right"].map((dir) => ({
+      direction: dir,
+      enemyTypes: this._pickJunctionEnemies(),
+    }));
+    this.junctionPending = false;
+  }
+
   _showJunction() {
+    if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
     this.junctionPending = true;
     this.movingForward = false;
-    const choices = ["forward"];
-    const r1 = Math.random();
-    if (r1 > 0.25) choices.push("left");
-    const r2 = Math.random();
-    if (r2 > 0.25) choices.push("right");
-    if (choices.length === 1) choices.push(Math.random() > 0.5 ? "left" : "right");
-
-    this.junctionChoices = choices.map(dir => {
-      const types = this._pickJunctionEnemies();
-      return { direction: dir, enemyTypes: types };
-    });
     this.emit("junction_show", { choices: this.junctionChoices });
   }
 
   _pickJunctionEnemies() {
-    const w = this.waveIndex;
-    const pool = ["slime", "goblin_runt"];
-    if (w >= 2) pool.push("imp");
-    if (w >= 3) pool.push("slime_large", "goblin_warrior");
-    if (w >= 4) pool.push("skeleton", "skeleton_archer");
-    if (w >= 5) pool.push("flyer", "warden");
-    const count = 2 + Math.floor(Math.random() * 3);
+    const pool = this._rosterForFloor();
+    const count = 1 + Math.floor(Math.random() * 2);
     const result = [];
     for (let i = 0; i < count; i++) {
       result.push(pool[Math.floor(Math.random() * pool.length)]);
@@ -228,26 +280,53 @@ export class CorridorSim {
   }
 
   chooseJunction(direction) {
-    const choice = this.junctionChoices.find(c => c.direction === direction);
+    if (!this.junctionPending || !this.junctionChoices || !this.junctionChoices.length) return;
+    const choice = this.junctionChoices.find((c) => c.direction === direction);
     if (!choice) return;
+    direction = choice.direction;
     this.junctionPending = false;
-    this._pendingEnemyTypes = choice.enemyTypes;
-    let angle = 0;
-    if (direction === "left") angle = -90;
-    else if (direction === "right") angle = 90;
-    if (angle !== 0) {
-      this.turnTarget = this.turnAngle + angle;
+    this._pendingTurnDir = direction;
+    this.emit("junction_chosen", { direction });
+    if (direction === "left" || direction === "right") {
       this.turning = true;
+      this.turnFrom = 0;
+      this.turnAngle = 0;
+      this.turnTarget = direction === "left" ? -90 : 90;
+      this.turnT = 0;
+      this.turnU = 0;
+      this.movingForward = false;
     } else {
+      this.turning = false;
+      this.turnAngle = 0;
+      this.turnTarget = 0;
+      this.turnU = 0;
       this._advanceSegment();
     }
   }
 
   turnComplete() {
+    if (this._pendingTurnDir === "left") this.heading -= 90;
+    else if (this._pendingTurnDir === "right") this.heading += 90;
+    this.pathPts.push({ x: this.mapX, y: this.mapZ });
+    this.turnAngle = 0;
+    this.turnTarget = 0;
+    this.turnU = 0;
+    this._pendingTurnDir = null;
     this._advanceSegment();
   }
 
   _advanceSegment() {
+    const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+    this.sectionIndex++;
+    if (this.sectionIndex >= halls) {
+      this.sectionIndex = 0;
+      this.floorIndex++;
+      if (this.floorIndex >= floors) {
+        this.floorIndex = 0;
+        this.elevatorIndex++;
+      }
+    }
     this.segmentIndex++;
     this.segmentStartZ = this.playerWorldZ;
     this.segmentEndZ = this.playerWorldZ + SEGMENT_LENGTH;
@@ -259,92 +338,157 @@ export class CorridorSim {
 
   _startWave() {
     this.waveIndex++;
-    const enemyTypes = this._pendingEnemyTypes || this._generateWaveEnemies();
-    this._pendingEnemyTypes = null;
     this.waveActive = true;
     this.waveQueue = [];
-
-    const startZ = this.playerWorldZ + 200;
-    const endZ = this.segmentEndZ - 50;
-    for (let i = 0; i < enemyTypes.length; i++) {
-      const t = enemyTypes[i];
-      const frac = i / Math.max(1, enemyTypes.length - 1);
-      const ez = startZ + (endZ - startZ) * frac;
-      const ex = (Math.random() - 0.5) * HALF_CORRIDOR * 1.2;
-      this.waveQueue.push({ type: t, worldX: ex, worldZ: ez });
-    }
-    this.spawnTimer = 0.3;
-    this.emit("wave_start", { wave: this.waveIndex });
+    this.waveGroups = this._composeWave();
+    this.groupGap = 0.2;
+    this.waveArrowsFired = 0;
+    this.waveSpentArrows = [];
+    this.quiver.shuffleForWave();
+    this._rollJunction();
+    this.emit("wave_start", {
+      wave: this.waveIndex,
+      floor: this.floorIndex + 1,
+      section: this.sectionIndex + 1,
+    });
   }
 
-  _generateWaveEnemies() {
-    const n = Math.floor(2 + this.waveIndex * 1.5);
-    const w = this.waveIndex;
-    const list = [];
+  _enemyScale() {
+    return (1 + 0.10 * this.floorIndex) * (1 + 0.50 * this.elevatorIndex);
+  }
+
+  _rosterForFloor() {
+    const f = this.floorIndex;
+    const e = this.elevatorIndex;
+    const r = ["slime", "goblin_runt"];
+    if (f >= 1 || e) r.push("imp");
+    if (f >= 2) r.push("slime_large", "goblin_warrior", "bat");
+    if (f >= 3) r.push("skeleton", "skeleton_archer", "ghoul");
+    if (f >= 4) r.push("spider", "wight");
+    if (f >= 5) r.push("orc", "scamp");
+    if (f >= 6) r.push("slime_huge", "troll");
+    if (f >= 7) r.push("goblin_chieftain", "wraith");
+    if (f >= 8) r.push("vampire", "hauler");
+    if (f >= 9 || e > 0) r.push("demon", "lich");
+    return r;
+  }
+
+  _composeWave() {
+    const f = this.floorIndex;
+    const s = this.sectionIndex;
+    const el = this.elevatorIndex;
+
+    if (el === 0 && f === 0 && s === 0) {
+      return [
+        ["slime"],
+        ["slime"],
+        ["slime", "slime"],
+        ["slime"],
+        ["goblin_runt"],
+        ["slime", "slime"],
+      ];
+    }
+
+    const roster = this._rosterForFloor();
+    const pick = () => roster[Math.floor(Math.random() * roster.length)];
+    const groupCount = 4 + Math.min(5, f + el) + (s >= 8 ? 1 : 0);
+    const maxTogether = f < 2 ? 2 : 1 + Math.min(3, Math.floor(f / 3) + el);
+    const groups = [];
+    for (let i = 0; i < groupCount; i++) {
+      const pairChance = f < 2 ? 0.22 : 0.18 + f * 0.06;
+      let n = 1;
+      if (Math.random() < pairChance) n = 2;
+      if (f >= 5 && Math.random() < 0.18) n = Math.min(maxTogether, 3);
+      const types = [];
+      for (let k = 0; k < n; k++) types.push(pick());
+      groups.push(types);
+    }
+    if (s === 9) {
+      const extra = [pick(), pick()];
+      if (f >= 3) extra.push(pick());
+      groups.push(extra);
+    }
+    if (f === 9 && s === 9) {
+      const bosses = ["boss_grunt", "boss_warden", "boss_wraith", "boss_death_knight", "boss_spider_queen", "boss_lich_king"];
+      groups.push([bosses[el % bosses.length]]);
+    }
+    return groups;
+  }
+
+  getProgressLabel() {
+    const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const fl = this.floorIndex + 1;
+    const hall = this.sectionIndex + 1;
+    if (this.elevatorIndex > 0) return `E${this.elevatorIndex + 1}  Fl. ${fl}  ${hall}/${halls}`;
+    return `Fl. ${fl}  ${hall}/${halls}`;
+  }
+
+  _groupGapSeconds() {
+    return Math.max(0.4, 1.7 - this.floorIndex * 0.12 - this.elevatorIndex * 0.25);
+  }
+
+  _spawnGroup(types) {
+    const scale = this._enemyScale();
+    const z = this.playerWorldZ + PACK_NEAR;
+    const n = types.length;
     for (let i = 0; i < n; i++) {
-      const r = Math.random();
-      if      (r < 0.30)                     list.push("slime");
-      else if (r < 0.50)                     list.push("goblin_runt");
-      else if (r < 0.60 && w >= 2)           list.push("imp");
-      else if (r < 0.65 && w >= 2)           list.push("bat");
-      else if (r < 0.70 && w >= 3)           list.push("slime_large");
-      else if (r < 0.75 && w >= 3)           list.push("goblin_warrior");
-      else if (r < 0.78 && w >= 3)           list.push("ghoul");
-      else if (r < 0.81 && w >= 4)           list.push("skeleton");
-      else if (r < 0.84 && w >= 4)           list.push("skeleton_archer");
-      else if (r < 0.86 && w >= 4)           list.push("spider");
-      else if (r < 0.88 && w >= 5)           list.push("wight");
-      else if (r < 0.90 && w >= 5)           list.push("scamp");
-      else if (r < 0.92 && w >= 5)           list.push("orc");
-      else if (r < 0.94 && w >= 6)           list.push("slime_huge");
-      else if (r < 0.95 && w >= 6)           list.push("giant_spider");
-      else if (r < 0.96 && w >= 6)           list.push("troll");
-      else if (r < 0.97 && w >= 7)           list.push("goblin_chieftain");
-      else if (r < 0.98 && w >= 7)           list.push("wraith");
-      else if (r < 0.99 && w >= 7)           list.push("vampire");
-      else if (r < 0.995 && w >= 8)          list.push("hauler");
-      else if (r < 0.998 && w >= 8)          list.push("demon");
-      else if (r < 1.00 && w >= 9)           list.push("lich");
-      else                                   list.push("slime");
+      let ex;
+      if (n === 1) {
+        const lane = PLAY_LANE * (0.25 + 0.5 * Math.random());
+        ex = (Math.random() < 0.5 ? -1 : 1) * lane;
+      } else {
+        const t = n === 2 ? (i === 0 ? -1 : 1) : (i / (n - 1) - 0.5) * 2;
+        ex = t * PLAY_LANE * 0.72;
+      }
+      const enemy = createEnemy(types[i], ex, z + i * 28, scale);
+      this.enemies.push(enemy);
+      this.emit("enemy_spawn", { enemy });
     }
-    if (this.waveIndex % 5 === 0) {
-      const br = Math.random();
-      if (br < 0.25) list.push("boss_grunt");
-      else if (br < 0.45) list.push("boss_warden");
-      else if (br < 0.65) list.push("boss_wraith");
-      else if (br < 0.80) list.push("boss_death_knight");
-      else if (br < 0.90) list.push("boss_spider_queen");
-      else list.push("boss_lich_king");
-    }
-    return list;
   }
 
   _tickSpawning() {
     if (!this.waveActive) return;
-    if (this.waveQueue.length > 0) {
-      this.spawnTimer -= this.dt;
-      if (this.spawnTimer <= 0) {
-        const next = this.waveQueue.shift();
-        const enemy = createEnemy(next.type, next.worldX, next.worldZ);
-        this.enemies.push(enemy);
-        this.emit("enemy_spawn", { enemy });
-        this.spawnTimer = 0.4;
+
+    if (this.enemies.length === 0 && this.waveGroups.length > 0) {
+      this.groupGap -= this.dt;
+      if (this.groupGap <= 0) {
+        this._spawnGroup(this.waveGroups.shift());
+        this.groupGap = this._groupGapSeconds();
       }
     }
-    if (this.waveQueue.length === 0 && this.enemies.length === 0) {
+
+    if (this.waveGroups.length === 0 && this.enemies.length === 0) {
       this.waveActive = false;
       this._recoverArrows();
+      this._closeSegmentToJunction();
       this.emit("wave_end", { wave: this.waveIndex });
+      const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+      const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+      if (this.floorIndex >= floors - 1 && this.sectionIndex >= halls - 1) {
+        this.state.victory();
+        return;
+      }
+      this._showJunction();
     }
   }
 
+  /** Each spent arrow has a 95% chance to return; the rest break. */
   _recoverArrows() {
-    const lootChance = this.state.getLootChance();
-    const arrowsUsed = this.state.arrowsFired;
-    for (let i = 0; i < arrowsUsed; i++) {
-      if (Math.random() < lootChance) {
-        this.quiver.addToStorage({ type: "normal", level: 1 });
-      }
+    const spent = this.waveSpentArrows || [];
+    this.waveSpentArrows = [];
+    this.waveArrowsFired = 0;
+    const chance = this.state.getArrowReturnChance();
+    for (const a of spent) {
+      if (Math.random() >= chance) continue;
+      if (!this.quiver.addToQuiver(a)) this.quiver.addToStorage(a);
+    }
+  }
+
+  /** After the fight, the fork sits just ahead — no empty march. */
+  _closeSegmentToJunction() {
+    const ahead = JUNCTION_STOP + 10;
+    if (this.segmentEndZ - this.playerWorldZ > ahead + 24) {
+      this.segmentEndZ = this.playerWorldZ + ahead;
     }
   }
 
@@ -362,10 +506,10 @@ export class CorridorSim {
       switch (e.behavior) {
         case "advance":
           e._lurkT = (e._lurkT || 0) + dt;
-          if (e._lurkT < 0.6) {
-            e.worldZ -= spd * 0.15;
-          } else if (e._lurkT < 0.9) {
-            e.worldZ -= spd * 3.5;
+          if (e._lurkT < 1.4) {
+            e.worldZ -= spd * 0.55;
+          } else if (e._lurkT < 1.75) {
+            e.worldZ -= spd * 1.15;
           } else {
             e._lurkT = 0;
           }
@@ -429,7 +573,7 @@ export class CorridorSim {
               e._noticeTimer = 0;
             }
           } else if (e._noticePhase === "alert") {
-            e.worldZ -= spd * 1.2;
+            e.worldZ -= spd * 0.85;
             const dxN = this.playerWorldX - e.x;
             e.x += Math.sign(dxN) * Math.min(Math.abs(dxN), spd * 1.5);
             if (relDist < 150) {
@@ -479,7 +623,7 @@ export class CorridorSim {
           else if (e.worldZ < ideal - 50) e.worldZ += spd * 0.3;
           e._lateralTimer -= dt;
           if (e._lateralTimer <= 0) {
-            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * HALF_CORRIDOR * 1.5;
+            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * PLAY_LANE * 1.6;
             e._lateralTimer = 1.5 + Math.random();
           }
           const dx = e._lateralTarget - e.x;
@@ -513,7 +657,7 @@ export class CorridorSim {
         case "charge":
           e._chargeTimer -= dt;
           if (e._chargeTimer <= 0) { e._charging = !e._charging; e._chargeTimer = e._charging ? 0.5 : 2.5; }
-          e.worldZ -= spd * (e._charging ? 3.0 : 0.2);
+          e.worldZ -= spd * (e._charging ? 1.55 : 0.25);
           break;
         case "summoner":
           e.worldZ -= spd * 0.4;
@@ -521,7 +665,7 @@ export class CorridorSim {
           if (e._summonTimer <= 0 && this.enemies.length < 30) {
             e._summonTimer = e._summonRate;
             const summonType = this.waveIndex < 5 ? "slime" : this.waveIndex < 10 ? "ghoul" : "wight";
-            const child = createEnemy(summonType, e.x + (Math.random() - 0.5) * 30, e.worldZ + 40);
+            const child = createEnemy(summonType, e.x + (Math.random() - 0.5) * 30, e.worldZ + 40, this._enemyScale());
             child._splitDone = true;
             this.enemies.push(child);
           }
@@ -531,45 +675,78 @@ export class CorridorSim {
           break;
       }
 
-      e.x = Math.max(-HALF_CORRIDOR, Math.min(HALF_CORRIDOR, e.x));
+      this._funnelTowardCenter(e, relDist, dt);
+      const dist = e.worldZ - this.playerWorldZ;
+      e.dist = dist;
 
       if (e.burnT > 0) { e.burnT -= dt; e.hp -= 4 * dt; }
       if (e.poisonT > 0) { e.poisonT -= dt; e.hp -= 2.5 * dt; }
       if (e.slowT > 0) e.slowT -= dt;
       if (e.shredT > 0) e.shredT -= dt;
+      if (e.oiledT > 0) e.oiledT -= dt;
       if (e._hitFlash > 0) e._hitFlash = Math.max(0, e._hitFlash - 0.05);
 
       const def = ENEMY_DEFS[e.type];
       if (def?.regen && e.hp < e.maxHp) {
         e.hp = Math.min(e.maxHp, e.hp + def.regen * dt);
       }
-      if (def?.lifeSteal && relDist < CONTACT_DIST && relDist > -20) {
+      const onAxis = Math.abs(e.x - this.playerWorldX) < 26;
+      if (def?.lifeSteal && dist < CONTACT_DIST && dist > 6 && onAxis) {
         e.hp = Math.min(e.maxHp, e.hp + 2 * dt);
       }
 
-      if (!e.flying && relDist < CONTACT_DIST && relDist > -20) {
-        const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
-        this.state.damagePlayer(dmg);
-        this.emit("player_hit", { damage: dmg, enemy: e });
-        this.enemies.splice(i, 1);
+      if (e.hp <= 0) {
+        this._killEnemy(e, i, def, relDist);
         continue;
       }
 
-      if (relDist < -100) { this.enemies.splice(i, 1); continue; }
-
-      if (e.hp <= 0) {
-        this.state.enemiesKilled++;
-        this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist });
-        const def = ENEMY_DEFS[e.type];
-        if (def.splitTo && !e._splitDone) {
-          for (let s = 0; s < (def.splitCount || 2); s++) {
-            const child = createEnemy(def.splitTo, e.x + (s ? 15 : -15), e.worldZ + 10);
-            child._splitDone = true;
-            this.enemies.push(child);
-          }
-        }
-        this.enemies.splice(i, 1);
+      if (!e.flying && dist < CONTACT_DIST && dist > 6 && onAxis) {
+        const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
+        this.state.damagePlayer(dmg);
+        this.emit("player_hit", { damage: dmg, enemy: e });
+        this._killEnemy(e, i, def, relDist);
+        continue;
       }
+    }
+  }
+
+  _killEnemy(e, index, def, relDist) {
+    this.state.enemiesKilled++;
+    this.state.awardKillSouls(e.souls || def?.souls || 1);
+    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist });
+    if (def?.splitTo && !e._splitDone) {
+      for (let s = 0; s < (def.splitCount || 2); s++) {
+        const child = createEnemy(def.splitTo, e.x + (s ? 15 : -15), e.worldZ + 10, this._enemyScale());
+        child._splitDone = true;
+        this.enemies.push(child);
+      }
+    }
+    this.enemies.splice(index, 1);
+  }
+
+  /**
+   * Enemies may start on the sides, but they must creep into the
+   * center as they close. Off-axis bodies cannot walk past the player.
+   */
+  _funnelTowardCenter(e, relDist, dt) {
+    const px = this.playerWorldX;
+    const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 340));
+    const maxOff = PLAY_LANE * (1 - close * close) * 0.92 + 6;
+    let dx = e.x - px;
+    if (Math.abs(dx) > maxOff) {
+      const pull = Math.abs(dx) - maxOff;
+      e.x -= Math.sign(dx) * Math.min(pull, (10 + close * 55) * dt);
+    } else if (close > 0.2) {
+      e.x += (px - e.x) * close * 2.2 * dt;
+    }
+    e.x = Math.max(-PLAY_LANE, Math.min(PLAY_LANE, e.x));
+
+    if (e.flying) return;
+
+    const off = Math.abs(e.x - px);
+    const floor = off > 24 ? 40 : 16;
+    if (e.worldZ < this.playerWorldZ + floor) {
+      e.worldZ = this.playerWorldZ + floor;
     }
   }
 
@@ -594,18 +771,28 @@ export class CorridorSim {
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
         const hitR = (e.size * CONFIG.CELL_SIZE) * 0.5;
+        if (p._hitIds && p._hitIds.includes(e.id)) continue;
         if (dx * dx + ddist * ddist < hitR * hitR) {
-          let dmg = this._calcDamage(p, e);
-          e.hp -= dmg;
+          if (!p._hitIds) p._hitIds = [];
+          p._hitIds.push(e.id);
+          const raw = this._calcDamage(p, e);
+          let dmg = raw;
+          if (e.shieldHp > 0) {
+            const absorbed = Math.min(e.shieldHp, dmg);
+            e.shieldHp -= absorbed;
+            dmg -= absorbed;
+          }
+          if (dmg > 0) e.hp -= dmg;
           e._hitFlash = 1;
-          this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: dmg });
+          this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: raw });
           this._applyStatus(p, e);
           this.substrates.onArrowImpact(
             Math.floor(p.x / CONFIG.CELL_SIZE),
             Math.floor(relDist / CONFIG.CELL_SIZE),
             p.element
           );
-          this.projectiles.splice(i, 1);
+          p.pierceLeft = (p.pierceLeft || 1) - 1;
+          if (p.pierceLeft <= 0) this.projectiles.splice(i, 1);
           break;
         }
       }
@@ -615,18 +802,40 @@ export class CorridorSim {
   _calcDamage(proj, enemy) {
     let d = proj.damage;
     const el = proj.element;
-    if (enemy.armor === "heavy" && (el === "normal" || el === "piercing" || el === "kinetic")) d *= 0.5;
+    const def = getArrowDef(el);
+    if (def.vsUndead && /skeleton|ghoul|wight|wraith|lich|vampire/.test(enemy.type || "")) {
+      d *= def.vsUndead;
+    }
+    const soft = el === "wood" || el === "flint" || el === "normal" || el === "kinetic";
+    if (enemy.armor === "heavy" && soft) d *= 0.5;
+    else if (enemy.armor === "heavy" && el === "iron") d *= 0.8;
     if (enemy.armor === "insulated" && (el === "fire" || el === "shock")) d *= 0.5;
     if (enemy.armor === "energy") { d *= 0.7; if (proj.ownerId === "player") this.state.damagePlayer(Math.floor(proj.damage * 0.3)); }
     if (enemy.shredT > 0) d = proj.damage;
+    if (proj.ownerId === "player") {
+      d += this.state.getStrengthBonus();
+      d *= this.state.runBonuses.damageMultiplier || 1;
+      if (Math.random() < this.state.getCritChance()) d *= this.state.getCritMultiplier();
+    }
     return Math.max(1, Math.floor(d));
   }
 
   _applyStatus(proj, e) {
     const el = proj.element;
-    if (el === "fire") e.burnT = Math.max(e.burnT, 3);
-    else if (el === "poison") e.poisonT = Math.max(e.poisonT, 4);
-    else if (el === "ice") e.slowT = Math.max(e.slowT, 2);
+    if (el === "fire") {
+      if (e.slowT > 0) e.slowT = 0;
+      if (e.oiledT > 0) {
+        e.oiledT = 0;
+        e.burnT = Math.max(e.burnT, 5);
+        e.hp -= 6;
+      } else {
+        e.burnT = Math.max(e.burnT, 3);
+      }
+    } else if (el === "ice" || el === "frost") {
+      if (e.burnT > 0) e.burnT = 0;
+      e.slowT = Math.max(e.slowT, 2);
+    } else if (el === "poison") e.poisonT = Math.max(e.poisonT, 4);
+    else if (el === "oil") e.oiledT = Math.max(e.oiledT, 6);
     else if (el === "acid") e.shredT = Math.max(e.shredT, 3);
   }
 
@@ -700,32 +909,49 @@ export class CorridorSim {
   // ─── Arrow Firing ────────────────────────────────────────
 
   fireArrow(trajectory) {
-    if (!trajectory) return null;
+    if (this.junctionPending || this.turning) return null;
+    if (this.state.phase !== "run") return null;
     if (this.state.arrowCooldown > 0) return null;
     const arrow = this.quiver.fireArrow();
     if (!arrow) return null;
     this.state.arrowsFired++;
+    this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
+    this.waveSpentArrows = this.waveSpentArrows || [];
+    this.waveSpentArrows.push({ type: arrow.type, level: arrow.level });
     this.state.arrowCooldown = this.state.getArrowCooldown();
 
-    const spd = trajectory.speed;
-    const vx = trajectory.vector.x * spd * 0.4;
-    const vz = -trajectory.vector.y * spd * 0.8;
+    const aim = trajectory && trajectory.vector ? trajectory.vector : { x: 0, y: -1 };
+    const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
+    const vx = aim.x * spd * 0.35;
+    const vz = spd * 0.75;
 
+    const dmg = getArrowDamage(arrow.type, arrow.level);
     const proj = createProjectile(
-      this.playerWorldX, this.playerWorldZ,
+      this.playerWorldX, this.playerWorldZ + 18,
       vx, vz,
-      1 + arrow.level, arrow.type, "player"
+      dmg, arrow.type, "player"
     );
     this.projectiles.push(proj);
     this.emit("arrow_fire", { arrow, projectile: proj });
+    if (arrow.type === "double") {
+      this.projectiles.push(createProjectile(
+        this.playerWorldX, this.playerWorldZ + 18,
+        vx * 1.08 + 18, vz * 0.96,
+        dmg, "wood", "player"
+      ));
+    }
 
     if (this.state.consumeBurst()) {
       setTimeout(() => {
+        if (this.state.phase !== "run" || this.junctionPending) return;
         const b = this.quiver.fireArrow();
         if (b) {
+          this.state.arrowsFired++;
+          this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
+          this.waveSpentArrows.push({ type: b.type, level: b.level });
           this.projectiles.push(createProjectile(
             this.playerWorldX, this.playerWorldZ, vx * 1.1, vz * 1.1,
-            1 + b.level, b.type, "player"
+            getArrowDamage(b.type, b.level), b.type, "player"
           ));
         }
       }, 80);
@@ -747,10 +973,15 @@ export class CorridorSim {
       list.push({ depth: d, type: "enemy", entity: e });
     }
     for (const p of this.projectiles) {
-      list.push({ depth: p.worldZ - pz, type: "projectile", entity: p });
+      p.dist = p.worldZ - pz;
+      if (p._trail) {
+        for (const t of p._trail) t.dist = t.worldZ - pz;
+      }
+      list.push({ depth: p.dist, type: "projectile", entity: p });
     }
     for (const p of this.enemyProjectiles) {
-      list.push({ depth: p.worldZ - pz, type: "enemy_projectile", entity: p });
+      p.dist = p.worldZ - pz;
+      list.push({ depth: p.dist, type: "enemy_projectile", entity: p });
     }
     list.sort((a, b) => a.depth - b.depth);
     return list;

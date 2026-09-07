@@ -1,22 +1,24 @@
 /**
- * main.js — Entry point. Wires RenderEngine2D5, CorridorSim, InputHandler.
- * Perspective rendering with optional curved corridor paths.
+ * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
-import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
-import { CAMERA } from "./engine/corridorCamera.js";
+import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
+import { DungeonView } from "./engine/DungeonView.js?v=33";
 import { withAlpha } from "./engine/drawUtil.js";
-import { box25 } from "./engine/prims25.js";
-import { CorridorSim } from "./game/CorridorSim.js";
-import { InputHandler } from "./game/InputHandler.js";
-import { CONFIG } from "./data/config.js";
+import { CorridorSim } from "./game/CorridorSim.js?v=38";
+import { InputHandler } from "./game/InputHandler.js?v=14";
+import { CONFIG } from "./data/config.js?v=26";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=29";
+import { STAT_INFO } from "./game/GameStateManager.js?v=31";
 
 // ─── Bootstrap ────────────────────────────────────────────────
 const canvas = document.getElementById("game");
 const engine = new RenderEngine2D5(canvas);
+const dungeon = new DungeonView();
 const sim = new CorridorSim();
 const input = new InputHandler(canvas);
-const cam = engine.cam;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
+engine.fxCam = dungeon;
+engine.sceneMode = "dungeon";
 
 // ─── UI references ────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
@@ -24,6 +26,7 @@ const phaseHub = $("#phase-hub");
 const phaseRun = $("#phase-run");
 const phaseDeath = $("#phase-death");
 const soulsEl = $("#souls-display");
+const quiverEl = $("#quiver-display");
 const hpFill = $("#hp-fill");
 const hpText = $("#hp-text");
 const waveEl = $("#wave-display");
@@ -34,13 +37,77 @@ const cooldownLabel = $("#cooldown-label");
 const minimapCanvas = $("#minimap");
 const deathStats = $("#death-stats");
 const debugPanel = $("#debug-panel");
-const junctionOverlay = $("#junction-overlay");
+const pathChoice = $("#path-choice");
+
+function prettyPathNames(choice) {
+  if (!choice || !choice.enemyTypes || !choice.enemyTypes.length) return "";
+  return choice.enemyTypes.slice(0, 2).map((t) =>
+    t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  ).join(" · ");
+}
+
+function setPathChoice(on) {
+  if (!pathChoice) return;
+  pathChoice.classList.toggle("active", !!on);
+  if (!on) return;
+  const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
+  const labels = { left: "‹ Left", forward: "Ahead", right: "Right ›" };
+  for (const btn of pathChoice.querySelectorAll("[data-dir]")) {
+    const dir = btn.dataset.dir;
+    const offered = dirs.has(dir);
+    btn.hidden = !offered;
+    if (!offered) continue;
+    const choice = (sim.junctionChoices || []).find((c) => c.direction === dir);
+    const names = prettyPathNames(choice);
+    btn.innerHTML = names
+      ? `${labels[dir]}<small>${names}</small>`
+      : labels[dir];
+  }
+}
 
 // ─── Input ───────────────────────────────────────────────────
+function tryChoosePath(x, y) {
+  if (sim.state.phase !== "run" || !sim.junctionPending) return false;
+  const w = canvas.clientWidth;
+  let dir = dungeon.hitTest(x, y);
+  if (!dir) {
+    if (x < w * 0.34) dir = "left";
+    else if (x > w * 0.66) dir = "right";
+    else dir = "forward";
+  }
+  const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
+  if (!dirs.has(dir)) return false;
+  sim.chooseJunction(dir);
+  return true;
+}
+
 input.onDragEnd = (angle, power, vector) => {
   if (sim.state.phase !== "run") return;
-  sim.fireArrow(input.getTrajectory());
+  if (sim.junctionPending) {
+    tryChoosePath(input.dragX, input.dragY);
+    return;
+  }
+  const pwr = power || input.power;
+  const vec = vector || (input.vector && input.vector.x ? input.vector : { x: 0, y: -1 });
+  const spd = CONFIG.ARROW_SPEED * (0.4 + 0.6 * Math.min(1, (pwr || 8) / CONFIG.SLINGSHOT_MAX_POWER));
+  sim.fireArrow({ angle: angle || 0, power: pwr, vector: vec, speed: spd });
 };
+
+input.onTap = (x, y) => {
+  tryChoosePath(x, y);
+};
+
+window.addEventListener("keydown", (e) => {
+  if (sim.state.phase !== "run" || !sim.junctionPending) return;
+  const dir = e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? "left"
+    : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? "right"
+    : e.key === "ArrowUp" || e.key === "w" || e.key === "W" ? "forward"
+    : null;
+  if (dir) {
+    e.preventDefault();
+    sim.chooseJunction(dir);
+  }
+});
 
 // ─── Game events ─────────────────────────────────────────────
 sim.state.onPhaseChange = (phase) => {
@@ -49,19 +116,23 @@ sim.state.onPhaseChange = (phase) => {
   phaseDeath.style.display = (phase === "death" || phase === "victory") ? "flex" : "none";
 
   if (phase === "hub") {
-    sim.state.hubVisits++;
+    sim.quiver.packForHub();
+    saveGame();
     populateHub();
   }
 
+  if (phase !== "run") setPathChoice(false);
+
   if (phase === "death" || phase === "victory") {
-    if (junctionOverlay) junctionOverlay.style.display = "none";
     const stats = sim.state.getRunStats();
     const earned = sim.state.bankSouls();
+    sim.quiver.packForHub();
+    saveGame();
     if (deathStats) {
       deathStats.innerHTML = `
-        <div style="font-size:1.6em;color:${phase==='victory'?'#5aaf8a':'#c45a4a'}">${phase === "victory" ? "Victory!" : "Fallen..."}</div>
-        <div>Distance: <b>${stats.distance}m</b></div>
-        <div>Waves Cleared: <b>${sim.waveIndex}</b></div>
+        <div style="font-size:1.6em;color:${phase==='victory'?'#5aaf8a':'#c45a4a'}">${phase === "victory" ? "Elevator!" : "Fallen..."}</div>
+        <div>Reached: <b>${sim.getProgressLabel()}</b></div>
+        <div>Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
         <div>Kills: <b>${stats.enemiesKilled}</b></div>
         <div>Arrows: <b>${stats.arrowsFired}</b></div>
         <div style="font-size:1.4em;margin-top:8px;color:#c9a227">+${earned} Souls</div>
@@ -81,8 +152,14 @@ sim.on("arrow_fire", (e) => {
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
 
+const FX_TYPE = {
+  ice: "frost", wood: "kinetic", flint: "kinetic", iron: "kinetic",
+  steel: "kinetic", silver: "kinetic", obsidian: "kinetic", moss: "poison",
+  oil: "acid", piercing: "kinetic", double: "kinetic", normal: "kinetic",
+};
 sim.on("projectile_hit", (e) => {
-  engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, e.projectile.element);
+  const fxType = FX_TYPE[e.projectile.element] || e.projectile.element;
+  engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, fxType);
   engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage));
 });
 
@@ -94,18 +171,46 @@ sim.on("wave_start", () => {
   engine.punch(2);
 });
 
-sim.on("junction_show", (e) => {
-  showJunctionOverlay(e.choices);
+sim.on("junction_show", () => {
+  setPathChoice(true);
+  input.choiceMode = true;
+  input.blockUntil = 0;
+  input.isDragging = false;
+});
+
+sim.on("junction_chosen", () => {
+  setPathChoice(false);
+  input.choiceMode = false;
+  engine.punch(4);
 });
 
 sim.on("run_start", () => {
-  if (junctionOverlay) junctionOverlay.style.display = "none";
+  setPathChoice(false);
+  input.reset();
+  input.blockUntil = performance.now() + 280;
 });
+
+if (pathChoice) {
+  pathChoice.addEventListener("pointerup", (e) => {
+    const btn = e.target.closest("[data-dir]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (sim.state.phase === "run" && sim.junctionPending) {
+      sim.chooseJunction(btn.dataset.dir);
+    }
+  });
+}
 
 // ─── UI Buttons ───────────────────────────────────────────────
 $("#btn-start").addEventListener("click", () => { try { sim.initRun(); } catch(err) { console.error("Init error:", err); } });
 $("#btn-retry").addEventListener("click", () => { try { sim.initRun(); } catch(err) { console.error("Init error:", err); } });
-$("#btn-hub").addEventListener("click", () => sim.state.enterHub());
+$("#btn-hub").addEventListener("click", () => {
+  if (sim.state.phase === "death" || sim.state.phase === "victory") {
+    sim.state.hubVisits++;
+  }
+  sim.state.enterHub();
+});
 
 // ─── Hub Nav ──────────────────────────────────────────────────
 const hubNavBtns = document.querySelectorAll(".hub-nav-btn");
@@ -121,29 +226,29 @@ hubNavBtns.forEach(btn => {
 });
 
 const ENEMY_DEFS_BESTIARY = [
-  { id: "slime",          name: "Slime",           hp: 10,  dmg: 4,  speed: 35,  souls: 1, armor: "None",   color: "#b84a55", behavior: "Advances steadily, pauses to lurch forward in bursts" },
-  { id: "slime_large",    name: "Large Slime",     hp: 30,  dmg: 6,  speed: 25,  souls: 2, armor: "None",   color: "#c45a65", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
-  { id: "slime_huge",     name: "Huge Slime",      hp: 60,  dmg: 8,  speed: 18,  souls: 4, armor: "None",   color: "#d46a75", behavior: "Massive slime that splits into 2 Large Slimes" },
-  { id: "goblin_runt",    name: "Goblin Runt",     hp: 8,   dmg: 3,  speed: 55,  souls: 1, armor: "None",   color: "#6aaa5a", behavior: "Walks forward, then dodges side to side in a rhythm" },
-  { id: "goblin_warrior", name: "Goblin Warrior",  hp: 18,  dmg: 5,  speed: 42,  souls: 2, armor: "None",   color: "#5a9a4a", behavior: "Tougher goblin with slower, heavier dodges" },
-  { id: "goblin_chieftain",name: "Goblin Chieftain",hp: 40, dmg: 7,  speed: 35,  souls: 4, armor: "None",   color: "#4a8a3a", behavior: "Powerful goblin leader, slow but devastating" },
-  { id: "imp",            name: "Imp",             hp: 6,   dmg: 3,  speed: 70,  souls: 1, armor: "None",   color: "#d4892a", behavior: "Walks slowly, then notices player and charges" },
-  { id: "scamp",          name: "Scamp",           hp: 12,  dmg: 4,  speed: 60,  souls: 2, armor: "None",   color: "#e0a030", behavior: "Faster imp variant, charges quickly" },
-  { id: "demon",          name: "Demon",           hp: 35,  dmg: 7,  speed: 45,  souls: 4, armor: "None",   color: "#c04040", behavior: "Slow, heavy, devastating charger" },
-  { id: "skeleton",       name: "Skeleton",        hp: 50,  dmg: 7,  speed: 22,  souls: 3, armor: "None",   color: "#c8c0b0", behavior: "Slow undead warrior with a sharp blade" },
-  { id: "skeleton_archer",name: "Skeleton Archer",  hp: 25,  dmg: 4,  speed: 28,  souls: 2, armor: "None",   color: "#b0a898", behavior: "Stops at range and fires bone arrows at you" },
-  { id: "ghoul",          name: "Ghoul",           hp: 15,  dmg: 4,  speed: 40,  souls: 1, armor: "None",   color: "#7a6a5a", behavior: "Fast, shambling undead" },
-  { id: "wight",          name: "Wight",           hp: 30,  dmg: 6,  speed: 35,  souls: 2, armor: "None",   color: "#6a5a4a", behavior: "Tougher ghoul, steady advance" },
-  { id: "wraith",         name: "Wraith",          hp: 18,  dmg: 5,  speed: 55,  souls: 2, armor: "Energy", color: "#8a7ab8", behavior: "Phases through attacks, zigzags unpredictably" },
-  { id: "vampire",        name: "Vampire",         hp: 35,  dmg: 6,  speed: 45,  souls: 3, armor: "None",   color: "#a02020", behavior: "Notices player, charges, drains HP" },
-  { id: "vampire_lord",   name: "Vampire Lord",    hp: 60,  dmg: 8,  speed: 50,  souls: 5, armor: "None",   color: "#801010", behavior: "Faster, stronger vampire" },
-  { id: "lich",           name: "Lich",            hp: 50,  dmg: 5,  speed: 30,  souls: 4, armor: "None",   color: "#6040a0", behavior: "Ranged magic, summons minions" },
-  { id: "bat",            name: "Bat",             hp: 6,   dmg: 2,  speed: 90,  souls: 1, armor: "None",   color: "#4a3a5a", behavior: "Very fast, tiny, might poison" },
-  { id: "spider",         name: "Spider",          hp: 8,   dmg: 3,  speed: 60,  souls: 1, armor: "None",   color: "#5a4a3a", behavior: "Fast, small, might poison" },
-  { id: "giant_spider",   name: "Giant Spider",    hp: 25,  dmg: 5,  speed: 50,  souls: 2, armor: "None",   color: "#4a3a2a", behavior: "Larger, tougher spider" },
-  { id: "orc",            name: "Orc",             hp: 35,  dmg: 7,  speed: 40,  souls: 3, armor: "None",   color: "#5a7a4a", behavior: "Tough, steady advance" },
-  { id: "ogre",           name: "Ogre",            hp: 70,  dmg: 10, speed: 25,  souls: 5, armor: "Heavy",  color: "#6a8a5a", behavior: "Very tough, slow, heavy" },
-  { id: "troll",          name: "Troll",           hp: 50,  dmg: 8,  speed: 35,  souls: 4, armor: "None",   color: "#4a6a3a", behavior: "Regenerates HP while alive" },
+  { id: "slime",          name: "Slime",           hp: 10,  dmg: 4,  speed: 9,   souls: 1, armor: "None",   color: "#b84a55", behavior: "Oozes forward with a slow, wet pulse" },
+  { id: "slime_large",    name: "Large Slime",     hp: 30,  dmg: 6,  speed: 7,   souls: 2, armor: "None",   color: "#c45a65", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
+  { id: "slime_huge",     name: "Huge Slime",      hp: 60,  dmg: 8,  speed: 5,   souls: 4, armor: "None",   color: "#d46a75", behavior: "Massive slime that splits into 2 Large Slimes" },
+  { id: "goblin_runt",    name: "Goblin Runt",     hp: 8,   dmg: 3,  speed: 20,  souls: 1, armor: "None",   color: "#6aaa5a", behavior: "Walks forward, then dodges side to side in a rhythm" },
+  { id: "goblin_warrior", name: "Goblin Warrior",  hp: 18,  dmg: 5,  speed: 16,  souls: 2, armor: "None",   color: "#5a9a4a", behavior: "Tougher goblin with slower, heavier dodges" },
+  { id: "goblin_chieftain",name: "Goblin Chieftain",hp: 40, dmg: 7,  speed: 13,  souls: 4, armor: "None",   color: "#4a8a3a", behavior: "Powerful goblin leader, slow but devastating" },
+  { id: "imp",            name: "Imp",             hp: 6,   dmg: 3,  speed: 24,  souls: 1, armor: "None",   color: "#d4892a", behavior: "Walks slowly, then notices player and charges" },
+  { id: "scamp",          name: "Scamp",           hp: 12,  dmg: 4,  speed: 22,  souls: 2, armor: "None",   color: "#e0a030", behavior: "Faster imp variant, charges quickly" },
+  { id: "demon",          name: "Demon",           hp: 35,  dmg: 7,  speed: 16,  souls: 4, armor: "None",   color: "#c04040", behavior: "Slow, heavy, devastating charger" },
+  { id: "skeleton",       name: "Skeleton",        hp: 50,  dmg: 7,  speed: 11,  souls: 3, armor: "None",   color: "#c8c0b0", behavior: "Slow undead warrior with a sharp blade" },
+  { id: "skeleton_archer",name: "Skeleton Archer",  hp: 25,  dmg: 4,  speed: 12,  souls: 2, armor: "None",   color: "#b0a898", behavior: "Stops at range and fires bone arrows at you" },
+  { id: "ghoul",          name: "Ghoul",           hp: 15,  dmg: 4,  speed: 15,  souls: 1, armor: "None",   color: "#7a6a5a", behavior: "Shambling undead" },
+  { id: "wight",          name: "Wight",           hp: 30,  dmg: 6,  speed: 13,  souls: 2, armor: "None",   color: "#6a5a4a", behavior: "Tougher ghoul, steady advance" },
+  { id: "wraith",         name: "Wraith",          hp: 18,  dmg: 5,  speed: 18,  souls: 2, armor: "Energy", color: "#8a7ab8", behavior: "Phases through attacks, zigzags unpredictably" },
+  { id: "vampire",        name: "Vampire",         hp: 35,  dmg: 6,  speed: 17,  souls: 3, armor: "None",   color: "#a02020", behavior: "Notices player, charges, drains HP" },
+  { id: "vampire_lord",   name: "Vampire Lord",    hp: 60,  dmg: 8,  speed: 19,  souls: 5, armor: "None",   color: "#801010", behavior: "Faster, stronger vampire" },
+  { id: "lich",           name: "Lich",            hp: 50,  dmg: 5,  speed: 10,  souls: 4, armor: "None",   color: "#6040a0", behavior: "Ranged magic, summons minions" },
+  { id: "bat",            name: "Bat",             hp: 6,   dmg: 2,  speed: 28,  souls: 1, armor: "None",   color: "#4a3a5a", behavior: "Hovers in the hall, might poison" },
+  { id: "spider",         name: "Spider",          hp: 8,   dmg: 3,  speed: 20,  souls: 1, armor: "None",   color: "#5a4a3a", behavior: "Creeps forward, might poison" },
+  { id: "giant_spider",   name: "Giant Spider",    hp: 25,  dmg: 5,  speed: 16,  souls: 2, armor: "None",   color: "#4a3a2a", behavior: "Larger, tougher spider" },
+  { id: "orc",            name: "Orc",             hp: 35,  dmg: 7,  speed: 14,  souls: 3, armor: "None",   color: "#5a7a4a", behavior: "Tough, steady advance" },
+  { id: "ogre",           name: "Ogre",            hp: 70,  dmg: 10, speed: 9,   souls: 5, armor: "Heavy",  color: "#6a8a5a", behavior: "Very tough, slow, heavy" },
+  { id: "troll",          name: "Troll",           hp: 50,  dmg: 8,  speed: 12,  souls: 4, armor: "None",   color: "#4a6a3a", behavior: "Regenerates HP while alive" },
 ];
 
 const ARMOUR_MATERIALS = [
@@ -174,9 +279,16 @@ const ARMOUR_QUALITIES = [
 const SLOT_ICONS = { head: "🪖", body: "🛡️", feet: "👢" };
 const SLOTS = ["head", "body", "feet"];
 
+function armourWeight(material, quality, slot) {
+  const slotW = slot === "body" ? 1 : slot === "head" ? 0.55 : 0.4;
+  const q = 0.7 + quality.mult * 0.3;
+  return Math.max(1, Math.round((1 + material.tier * 0.7) * slotW * q));
+}
+
 function generateArmourItem(material, quality, slot) {
   const baseArmor = slot === "body" ? material.body : slot === "head" ? material.head : material.feet;
   const armor = Math.max(1, Math.floor(baseArmor * quality.mult));
+  const weight = armourWeight(material, quality, slot);
   const cost = Math.floor(10 + material.tier * 8 + (ARMOUR_QUALITIES.indexOf(quality)) * 15);
   const prefix = quality.name ? quality.name + " " : "";
   const name = `${prefix}${material.name} ${slot.charAt(0).toUpperCase() + slot.slice(1)}`;
@@ -186,10 +298,11 @@ function generateArmourItem(material, quality, slot) {
     slot,
     cost,
     desc: `${material.name} ${slot} armor`,
-    stats: `Armor ${armor}`,
+    stats: `Armor ${armor} · Wt ${weight}`,
     icon: SLOT_ICONS[slot],
     section: "armour",
     armor,
+    weight,
     material: material.id,
     quality: quality.id,
     tier: material.tier,
@@ -205,17 +318,7 @@ for (const mat of ARMOUR_MATERIALS) {
   }
 }
 
-const SHOP_CONSUMABLES = [
-  { id: "health_potion", name: "Health Potion", slot: "item", cost: 25, desc: "Restore 5 HP", stats: "Heal 5 HP", icon: "🧪", section: "items" },
-  { id: "damage_scroll", name: "Damage Scroll", slot: "item", cost: 40, desc: "+50% damage for 10s", stats: "Buff", icon: "📜", section: "items" },
-  { id: "speed_charm",   name: "Speed Charm",   slot: "item", cost: 30, desc: "Move faster for 15s", stats: "Buff", icon: "✨", section: "items" },
-];
-
-const SHOP_ARROWS = [
-  { id: "fire_arrows",   name: "Fire Arrow",    slot: "ammo", cost: 30, desc: "1 fire arrow", stats: "Burn DOT", icon: "🔥", section: "arrows", element: "fire" },
-  { id: "ice_arrows",    name: "Ice Arrow",     slot: "ammo", cost: 30, desc: "1 ice arrow",  stats: "Slow",     icon: "❄️", section: "arrows", element: "ice" },
-  { id: "poison_arrows", name: "Poison Arrow",  slot: "ammo", cost: 30, desc: "1 poison arrow", stats: "Poison", icon: "☠️", section: "arrows", element: "poison" },
-];
+const SHOP_ARROWS_ALL = getShopArrowCatalog();
 
 const SHOP_QUIVERS = [
   { id: "quiver_small",  name: "Small Quiver",  slot: "misc", cost: 40,  desc: "Holds 12 arrows",  stats: "12 Capacity", icon: "🏹", section: "quivers" },
@@ -223,28 +326,76 @@ const SHOP_QUIVERS = [
   { id: "quiver_large",  name: "Large Quiver",  slot: "misc", cost: 150, desc: "Holds 20 arrows",  stats: "20 Capacity", icon: "🏹", section: "quivers" },
 ];
 
-function rollShopArmour() {
+function mulberry32(seed) {
+  let a = seed | 0;
+  return () => {
+    a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function pickArmourQuality(rand, luck = 1) {
+  const n = ARMOUR_QUALITIES.length;
+  const power = 1 + Math.max(0, luck - 1) * 0.08;
+  const skewed = 1 - Math.pow(1 - rand(), power);
+  return ARMOUR_QUALITIES[Math.min(n - 1, Math.floor(skewed * n))];
+}
+
+function rollShopArmour(rand = Math.random, luck = 1) {
   const pool = [];
   for (const mat of ARMOUR_MATERIALS) {
     for (const slot of SLOTS) {
-      const qual = ARMOUR_QUALITIES[Math.floor(Math.random() * ARMOUR_QUALITIES.length)];
-      pool.push(generateArmourItem(mat, qual, slot));
+      pool.push(generateArmourItem(mat, pickArmourQuality(rand, luck), slot));
     }
   }
-  const shuffled = pool.sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 3);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const t = pool[i];
+    pool[i] = pool[j];
+    pool[j] = t;
+  }
+  return pool.slice(0, 3);
 }
 
 let _shopArmourCache = null;
+let _shopArrowCache = null;
 let _shopHubVisit = -1;
 
-function getShopArmour(state) {
+function refreshShopCaches(state) {
   const visit = state.hubVisits || 0;
-  if (_shopHubVisit !== visit || !_shopArmourCache) {
-    _shopArmourCache = rollShopArmour();
+  if (_shopHubVisit !== visit || !_shopArmourCache || !_shopArrowCache) {
+    _shopArmourCache = rollShopArmour(mulberry32(0x9E3779B9 + visit * 0x85ebca6b), state.getStat("luck"));
+    _shopArrowCache = rollShopArrows(3, mulberry32(0xC2B2AE35 + visit * 0x27d4eb2d));
     _shopHubVisit = visit;
   }
+}
+
+function syncArmorRating(state) {
+  let rating = 0;
+  let load = 0;
+  for (const slot of SLOTS) {
+    const id = state.equipped?.[slot];
+    if (!id) continue;
+    const item = ARMOUR_ITEMS.find((i) => i.id === id);
+    if (item) {
+      rating += item.armor;
+      load += item.weight || 0;
+    }
+  }
+  state.armorRating = rating;
+  state.equipLoad = load;
+}
+
+function getShopArmour(state) {
+  refreshShopCaches(state);
   return _shopArmourCache;
+}
+
+function getShopArrows(state) {
+  refreshShopCaches(state);
+  return _shopArrowCache;
 }
 
 const EQUIP_SLOTS = [
@@ -257,23 +408,36 @@ const EQUIP_SLOTS = [
 
 function populateHub() {
   const state = sim.state;
+  sim.quiver.capacity = state.getQuiverCapacity();
+  syncArmorRating(state);
+  state.applyUpgrades();
   const soulsEl = document.getElementById("hub-souls");
   if (soulsEl) soulsEl.textContent = state.souls;
 
   // Training
   const trainingList = document.getElementById("training-list");
   if (trainingList) {
-    const upgrades = [
-      { id: "arrowDamage", name: "Arrow Damage", desc: "Increases base arrow damage", max: 5, base: 15 },
-      { id: "attackSpeed", name: "Attack Speed", desc: "Reduces arrow cooldown", max: 5, base: 20 },
-      { id: "maxHp",       name: "Max Health",   desc: "+2 max HP per level", max: 5, base: 20 },
-      { id: "critChance",  name: "Crit Chance",  desc: "5% crit chance per level", max: 5, base: 30 },
-      { id: "lootChance",  name: "Loot Find",    desc: "+5% arrow recovery per level", max: 5, base: 25 },
-    ];
-    trainingList.innerHTML = upgrades.map(u => {
-      const lvl = state.upgrades[u.id] || 0;
-      const maxed = lvl >= u.max;
-      const cost = Math.floor(u.base * (1.5 + lvl * 0.3));
+    const cd = state.getArrowCooldown();
+    const ret = Math.round(state.getArrowReturnChance() * 100);
+    const crit = Math.round(state.getCritChance() * 100);
+    const critX = state.getCritMultiplier().toFixed(1);
+    const over = state.isOverEncumbered();
+    const cost = state.getUpgradeCost();
+    const charLevel = state.getCharacterLevel();
+    trainingList.innerHTML = `
+      <div class="train-summary">
+        <span>Level ${charLevel}</span>
+        <span>Next ${cost} souls</span>
+        <span>HP ${state.playerMaxHp}</span>
+        <span>CD ${cd.toFixed(2)}s</span>
+        <span>Dmg +${state.getStrengthBonus()}</span>
+        <span>Crit ${crit}% ×${critX}</span>
+        <span>Return ${ret}%</span>
+        <span class="${over ? "overencumbered" : ""}">Load ${state.equipLoad || 0}/${state.getMaxEquipLoad()}</span>
+      </div>
+    ` + STAT_INFO.map((u) => {
+      const lvl = state.getStat(u.id);
+      const maxed = state.isUpgradeMaxed(u.id);
       const afford = state.souls >= cost;
       return `<div class="train-row">
         <div class="train-info">
@@ -281,9 +445,9 @@ function populateHub() {
           <div class="train-desc">${u.desc}</div>
         </div>
         <div class="train-right">
-          <span class="train-level">Lv ${lvl} / ${u.max}</span>
+          <span class="train-level">${lvl} / 20</span>
           <span class="train-cost">${maxed ? "MAX" : cost + " souls"}</span>
-          <button class="train-buy ${maxed ? 'maxed' : ''}" ${maxed || !afford ? 'disabled' : ''} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
+          <button class="train-buy ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
         </div>
       </div>`;
     }).join("");
@@ -291,6 +455,7 @@ function populateHub() {
       btn.addEventListener("click", () => {
         const id = btn.dataset.upgrade;
         state.buyUpgrade(id);
+        saveGame();
         populateHub();
       });
     });
@@ -301,15 +466,14 @@ function populateHub() {
   if (shopList) {
     const owned = state.ownedItems || [];
     const armourItems = getShopArmour(state);
+    const arrowItems = getShopArrows(state);
     const allItems = [
-      ...SHOP_CONSUMABLES,
-      ...SHOP_ARROWS,
+      ...SHOP_ARROWS_ALL,
       ...SHOP_QUIVERS,
       ...armourItems,
     ];
     const sections = [
-      { id: "items",   label: "Items",   items: SHOP_CONSUMABLES },
-      { id: "arrows",  label: "Arrows",  items: SHOP_ARROWS },
+      { id: "arrows",  label: "Arrows",  items: arrowItems },
       { id: "quivers", label: "Quivers", items: SHOP_QUIVERS },
       { id: "armour",  label: "Armour",  items: armourItems },
     ];
@@ -318,14 +482,15 @@ function populateHub() {
         <div class="shop-section-title" data-toggle="${section.id}">${section.label} ▾</div>
         <div class="shop-section-items" id="shop-section-${section.id}">
           ${section.items.map(item => {
-            const isOwned = owned.includes(item.id);
+            const repeatable = item.section === "arrows";
+            const isOwned = !repeatable && owned.includes(item.id);
             const afford = state.souls >= item.cost;
             const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
             const qualColor = qual ? qual.color : "#e8e4dc";
             return `<div class="shop-item">
               <div class="shop-icon">${item.icon}</div>
               <div class="shop-name" style="color:${qualColor}">${item.name}</div>
-              <div class="shop-desc">${item.desc}<br><span style="color:#9aa8b8">${item.stats}</span></div>
+              <div class="shop-desc">${item.desc}<br><span style="color:#8a7348">${item.stats}</span></div>
               <div class="shop-bottom">
                 <span class="shop-cost">${isOwned ? "Owned" : item.cost + " souls"}</span>
                 <button class="shop-buy ${isOwned ? 'owned' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${isOwned ? "Owned" : "Buy"}</button>
@@ -353,7 +518,18 @@ function populateHub() {
         const item = allItems.find(i => i.id === id);
         if (!item || !state.spendSouls(item.cost)) return;
         if (!state.ownedItems) state.ownedItems = [];
-        state.ownedItems.push(id);
+        if (item.section === "arrows") {
+          const arrow = { type: item.element || "normal", level: 1 };
+          if (!sim.quiver.addToQuiver(arrow)) sim.quiver.addToStorage(arrow);
+        } else {
+          state.ownedItems.push(id);
+          if (item.section === "quivers") {
+            if (!state.equipped) state.equipped = {};
+            state.equipped.quiver = id;
+            sim.quiver.capacity = state.getQuiverCapacity();
+          }
+        }
+        saveGame();
         populateHub();
       });
     });
@@ -369,19 +545,21 @@ function populateHub() {
     const storageCount = quiverData ? quiverData.storageCount : 0;
 
     function findItem(id) {
-      return SHOP_CONSUMABLES.find(i => i.id === id)
-        || SHOP_ARROWS.find(i => i.id === id)
+      return SHOP_ARROWS_ALL.find(i => i.id === id)
         || SHOP_QUIVERS.find(i => i.id === id)
         || ARMOUR_ITEMS.find(i => i.id === id)
         || null;
     }
 
-    equipSlotsEl.innerHTML = EQUIP_SLOTS.map(slot => {
+    const maxLoad = state.getMaxEquipLoad();
+    const load = state.equipLoad || 0;
+    const over = load > maxLoad;
+    equipSlotsEl.innerHTML = `<div class="equip-load ${over ? "overencumbered" : ""}">Equip load ${load} / ${maxLoad}${over ? " — overencumbered, slower shots" : ""}</div>` + EQUIP_SLOTS.map(slot => {
       const itemId = equipped[slot.id];
       const item = itemId ? findItem(itemId) : null;
       let extra = "";
       if (slot.id === "arrows") {
-        extra = ` (${quiverCount}/${quiverData?.capacity || 8} + ${storageCount} spares)`;
+        extra = ` (${quiverCount}/${quiverData?.capacity || 6} + ${storageCount} stored)`;
       }
       return `<div class="equip-slot" data-slot="${slot.id}">
         <div class="equip-slot-icon">${item ? item.icon : slot.icon}</div>
@@ -417,25 +595,26 @@ function populateHub() {
             equipDetail.innerHTML = `
               <div style="display:flex;gap:16px;height:100%">
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <h3 style="margin:0">Storage (${sArr.length})</h3>
-                  <div style="color:#6a7a8a;font-size:0.75em">Click to move to quiver</div>
+                  <h3 style="margin:0">Collection (${sArr.length})</h3>
+                  <div style="color:#6a7a8a;font-size:0.9em">Tap to load into the run deck</div>
                   <div style="display:flex;flex-wrap:wrap;gap:4px;overflow-y:auto;flex:1">
                     ${sArr.length === 0 ? '<div style="color:#4a5a6a;font-size:0.8em">Empty</div>' : ''}
-                    ${sArr.map((a, i) => `<div class="arrow-card ${a.type}" data-storage="${i}" style="cursor:pointer" title="Move to quiver">${a.type.slice(0,3).toUpperCase()} L${a.level}</div>`).join("")}
+                    ${sArr.map((a, i) => `<div class="arrow-card ${a.type}" data-storage="${i}" style="cursor:pointer;border-color:${getArrowDef(a.type).color}" title="Move to quiver">${arrowShort(a.type)} L${a.level}</div>`).join("")}
                   </div>
                 </div>
                 <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
                 <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                  <h3 style="margin:0">Quiver (${qArr.length}/${quiver.capacity})</h3>
-                  <div style="color:#6a7a8a;font-size:0.75em">Click to move to storage</div>
+                  <h3 style="margin:0">Run Deck (${qArr.length}/${quiver.capacity})</h3>
+                  <div style="color:#6a7a8a;font-size:0.9em">Tap to move to collection</div>
                   <div style="display:flex;flex-wrap:wrap;gap:4px;overflow-y:auto;flex:1">
-                    ${qArr.map((a, i) => `<div class="arrow-card ${a.type}" data-quiver="${i}" style="cursor:pointer" title="Move to storage">${a.type.slice(0,3).toUpperCase()} L${a.level}</div>`).join("")}
+                    ${qArr.map((a, i) => `<div class="arrow-card ${a.type}" data-quiver="${i}" style="cursor:pointer;border-color:${getArrowDef(a.type).color}" title="Move to storage">${arrowShort(a.type)} L${a.level}</div>`).join("")}
                   </div>
                 </div>
               </div>`;
             equipDetail.querySelectorAll("[data-storage]").forEach(el => {
               el.addEventListener("click", () => {
                 quiver.moveArrowToQuiver(parseInt(el.dataset.storage));
+                saveGame();
                 populateHub();
                 equipSlotsEl.querySelector('[data-slot="arrows"]').click();
               });
@@ -443,6 +622,7 @@ function populateHub() {
             equipDetail.querySelectorAll("[data-quiver]").forEach(el => {
               el.addEventListener("click", () => {
                 quiver.moveArrowToStorage(parseInt(el.dataset.quiver));
+                saveGame();
                 populateHub();
                 equipSlotsEl.querySelector('[data-slot="arrows"]').click();
               });
@@ -470,15 +650,13 @@ function populateHub() {
               btn.addEventListener("click", () => {
                 if (!state.equipped) state.equipped = {};
                 state.equipped[btn.dataset.slot] = btn.dataset.equip;
+                saveGame();
                 populateHub();
               });
             });
           }
         } else {
-          const allEquipItems = [
-            ...ARMOUR_ITEMS.filter(i => i.slot === slotId),
-            ...SHOP_CONSUMABLES.filter(i => i.slot === slotId),
-          ];
+          const allEquipItems = ARMOUR_ITEMS.filter(i => i.slot === slotId);
           const ownedInSlot = allEquipItems.filter(i => owned.includes(i.id));
           const currentlyEquipped = equipped[slotId];
 
@@ -503,6 +681,7 @@ function populateHub() {
               btn.addEventListener("click", () => {
                 if (!state.equipped) state.equipped = {};
                 state.equipped[btn.dataset.slot] = btn.dataset.equip;
+                saveGame();
                 populateHub();
                 equipSlotsEl.querySelector(`[data-slot="${btn.dataset.slot}"]`).click();
               });
@@ -537,50 +716,19 @@ function populateHub() {
   }
 }
 
-// ─── Junction handlers ────────────────────────────────────────
-function showJunctionOverlay(choices) {
-  if (!junctionOverlay) return;
-  junctionOverlay.style.display = "flex";
-  junctionOverlay.innerHTML = "";
-
-  const label = document.createElement("div");
-  label.className = "junction-title";
-  label.textContent = "Choose Path";
-  junctionOverlay.appendChild(label);
-
-  choices.forEach((choice) => {
-    const btn = document.createElement("div");
-    btn.className = "junction-choice-btn";
-
-    const arrowSvg = choice.direction === "left"
-      ? '<svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="#e8e4dc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
-      : choice.direction === "right"
-      ? '<svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="#e8e4dc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>'
-      : '<svg class="arrow-icon" viewBox="0 0 24 24" fill="none" stroke="#e8e4dc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
-
-    const typeLabel = document.createElement("div");
-    typeLabel.className = "enemy-label";
-    typeLabel.textContent = choice.enemyTypes.slice(0, 3).join(", ");
-
-    btn.innerHTML = arrowSvg;
-    btn.appendChild(typeLabel);
-
-    btn.addEventListener("click", () => {
-      junctionOverlay.style.display = "none";
-      sim.chooseJunction(choice.direction);
-    });
-
-    junctionOverlay.appendChild(btn);
-  });
-}
-
 // ─── UI Update ────────────────────────────────────────────────
 function updateUI() {
-  if (soulsEl) soulsEl.textContent = sim.state.souls;
+  if (soulsEl) soulsEl.textContent = sim.state.phase === "run" ? (sim.state.runSouls || 0) : sim.state.souls;
+  if (quiverEl) {
+    const q = sim.quiver;
+    quiverEl.textContent = sim.state.phase === "run"
+      ? `Queue ${q.queueCount} · Deck ${q.deckCount}`
+      : `Deck ${q.quiverCount}/${q.capacity}`;
+  }
   if (hpFill) hpFill.style.width = `${(sim.state.playerHp / sim.state.playerMaxHp) * 100}%`;
   if (hpText) hpText.textContent = `${Math.ceil(sim.state.playerHp)} / ${sim.state.playerMaxHp}`;
-  if (waveEl) waveEl.textContent = `Wave ${sim.waveIndex}`;
-  if (distEl) distEl.textContent = `${sim.enemies.length} enemies`;
+  if (waveEl) waveEl.textContent = sim.getProgressLabel ? sim.getProgressLabel() : `Fl. 1`;
+  if (distEl) distEl.textContent = `${sim.enemies.length} ahead`;
 
   if (timerEl) {
     const t = Math.floor(sim.runTime || 0);
@@ -603,6 +751,8 @@ function updateUI() {
   if (debugPanel) {
     debugPanel.textContent = `wave=${sim.waveIndex} en=${sim.enemies.length} projs=${sim.projectiles.length}`;
   }
+
+  setPathChoice(sim.state.phase === "run" && !!sim.junctionPending);
 }
 
 // ─── Minimap ─────────────────────────────────────────────────
@@ -620,6 +770,21 @@ function drawMinimap() {
   mctx.strokeRect(2, 2, mw - 4, mh - 4);
 
   const viewRange = 700;
+  const heading = ((sim.heading || 0) * Math.PI) / 180;
+  const pts = sim.pathPts || [];
+  if (pts.length > 1) {
+    mctx.strokeStyle = "rgba(180, 150, 80, 0.45)";
+    mctx.lineWidth = 2;
+    mctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const px = mw / 2 + (pts[i].x - sim.mapX) * 0.04;
+      const py = mh - 8 - (pts[i].y - sim.mapZ) * 0.04;
+      if (i === 0) mctx.moveTo(px, py);
+      else mctx.lineTo(px, py);
+    }
+    mctx.lineTo(mw / 2, mh - 8);
+    mctx.stroke();
+  }
 
   for (const e of sim.enemies) {
     const ex = (e.x / HALF_CORRIDOR + 1) / 2;
@@ -638,475 +803,81 @@ function drawMinimap() {
   mctx.arc(mw / 2, mh - 8, 3, 0, Math.PI * 2);
   mctx.fill();
   mctx.strokeStyle = "#e8c56a";
-  mctx.lineWidth = 1;
+  mctx.lineWidth = 1.5;
+  mctx.beginPath();
+  mctx.moveTo(mw / 2, mh - 8);
+  mctx.lineTo(mw / 2 + Math.sin(heading) * 8, mh - 8 - Math.cos(heading) * 8);
   mctx.stroke();
 }
 
+function getJunctionView() {
+  if (sim.state.phase !== "run" || !sim.junctionPending) return null;
+  if (!sim.junctionChoices || !sim.junctionChoices.length) return null;
+  const dirs = new Set(sim.junctionChoices.map((c) => c.direction));
+  return {
+    dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
+    left: dirs.has("left"),
+    right: dirs.has("right"),
+    forward: dirs.has("forward"),
+    pending: true,
+    choices: sim.junctionChoices,
+  };
+}
+
 // ─── Rendering ────────────────────────────────────────────────
-function drawCorridor(ctx, cam, eng) {
-  const cell = CONFIG.CELL_SIZE;
-  const corridorW = CONFIG.CORRIDOR_WIDTH;
-  const maxDist = cam.K * 4;
+function drawCorridor(ctx) {
+  dungeon.resize(canvas.clientWidth, canvas.clientHeight);
+  const t = Number.isFinite(sim.runTime) ? sim.runTime : 0;
+  dungeon.yaw = (sim.turnAngle || 0) * Math.PI / 180;
+  dungeon.drawHall(ctx, sim.playerWorldZ, t, getJunctionView(), {
+    walking: sim.movingForward && !sim.turning && !sim.junctionPending,
+    turning: !!sim.turning,
+    turnU: sim.turnU || 0,
+    turnSign: Math.sign(sim.turnTarget || 0) || 1,
+  });
 
-  drawCorridorStraight(ctx, cam, maxDist, cell, corridorW);
-
-  const entities = sim.getAllEntities();
-  for (const ent of entities) {
-    if (ent.type === "player") drawPlayer(ctx, cam);
-    else if (ent.type === "enemy") drawEnemy(ctx, cam, ent.entity);
-    else if (ent.type === "projectile") drawProjectile(ctx, cam, ent.entity);
-    else if (ent.type === "enemy_projectile") drawEnemyProjectile(ctx, cam, ent.entity);
+  ctx.save();
+  if (dungeon.roll) {
+    ctx.translate(dungeon.cssW * 0.5, dungeon.cssH * 0.5);
+    ctx.rotate(dungeon.roll);
+    ctx.translate(-dungeon.cssW * 0.5, -dungeon.cssH * 0.5);
   }
+  const entities = sim.getAllEntities();
+  for (let i = entities.length - 1; i >= 0; i--) {
+    const ent = entities[i];
+    if (ent.type === "enemy") dungeon.drawEnemy(ent.entity);
+    else if (ent.type === "projectile") dungeon.drawProjectile(ent.entity);
+    else if (ent.type === "enemy_projectile") dungeon.drawProjectile(ent.entity, true);
+  }
+  ctx.restore();
 
+  dungeon.drawOverlay(ctx, input);
   input.drawAimLine(ctx);
 }
 
-function drawCorridorStraight(ctx, cam, maxDist, cell, corridorW) {
-  const canvasH = canvas.clientHeight;
-  const canvasW = canvas.clientWidth;
-  const scrollOffset = sim.playerWorldZ % cell;
-
-  const backDist = 200;
-  const px = cam.project(0, 0);
-  const backLeft = cam.project(-HALF_CORRIDOR, 0);
-  const backRight = cam.project(HALF_CORRIDOR, 0);
-  const backFarL = cam.project(-HALF_CORRIDOR, -backDist);
-  const backFarR = cam.project(HALF_CORRIDOR, -backDist);
-
-  ctx.fillStyle = "#0e1218";
-  ctx.beginPath();
-  ctx.moveTo(backFarL.x, backFarL.y);
-  ctx.lineTo(backFarR.x, backFarR.y);
-  ctx.lineTo(backRight.x, backRight.y);
-  ctx.lineTo(backLeft.x, backLeft.y);
-  ctx.closePath();
-  ctx.fill();
-
-  const nearLeft = cam.project(-HALF_CORRIDOR, 0);
-  const nearRight = cam.project(HALF_CORRIDOR, 0);
-  const farLeft = cam.project(-HALF_CORRIDOR, maxDist);
-  const farRight = cam.project(HALF_CORRIDOR, maxDist);
-
-  ctx.fillStyle = "#1a2030";
-  ctx.beginPath();
-  ctx.moveTo(nearLeft.x, nearLeft.y);
-  ctx.lineTo(nearRight.x, nearRight.y);
-  ctx.lineTo(farRight.x, farRight.y);
-  ctx.lineTo(farLeft.x, farLeft.y);
-  ctx.closePath();
-  ctx.fill();
-
-  const endRow = Math.ceil(maxDist / cell) + 1;
-  for (let gy = 0; gy < endRow; gy++) {
-    const rowDist = gy * cell - scrollOffset;
-    if (rowDist > maxDist) break;
-    const rowBot = rowDist + cell;
-    if (rowBot > maxDist) break;
-
-    const yNear = cam.project(0, rowDist).y;
-    const yFar = cam.project(0, rowBot).y;
-    if (yFar < -20 || yNear > canvasH + 20) continue;
-
-    if (gy % 2 === 0) {
-      const leftNear = cam.project(-HALF_CORRIDOR, rowDist);
-      const rightNear = cam.project(HALF_CORRIDOR, rowDist);
-      const leftFar = cam.project(-HALF_CORRIDOR, rowBot);
-      const rightFar = cam.project(HALF_CORRIDOR, rowBot);
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.beginPath();
-      ctx.moveTo(leftNear.x, yNear);
-      ctx.lineTo(rightNear.x, yNear);
-      ctx.lineTo(rightFar.x, yFar);
-      ctx.lineTo(leftFar.x, yFar);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  ctx.strokeStyle = "rgba(80, 95, 120, 0.25)";
-  ctx.lineWidth = 0.5;
-  for (let gy = 0; gy <= endRow; gy++) {
-    const rowDist = gy * cell - scrollOffset;
-    if (rowDist > maxDist) break;
-    const pL = cam.project(-HALF_CORRIDOR, rowDist);
-    const pR = cam.project(HALF_CORRIDOR, rowDist);
-    if (pL.y < -20 && pR.y < -20) continue;
-    ctx.beginPath();
-    ctx.moveTo(pL.x, pL.y);
-    ctx.lineTo(pR.x, pR.y);
-    ctx.stroke();
-  }
-
-  for (let gx = 0; gx <= corridorW; gx++) {
-    const worldX = (gx - corridorW / 2) * cell;
-    const pNear = cam.project(worldX, 0);
-    const pFar = cam.project(worldX, maxDist);
-    ctx.strokeStyle = "rgba(80, 95, 120, 0.2)";
-    ctx.beginPath();
-    ctx.moveTo(pNear.x, pNear.y);
-    ctx.lineTo(pFar.x, pFar.y);
-    ctx.stroke();
-  }
-
-  const wallW = 16;
-  const wTop = cam.project(-HALF_CORRIDOR, maxDist);
-  const wBot = cam.project(-HALF_CORRIDOR, 0);
-  const wTopR = cam.project(HALF_CORRIDOR, maxDist);
-  const wBotR = cam.project(HALF_CORRIDOR, 0);
-
-  ctx.fillStyle = "#0c1018";
-  ctx.beginPath();
-  ctx.moveTo(wTop.x - wallW * 2, wTop.y);
-  ctx.lineTo(wTop.x, wTop.y);
-  ctx.lineTo(wBot.x, wBot.y);
-  ctx.lineTo(wBot.x - wallW * 2, wBot.y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(wTopR.x, wTopR.y);
-  ctx.lineTo(wTopR.x + wallW * 2, wTopR.y);
-  ctx.lineTo(wBotR.x + wallW * 2, wBotR.y);
-  ctx.lineTo(wBotR.x, wBotR.y);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(100, 115, 140, 0.5)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(wTop.x, wTop.y);
-  ctx.lineTo(wBot.x, wBot.y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(wTopR.x, wTopR.y);
-  ctx.lineTo(wBotR.x, wBotR.y);
-  ctx.stroke();
-
-  for (let i = 1; i <= 8; i++) {
-    const td = i * 280 - scrollOffset;
-    if (td > maxDist || td < 20) continue;
-    const torchL = cam.project(-HALF_CORRIDOR, td);
-    const torchR = cam.project(HALF_CORRIDOR, td);
-    const torchS = Math.max(12, 120 * torchL.s);
-
-    const flicker = 0.6 + Math.sin(sim.runTime * 4 + i * 2.1) * 0.2;
-
-    const gL = ctx.createRadialGradient(
-      torchL.x - wallW * 0.8, torchL.y, 0,
-      torchL.x - wallW * 0.8, torchL.y, torchS
-    );
-    gL.addColorStop(0, `rgba(255, 190, 70, ${0.7 * flicker})`);
-    gL.addColorStop(0.15, `rgba(255, 150, 50, ${0.45 * flicker})`);
-    gL.addColorStop(0.4, `rgba(200, 90, 25, ${0.15 * flicker})`);
-    gL.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = gL;
-    ctx.beginPath();
-    ctx.arc(torchL.x - wallW * 0.8, torchL.y, torchS, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = `rgba(255, 230, 120, ${0.9 * flicker})`;
-    ctx.beginPath();
-    ctx.arc(torchL.x - wallW * 0.8, torchL.y, Math.max(3, torchS * 0.05), 0, Math.PI * 2);
-    ctx.fill();
-
-    const gR = ctx.createRadialGradient(
-      torchR.x + wallW * 0.8, torchR.y, 0,
-      torchR.x + wallW * 0.8, torchR.y, torchS
-    );
-    gR.addColorStop(0, `rgba(255, 190, 70, ${0.7 * flicker})`);
-    gR.addColorStop(0.15, `rgba(255, 150, 50, ${0.45 * flicker})`);
-    gR.addColorStop(0.4, `rgba(200, 90, 25, ${0.15 * flicker})`);
-    gR.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = gR;
-    ctx.beginPath();
-    ctx.arc(torchR.x + wallW * 0.8, torchR.y, torchS, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = `rgba(255, 230, 120, ${0.9 * flicker})`;
-    ctx.beginPath();
-    ctx.arc(torchR.x + wallW * 0.8, torchR.y, Math.max(3, torchS * 0.05), 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  const gateDist = maxDist * 0.85;
-  const gateL = cam.project(-HALF_CORRIDOR, gateDist);
-  const gateR = cam.project(HALF_CORRIDOR, gateDist);
-  const gateH = Math.max(12, 140 * gateL.s);
-  const gateW = Math.max(3, 12 * gateL.s);
-
-  ctx.fillStyle = "#2a3040";
-  ctx.fillRect(gateL.x - gateW, gateL.y - gateH, gateW * 2, gateH);
-  ctx.fillRect(gateR.x - gateW, gateR.y - gateH, gateW * 2, gateH);
-
-  ctx.fillStyle = "#3a3530";
-  ctx.fillRect(gateL.x - gateW * 3, gateL.y - gateH * 0.12, gateW * 6, gateH * 0.12);
-  ctx.fillRect(gateR.x - gateW * 3, gateR.y - gateH * 0.12, gateW * 6, gateH * 0.12);
-
-  ctx.strokeStyle = "rgba(120, 130, 150, 0.4)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(gateL.x - gateW * 3, gateL.y - gateH);
-  ctx.lineTo(gateR.x + gateW * 3, gateR.y - gateH);
-  ctx.stroke();
-
-  if (sim.junctionPending || sim.junctionChoices) {
-    const choices = sim.junctionChoices || [];
-    const branchLen = 600;
-    const branchW = HALF_CORRIDOR;
-    const jDist = gateDist;
-
-    for (const choice of choices) {
-      if (choice.direction === "left" || choice.direction === "right") {
-        const sign = choice.direction === "left" ? -1 : 1;
-        const jL = cam.project(sign * branchW * 0.3, jDist);
-        const jR = cam.project(sign * branchW * 1.8, jDist);
-        const jLF = cam.project(sign * branchW * 0.3 - sign * branchW, jDist + branchLen);
-        const jRF = cam.project(sign * branchW * 1.8 - sign * branchW, jDist + branchLen);
-
-        ctx.fillStyle = "#1a2030";
-        ctx.beginPath();
-        ctx.moveTo(jL.x, jL.y);
-        ctx.lineTo(jR.x, jR.y);
-        ctx.lineTo(jRF.x, jRF.y);
-        ctx.lineTo(jLF.x, jLF.y);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle = "rgba(100, 115, 140, 0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(jL.x, jL.y);
-        ctx.lineTo(jLF.x, jLF.y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(jR.x, jR.y);
-        ctx.lineTo(jRF.x, jRF.y);
-        ctx.stroke();
-      }
-    }
-  }
-
-  drawDepthFog(ctx, cam, wTop.y, wBot.y);
-}
-
-function drawDepthFog(ctx, cam, topY, botY) {
-  const fogStr = CAMERA.depthFog;
-  if (fogStr > 0.05) {
-    const grad = ctx.createLinearGradient(0, topY, 0, botY);
-    grad.addColorStop(0, `rgba(6, 8, 10, ${0.3 * fogStr})`);
-    grad.addColorStop(0.5, `rgba(8, 10, 12, ${0.08 * fogStr})`);
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, topY - 10, canvas.clientWidth, botY - topY + 20);
-  }
-}
-
-// ─── Player ──────────────────────────────────────────────────
-function drawPlayer(ctx, cam) {
-  const px = cam.project(0, 0);
-  const s = cam.cell * 1.4 * px.s;
-
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.beginPath();
-  ctx.ellipse(px.x + 2, px.y + s * 0.22, s * 0.35, deckRy(s * 0.35), 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const m = matsFrom("#4f7eb0");
-  box25(ctx, px.x, px.y - s * 0.4, s * 0.55, s * 0.35, s * 0.7, m);
-
-  const hpRatio = sim.state.playerHp / sim.state.playerMaxHp;
-  ctx.strokeStyle = hpRatio > 0.5 ? "rgba(100, 200, 100, 0.6)" : "rgba(200, 80, 80, 0.6)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(px.x, px.y + s * 0.15, s * 0.45, deckRy(s * 0.45), 0, 0, Math.PI * 2);
-  ctx.stroke();
-
-  if (sim.state.runBonuses.shieldActive && sim.state.runBonuses.shieldHp > 0) {
-    ctx.strokeStyle = "rgba(158, 200, 232, 0.6)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.ellipse(px.x, px.y + s * 0.15, s * 0.55, deckRy(s * 0.55), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-}
-
-// ─── Enemy ───────────────────────────────────────────────────
-function drawEnemy(ctx, cam, e) {
-  const p = cam.project(e.x, e.dist);
-  if (p.y < -50 || p.y > canvas.clientHeight + 50) return;
-
-  const s = cam.cell * e.size * 0.8 * p.s;
-  const flash = e._hitFlash > 0 ? 1 + e._hitFlash * 0.3 : 1;
-
-  ctx.fillStyle = "rgba(0,0,0,0.32)";
-  ctx.beginPath();
-  ctx.ellipse(p.x + 1, p.y + s * 0.2, s * 0.28, deckRy(s * 0.28), 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = e.color;
-  ctx.beginPath();
-  if (e.behavior === "hover" || e.flying) {
-    ctx.moveTo(p.x, p.y - s * 0.4 * flash);
-    ctx.lineTo(p.x + s * 0.35 * flash, p.y);
-    ctx.lineTo(p.x, p.y + s * 0.15);
-    ctx.lineTo(p.x - s * 0.35 * flash, p.y);
-    ctx.closePath();
-  } else if (e.armor === "heavy") {
-    ctx.ellipse(p.x, p.y - s * 0.1, s * 0.42 * flash, deckRy(s * 0.3) * flash, 0, 0, Math.PI * 2);
-  } else if (e.armor === "energy") {
-    const r = s * 0.35 * flash;
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-      const cr = i % 2 === 0 ? r : r * 0.6;
-      const cx = p.x + Math.cos(a) * cr;
-      const cy = p.y - s * 0.15 + Math.sin(a) * deckRy(cr);
-      if (i === 0) ctx.moveTo(cx, cy);
-      else ctx.lineTo(cx, cy);
-    }
-    ctx.closePath();
-  } else {
-    ctx.ellipse(p.x, p.y - s * 0.15, s * 0.35 * flash, deckRy(s * 0.35) * flash, 0, 0, Math.PI * 2);
-  }
-  ctx.fill();
-
-  if (e.armor === "insulated") {
-    ctx.strokeStyle = "rgba(126, 184, 201, 0.4)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y - s * 0.12, s * 0.38, deckRy(s * 0.38), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (e.armor === "energy") {
-    ctx.strokeStyle = "rgba(230, 200, 74, 0.35)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y - s * 0.12, s * 0.38, deckRy(s * 0.38), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  if (e.shieldHp > 0) {
-    const shieldRatio = e.shieldHp / e.maxShieldHp;
-    ctx.strokeStyle = `rgba(158, 200, 232, ${0.3 + shieldRatio * 0.5})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y - s * 0.1, s * 0.4, deckRy(s * 0.4), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  const rings = [];
-  if (e.burnT > 0) rings.push("rgba(224, 122, 58, 0.7)");
-  if (e.slowT > 0) rings.push("rgba(126, 184, 201, 0.7)");
-  if (e.poisonT > 0) rings.push("rgba(154, 107, 184, 0.7)");
-  if (e.shredT > 0) rings.push("rgba(122, 173, 92, 0.7)");
-  for (const col of rings) {
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y - s * 0.1, s * 0.34, deckRy(s * 0.34), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  const ratio = Math.max(0, e.hp / e.maxHp);
-  const barW = s * 0.72;
-  ctx.fillStyle = "rgba(20,16,12,0.85)";
-  ctx.fillRect(p.x - barW / 2 - 1, p.y - s * 0.52 - 1, barW + 2, 5);
-  ctx.fillStyle = "rgba(60,55,45,0.9)";
-  ctx.fillRect(p.x - barW / 2, p.y - s * 0.52, barW, 3);
-  ctx.fillStyle = ratio > 0.35 ? "#8fbf6a" : "#c45a4a";
-  ctx.fillRect(p.x - barW / 2, p.y - s * 0.52, barW * ratio, 3);
-}
-
-// ─── Projectile ───────────────────────────────────────────────
-function drawProjectile(ctx, cam, p) {
-  const colors = {
-    normal: "#d8d2c4", fire: "#e07a3a", oil: "#8a7040",
-    moss: "#6a9a5a", poison: "#9a6bb8", ice: "#7eb8c9",
-    piercing: "#e8d5a0", acid: "#7aad5c", shock: "#e6c84a",
-    kinetic: "#d8d2c4",
-  };
-  const col = colors[p.element] || colors.normal;
-
-  const sp = cam.project(p.x, p.dist);
-  if (sp.y < -20 || sp.y > canvas.clientHeight + 20) return;
-  const r = Math.max(1.5, 3 * sp.s);
-
-  const trail = p._trail || [];
-  for (let i = 0; i < trail.length; i++) {
-    const a = (i + 1) / trail.length;
-    const t0 = cam.project(trail[i].x, trail[i].dist);
-    ctx.globalAlpha = a * 0.3;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.arc(t0.x, t0.y, r * 0.4 * a, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  const glow = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, r * 2.5);
-  glow.addColorStop(0, withAlpha(col, 0.4));
-  glow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(sp.x, sp.y, r * 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawEnemyProjectile(ctx, cam, p) {
-  const sp = cam.project(p.x, p.dist);
-  if (sp.y < -20 || sp.y > canvas.clientHeight + 20) return;
-  const r = Math.max(2, 4 * sp.s);
-  const col = "#e05a5a";
-
-  const glow = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, r * 2);
-  glow.addColorStop(0, withAlpha(col, 0.5));
-  glow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = glow;
-  ctx.beginPath();
-  ctx.arc(sp.x, sp.y, r * 2, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-  ctx.fill();
-}
 
 // ─── Arrow Queue ─────────────────────────────────────────────
 function drawArrowQueue(ctx) {
-  const allArrows = sim.quiver.peekQuiver();
-  const queue = allArrows.slice(0, 4);
-  const startX = 20;
-  const y = canvas.clientHeight - 50;
-  const spacing = 52;
+  const queue = sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver().slice(0, 4);
+  const startX = 16;
+  const y = canvas.clientHeight * (canvas.clientWidth / Math.max(1, canvas.clientHeight) < 0.85 ? 0.86 : 0.92);
+  const spacing = 64;
 
-  ctx.font = '600 11px "Chakra Petch", sans-serif';
+  ctx.font = '600 14px "Chakra Petch", sans-serif';
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-
-  const colorMap = {
-    normal: "#d8d2c4", fire: "#e07a3a", oil: "#8a7040",
-    moss: "#6a9a5a", poison: "#9a6bb8", ice: "#7eb8c9",
-    piercing: "#e8d5a0", acid: "#7aad5c",
-    explosive: "#e07a3a", corrosive: "#7aad5c",
-    wildfire: "#d4783a", toxic_canopy: "#9a6bb8",
-    thermal_shock: "#e6c84a", cryogenic: "#7eb8c9",
-    inferno_pierce: "#e8d5a0", shatter: "#7eb8c9",
-    sticky_explosive: "#8a7040",
-  };
 
   for (let i = 0; i < queue.length; i++) {
     const a = queue[i];
     const x = startX + i * spacing + 20;
-    const col = colorMap[a.type] || "#d8d2c4";
+    const def = getArrowDef(a.type);
+    const col = def.color || "#d8d2c4";
 
     ctx.fillStyle = "rgba(20, 16, 12, 0.8)";
-    ctx.fillRect(x - 22, y - 20, 44, 40);
+    ctx.fillRect(x - 26, y - 24, 52, 48);
     ctx.strokeStyle = withAlpha(col, 0.6);
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(x - 22, y - 20, 44, 40);
+    ctx.strokeRect(x - 26, y - 24, 52, 48);
 
     ctx.fillStyle = col;
     ctx.beginPath();
@@ -1117,8 +888,8 @@ function drawArrowQueue(ctx) {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = withAlpha("#ebe6d8", 0.8);
-    ctx.fillText(`L${a.level}`, x, y + 26);
+    ctx.fillStyle = withAlpha("#ebe6d8", 0.85);
+    ctx.fillText(def.short, x, y + 30);
   }
 }
 
@@ -1148,20 +919,49 @@ function gameLoop(now) {
     if (sim.running) engine.fx.tick(dt);
   }
 
-  if (sim.running) {
-    cam.updatePose(sim.state.playerZ);
+  try {
+    engine.draw(dt, (ctx) => {
+      try { drawCorridor(ctx); }
+      catch(err) {
+        console.error("Draw error:", err);
+        /* keep the loop alive */
+      }
+    });
+    drawArrowQueue(engine.ctx);
+    updateUI();
+  } catch (err) {
+    console.error("Frame error:", err);
+    /* keep the loop alive */
   }
-
-  engine.draw(dt, (ctx, cam, eng) => {
-    try { drawCorridor(ctx, cam, eng); }
-    catch(err) { console.error("Draw error:", err); }
-  });
-  drawArrowQueue(engine.ctx);
-  updateUI();
   requestAnimationFrame(gameLoop);
 }
 
+const SAVE_KEY = "ranger-defense-save-v1";
+
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      state: sim.state.serialize(),
+      quiver: sim.quiver.serialize(),
+    }));
+  } catch (_) { /* ignore quota / private mode */ }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.state) sim.state.deserialize(data.state);
+    if (data.quiver) sim.quiver.deserialize(data.quiver);
+    sim.quiver.capacity = sim.state.getQuiverCapacity();
+    sim.quiver.packForHub();
+    syncArmorRating(sim.state);
+  } catch (_) { /* corrupt save */ }
+}
+
 // ─── Start ────────────────────────────────────────────────────
+loadGame();
 sim.state.enterHub();
 engine.fit(true);
 requestAnimationFrame((now) => {

@@ -8,7 +8,7 @@
  *   - Drag up → arrow backward (away from enemies)
  *   - Power = drag distance
  */
-import { CONFIG } from "../data/config.js";
+import { CONFIG } from "../data/config.js?v=26";
 
 export class InputHandler {
   constructor(canvas) {
@@ -31,8 +31,24 @@ export class InputHandler {
     this.onDragStart = null;
     this.onDragMove = null;
     this.onDragEnd = null;
+    this.onTap = null;
+
+    this._ignoreMouseUntil = 0;
+    this._suppressClick = false;
+    this.blockUntil = 0;
+    this.choiceMode = false;
 
     this._bindEvents();
+  }
+
+  reset() {
+    this.isDragging = false;
+    this.active = false;
+    this._pointerId = null;
+    this.power = 0;
+    this.vector = { x: 0, y: 0 };
+    this._suppressClick = false;
+    this.choiceMode = false;
   }
 
   _bindEvents() {
@@ -40,6 +56,15 @@ export class InputHandler {
     this.canvas.addEventListener("pointermove", (e) => this._onMove(e));
     this.canvas.addEventListener("pointerup", (e) => this._onUp(e));
     this.canvas.addEventListener("pointercancel", (e) => this._onUp(e));
+    this.canvas.addEventListener("click", (e) => {
+      if (this._suppressClick) {
+        this._suppressClick = false;
+        return;
+      }
+      if (performance.now() < this.blockUntil) return;
+      const { x, y } = this._toCanvas(e);
+      if (this.onTap) this.onTap(x, y);
+    });
     this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
@@ -49,6 +74,8 @@ export class InputHandler {
   }
 
   _onDown(e) {
+    if (e.pointerType === "mouse" && performance.now() < this._ignoreMouseUntil) return;
+    if (!this.choiceMode && performance.now() < this.blockUntil) return;
     const { x, y } = this._toCanvas(e);
     this._pointerId = e.pointerId;
     try { this.canvas.setPointerCapture(e.pointerId); } catch(_) {}
@@ -71,15 +98,33 @@ export class InputHandler {
   }
 
   _onUp(e) {
-    if (e.pointerId !== this._pointerId) return;
+    if (this._pointerId != null && e.pointerId !== this._pointerId) return;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+    const { x, y } = this._toCanvas(e);
+    this.dragX = x;
+    this.dragY = y;
     const wasDragging = this.isDragging;
     this.isDragging = false;
     this._pointerId = null;
+    if (e.pointerType === "touch" || e.pointerType === "pen") {
+      this._ignoreMouseUntil = performance.now() + 550;
+    }
+    if (this.choiceMode && this.onTap) {
+      this._suppressClick = true;
+      this.onTap(x, y);
+      this.power = 0;
+      this.vector = { x: 0, y: 0 };
+      return;
+    }
+    this._suppressClick = true;
     if (wasDragging) {
       this._compute();
-      if (this.power > CONFIG.SLINGSHOT_MIN_POWER && this.onDragEnd) {
-        this.onDragEnd(this.angle, this.power, this.vector);
+      if (performance.now() >= this.blockUntil) {
+        if (this.power >= 1 && this.onDragEnd) {
+          this.onDragEnd(this.angle, this.power, { ...this.vector });
+        } else if (this.onTap) {
+          this.onTap(this.originX, this.originY);
+        }
       }
       this.power = 0;
       this.vector = { x: 0, y: 0 };
@@ -90,6 +135,13 @@ export class InputHandler {
     const dx = this.originX - this.dragX;
     const dy = this.originY - this.dragY;
     const dist = Math.hypot(dx, dy);
+
+    if (this.choiceMode) {
+      this.power = 0;
+      this.vector = { x: 0, y: 0 };
+      this.angle = 0;
+      return;
+    }
 
     this.power = Math.min(CONFIG.SLINGSHOT_MAX_POWER,
       (dist / this.maxPull) * CONFIG.SLINGSHOT_MAX_POWER);
@@ -122,7 +174,7 @@ export class InputHandler {
 
   /** Draw the slingshot aim line on screen. */
   drawAimLine(ctx) {
-    if (!this.isDragging || this.power < CONFIG.SLINGSHOT_MIN_POWER) return;
+    if (this.choiceMode || !this.isDragging || this.power < CONFIG.SLINGSHOT_MIN_POWER) return;
 
     const fireAngle = Math.atan2(
       this.originY - this.dragY,

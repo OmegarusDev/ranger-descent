@@ -8,12 +8,16 @@ export const CONFIG = {
   PITCH_DEFAULT: 24,
 
   // Corridor dimensions (grid units)
-  CORRIDOR_WIDTH: 10,
+  CORRIDOR_WIDTH: 5,
   CORRIDOR_LENGTH: 500,
   CELL_SIZE: 40,
 
   // On-rails movement
-  PLAYER_SPEED: 1.0,
+  PLAYER_SPEED: 0.2,
+
+  // Dungeon structure: 1 wave per hall, 10 halls per floor, 10 floors per elevator
+  SECTIONS_PER_FLOOR: 10,
+  FLOORS_PER_ELEVATOR: 10,
 
   // Slingshot
   SLINGSHOT_MAX_POWER: 24,

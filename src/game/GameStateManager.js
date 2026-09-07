@@ -11,6 +11,43 @@ export const PHASES = {
   VICTORY: "victory",
 };
 
+export const STAT_INFO = [
+  { id: "vigor", name: "Vigor", desc: "Raises maximum HP." },
+  { id: "endurance", name: "Endurance", desc: "Lowers arrow cooldown and raises max equip load." },
+  { id: "strength", name: "Strength", desc: "Raises arrow damage." },
+  { id: "dexterity", name: "Dexterity", desc: "Raises crit damage. Slightly lowers arrow cooldown." },
+  { id: "luck", name: "Luck", desc: "Raises crit chance, soul drops, shop finds, and arrow return." },
+];
+
+const STAT_MAX = {
+  vigor: 20, endurance: 20, strength: 20, dexterity: 20, luck: 20,
+};
+
+function migrateStats(raw) {
+  const u = raw || {};
+  const clamp = (n) => Math.max(1, Math.min(20, Math.floor(Number(n) || 1)));
+  if (u.vigor || u.endurance || u.strength || u.dexterity || u.luck) {
+    return {
+      vigor: clamp(u.vigor || 1),
+      endurance: clamp(u.endurance || 1),
+      strength: clamp(u.strength || 1),
+      dexterity: clamp(u.dexterity || 1),
+      luck: clamp(u.luck || 1),
+      hexUnlock: [...(u.hexUnlock || [])],
+      prayerUnlock: [...(u.prayerUnlock || [])],
+    };
+  }
+  return {
+    vigor: clamp(1 + (u.maxHp || 0)),
+    endurance: clamp(1 + (u.attackSpeed || 0)),
+    strength: clamp(1 + (u.arrowDamage || 0)),
+    dexterity: 1,
+    luck: clamp(1 + Math.max(u.critChance || 0, u.lootChance || 0)),
+    hexUnlock: [...(u.hexUnlock || [])],
+    prayerUnlock: [...(u.prayerUnlock || [])],
+  };
+}
+
 export class GameStateManager {
   constructor() {
     this.phase = PHASES.HUB;
@@ -19,14 +56,15 @@ export class GameStateManager {
     this.runDistance = 0;
     this.enemiesKilled = 0;
     this.arrowsFired = 0;
+    this.runSouls = 0;
 
-    // Persistent upgrades (between runs)
+    // Persistent stats (between runs). All start at 1.
     this.upgrades = {
-      arrowDamage: 0,
-      attackSpeed: 0,
-      maxHp: 0,
-      critChance: 0,
-      lootChance: 0,
+      vigor: 1,
+      endurance: 1,
+      strength: 1,
+      dexterity: 1,
+      luck: 1,
       hexUnlock: [],
       prayerUnlock: [],
     };
@@ -41,6 +79,8 @@ export class GameStateManager {
     this.runBonuses = {
       soulMultiplier: 1,
       damageMultiplier: 1,
+      damageBoostT: 0,
+      soulBoostT: 0,
       shieldActive: false,
       shieldHp: 0,
       instantBurst: 0,
@@ -54,6 +94,8 @@ export class GameStateManager {
     this.playerHp = 10;
     this.playerMaxHp = 10;
     this.arrowCooldown = 0;
+    this.armorRating = 0;
+    this.equipLoad = 0;
 
     // Callbacks
     this.onPhaseChange = null;
@@ -76,6 +118,7 @@ export class GameStateManager {
     this.runDistance = 0;
     this.enemiesKilled = 0;
     this.arrowsFired = 0;
+    this.runSouls = 0;
     this.playerZ = 0;
     this.playerX = 0;
     this.runSpeed = 0;
@@ -83,6 +126,8 @@ export class GameStateManager {
     this.runBonuses = {
       soulMultiplier: 1,
       damageMultiplier: 1,
+      damageBoostT: 0,
+      soulBoostT: 0,
       shieldActive: false,
       shieldHp: 0,
       instantBurst: 0,
@@ -92,6 +137,7 @@ export class GameStateManager {
 
   /** Player dies — transition to Death Phase. */
   die() {
+    if (this.phase === PHASES.DEATH || this.phase === PHASES.VICTORY) return;
     this.phase = PHASES.DEATH;
     this.runActive = false;
     if (this.onDeath) this.onDeath(this.getRunStats());
@@ -100,17 +146,27 @@ export class GameStateManager {
 
   /** Player reaches the end — transition to Victory Phase. */
   victory() {
+    if (this.phase === PHASES.DEATH || this.phase === PHASES.VICTORY) return;
     this.phase = PHASES.VICTORY;
     this.runActive = false;
     if (this.onVictory) this.onVictory(this.getRunStats());
     if (this.onPhaseChange) this.onPhaseChange(this.phase);
   }
 
+  /** Award souls for a kill using that enemy's tier value. */
+  awardKillSouls(amount) {
+    const n = Math.max(0, Math.floor((amount || 0) * (this.runBonuses.soulMultiplier || 1) * this.getLootMultiplier()));
+    this.runSouls += n;
+    if (this.onSoulsChange) this.onSoulsChange(this.runSouls);
+    return n;
+  }
+
   /** Bank earned Souls (called on death/victory). */
   bankSouls() {
-    const earned = Math.floor(this.enemiesKilled * this.runBonuses.soulMultiplier);
+    const earned = this.runSouls || 0;
     this.souls += earned;
     this.totalSoulsEarned += earned;
+    this.runSouls = 0;
     if (this.onSoulsChange) this.onSoulsChange(this.souls);
     return earned;
   }
@@ -129,7 +185,7 @@ export class GameStateManager {
       distance: Math.floor(this.runDistance),
       enemiesKilled: this.enemiesKilled,
       arrowsFired: this.arrowsFired,
-      soulsEarned: Math.floor(this.enemiesKilled * this.runBonuses.soulMultiplier),
+      soulsEarned: this.runSouls || 0,
       playerHp: this.playerHp,
       playerMaxHp: this.playerMaxHp,
     };
@@ -144,6 +200,9 @@ export class GameStateManager {
       if (this.runBonuses.shieldHp <= 0) {
         this.runBonuses.shieldActive = false;
       }
+    }
+    if (amount > 0 && this.armorRating > 0) {
+      amount = Math.max(1, amount - Math.floor(this.armorRating / 4));
     }
     this.playerHp = Math.max(0, this.playerHp - amount);
     if (this.playerHp <= 0) this.die();
@@ -164,12 +223,24 @@ export class GameStateManager {
   /** Activate damage boost (from Prayer of Fortify). */
   activateDamageBoost(multiplier, duration) {
     this.runBonuses.damageMultiplier = multiplier;
-    // Duration handled by AutoMagicSystem
+    this.runBonuses.damageBoostT = duration || 0;
   }
 
   /** Activate soul multiplier (from Prayer of Harvest). */
   activateSoulMultiplier(multiplier, duration) {
     this.runBonuses.soulMultiplier = multiplier;
+    this.runBonuses.soulBoostT = duration || 0;
+  }
+
+  tickBonuses(dt) {
+    if (this.runBonuses.damageBoostT > 0) {
+      this.runBonuses.damageBoostT -= dt;
+      if (this.runBonuses.damageBoostT <= 0) this.runBonuses.damageMultiplier = 1;
+    }
+    if (this.runBonuses.soulBoostT > 0) {
+      this.runBonuses.soulBoostT -= dt;
+      if (this.runBonuses.soulBoostT <= 0) this.runBonuses.soulMultiplier = 1;
+    }
   }
 
   /** Activate instant burst (from Prayer of Quicksilver). */
@@ -186,55 +257,101 @@ export class GameStateManager {
     return false;
   }
 
-  /** Check if a specific upgrade is maxed. */
+  getStat(id) {
+    const n = Number(this.upgrades[id]);
+    if (!Number.isFinite(n) || n < 1) return 1;
+    const max = STAT_MAX[id] || 20;
+    return Math.min(max, Math.floor(n));
+  }
+
   isUpgradeMaxed(upgradeId) {
-    const maxLevels = {
-      arrowDamage: 5,
-      attackSpeed: 5,
-      maxHp: 5,
-      critChance: 5,
-      lootChance: 5,
-    };
-    return (this.upgrades[upgradeId] || 0) >= (maxLevels[upgradeId] || 0);
+    return this.getStat(upgradeId) >= (STAT_MAX[upgradeId] || 20);
   }
 
-  /** Get the cost of the next upgrade level. */
-  getUpgradeCost(upgradeId) {
-    const baseCosts = {
-      arrowDamage: 15,
-      attackSpeed: 20,
-      maxHp: 20,
-      critChance: 30,
-      lootChance: 25,
-    };
-    const level = this.upgrades[upgradeId] || 0;
-    return Math.floor((baseCosts[upgradeId] || 10) * (1.5 + level * 0.3));
+  /** Purchases made since the starter ranger (all stats at 1). */
+  getSpentLevels() {
+    return STAT_INFO.reduce((sum, s) => sum + this.getStat(s.id), 0) - STAT_INFO.length;
   }
 
-  /** Purchase an upgrade. Returns true if successful. */
+  /** Starter is level 1. Each trained point is a character level. */
+  getCharacterLevel() {
+    return 1 + Math.max(0, this.getSpentLevels());
+  }
+
+  /** First level-up costs 5. Each later one is 30% more, rounded. */
+  getUpgradeCost() {
+    let cost = 5;
+    const spent = Math.max(0, this.getSpentLevels());
+    for (let i = 0; i < spent; i++) cost = Math.round(cost * 1.3);
+    return Math.max(1, cost);
+  }
+
   buyUpgrade(upgradeId) {
+    if (!STAT_MAX[upgradeId]) return false;
     if (this.isUpgradeMaxed(upgradeId)) return false;
-    const cost = this.getUpgradeCost(upgradeId);
+    const cost = this.getUpgradeCost();
     if (!this.spendSouls(cost)) return false;
-    this.upgrades[upgradeId] = (this.upgrades[upgradeId] || 0) + 1;
+    this.upgrades[upgradeId] = this.getStat(upgradeId) + 1;
+    this.applyUpgrades();
     return true;
   }
 
-  /** Get arrow cooldown in seconds based on attack speed upgrade. */
+  /** Strength adds flat damage. Vigor 1 / Strength 1 is the starter ranger. */
+  getStrengthBonus() {
+    return this.getStat("strength") - 1;
+  }
+
+  /** Luck: 5% at 1, about 43% at 20. */
+  getCritChance() {
+    return Math.min(0.45, 0.03 + this.getStat("luck") * 0.02);
+  }
+
+  /** Dexterity: 1.6× at 1, 3.5× at 20. */
+  getCritMultiplier() {
+    return 1.5 + this.getStat("dexterity") * 0.1;
+  }
+
+  getLootMultiplier() {
+    return 1 + this.getStat("luck") * 0.02;
+  }
+
+  getMaxEquipLoad() {
+    return 6 + this.getStat("endurance") * 2;
+  }
+
+  isOverEncumbered() {
+    return (this.equipLoad || 0) > this.getMaxEquipLoad();
+  }
+
+  /** Endurance is the bulk of cooldown; Dexterity shaves a little. Fat load slows shots. */
   getArrowCooldown() {
-    const level = this.upgrades.attackSpeed || 0;
-    return Math.max(0.2, 0.8 - level * 0.1);
+    const end = this.getStat("endurance");
+    const dex = this.getStat("dexterity");
+    let cd = 0.82 - end * 0.022 - dex * 0.008;
+    const maxLoad = this.getMaxEquipLoad();
+    const load = this.equipLoad || 0;
+    if (maxLoad > 0 && load > maxLoad) {
+      cd *= load >= maxLoad * 1.5 ? 1.8 : 1.35;
+    }
+    return Math.max(0.2, cd);
   }
 
-  /** Get loot chance (arrow recovery) based on loot chance upgrade. */
-  getLootChance() {
-    const level = this.upgrades.lootChance || 0;
-    return Math.min(1, 0.9 + level * 0.05);
+  /** Base 90% at Luck 1; +0.5% per point, cap 99%. */
+  getArrowReturnChance() {
+    const luck = this.getStat("luck");
+    return Math.min(0.99, 0.90 + (luck - 1) * 0.005);
   }
 
-  /** Apply persistent upgrades to the current run. */
+  getQuiverCapacity() {
+    const id = this.equipped.quiver;
+    if (id === "quiver_large") return 20;
+    if (id === "quiver_medium") return 16;
+    if (id === "quiver_small") return 12;
+    return 6;
+  }
+
   applyUpgrades() {
-    this.playerMaxHp = 10 + (this.upgrades.maxHp || 0) * 2;
+    this.playerMaxHp = 8 + this.getStat("vigor") * 2;
     this.playerHp = this.playerMaxHp;
     this.arrowCooldown = 0;
   }
@@ -256,14 +373,14 @@ export class GameStateManager {
 
   deserialize(data) {
     if (!data) return;
-    this.phase = data.phase || PHASES.HUB;
+    this.phase = PHASES.HUB;
     this.souls = data.souls || 0;
     this.totalSoulsEarned = data.totalSoulsEarned || 0;
-    this.upgrades = { ...this.upgrades, ...(data.upgrades || {}) };
+    this.upgrades = migrateStats(data.upgrades);
     this.equipped = { ...(data.equipped || {}) };
     this.ownedItems = [...(data.ownedItems || [])];
     this.arrowStorage = [...(data.arrowStorage || [])];
-    this.playerMaxHp = data.playerMaxHp || 10;
     this.hubVisits = data.hubVisits || 0;
+    this.applyUpgrades();
   }
 }

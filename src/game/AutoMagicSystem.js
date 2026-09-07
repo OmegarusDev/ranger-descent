@@ -200,9 +200,10 @@ export class AutoMagicSystem {
       for (const e of entities) {
         if (e.hp <= 0) continue;
         const dx = e.x - playerPos.x;
-        const dy = e.dist - playerPos.y;
+        const dy = (e.dist != null ? e.dist : e.worldZ - playerPos.y);
         const dist = Math.hypot(dx, dy);
-        if (dist <= range && dist < bestDist) {
+        const reach = range > 40 ? range : range * 40;
+        if (dist <= reach && dist < bestDist) {
           bestDist = dist;
           best = e;
         }
