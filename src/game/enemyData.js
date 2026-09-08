@@ -88,11 +88,12 @@ const ENEMY_LOOT = {
   boss_spider_queen: [{ kind: "arrow", type: "poison", chance: 0.5 }, { kind: "potion", id: "potion_tonic", chance: 0.35 }],
 };
 
-const POTION_LABELS = {
+export const POTION_LABELS = {
   potion_salve: "Herbal Remedy",
   potion_bandage: "Field Bandage",
   potion_tonic: "Clearing Tonic",
 };
+
 const TRINKET_LABELS = {
   trinket_lucky_tooth: "Lucky Tooth",
 };

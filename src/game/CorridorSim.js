@@ -1,6 +1,7 @@
 import { CONFIG } from "../data/config.js";
 import {
   QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
+  lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
 } from "./QuiverDeckManager.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js";
@@ -10,14 +11,13 @@ import {
   scaleEnemyHp,
   enemyHitWidth,
   enemyFamily,
-  enemyThreat,
   rollEnemyCoins,
   rollEnemyItemDrop,
   rollGroundFind,
   hallHpBudget,
-  packIntoGroups,
   composeWaveForHp,
   enemyDisplayName,
+  POTION_LABELS,
 } from "./enemyData.js";
 
 export { ENEMY_DEFS };
