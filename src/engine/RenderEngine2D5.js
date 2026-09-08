@@ -5,10 +5,6 @@
 import { CorridorCamera, CAMERA } from "./corridorCamera.js";
 import { FxSystem } from "./fx.js";
 
-/** Entity render descriptors — what the engine receives for depth sorting. */
-export function renderDescriptor(entity, renderFn) {
-  return { entity, render: renderFn, depth: 0 };
-}
 
 export class RenderEngine2D5 {
   constructor(canvas) {
@@ -51,7 +47,6 @@ export class RenderEngine2D5 {
     }));
 
     // Depth-sorted render list (rebuilt each frame)
-    this._renderList = [];
   }
 
   _resolveDpr() {
@@ -148,9 +143,7 @@ export class RenderEngine2D5 {
   /**
    * Main draw call. Call once per frame.
    * @param {number} dt - delta time in seconds
-   * @param {Function} drawCallback - called with (ctx, cam) for each draw layer
-   *   The callback receives the engine context and should call
-   *   engine.addRenderable() before the sort, then engine.drawSorted().
+   * @param {Function} drawCallback - called with (ctx, cam, engine)
    */
   draw(dt, drawCallback) {
     this._stepCamera(dt);
@@ -212,25 +205,6 @@ export class RenderEngine2D5 {
     this.ctx.fillRect(0, 0, cssW, cssH);
   }
 
-  /** Add a renderable to the depth-sorted list. Call before drawSorted(). */
-  addRenderable(depth, renderFn) {
-    this._renderList.push({ depth, render: renderFn });
-  }
-
-  /** Clear the render list (call at start of frame). */
-  clearRenderList() {
-    this._renderList.length = 0;
-  }
-
-  /** Sort and draw all renderables. */
-  drawSorted(ctx) {
-    this._renderList.sort((a, b) => a.depth - b.depth);
-    for (const r of this._renderList) {
-      ctx.save();
-      r.render(ctx, this.cam);
-      ctx.restore();
-    }
-  }
 
   _stepCamera(dt) {
     if (this._direct) {

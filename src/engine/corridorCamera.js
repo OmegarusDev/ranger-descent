@@ -22,17 +22,7 @@ export const CAMERA = {
   vExag: 0.8,
 };
 
-export function setCameraPitch(deg) {
-  CAMERA.pitchDeg = Math.max(CONFIG.PITCH_MIN, Math.min(CONFIG.PITCH_MAX, deg));
-  const p = (CAMERA.pitchDeg * Math.PI) / 180;
-  const D = Math.max(0.42, Math.pow(Math.cos(p), 1.5));
-  CAMERA.yScale = D;
-  CAMERA.deckRatio = D;
-}
 
-export function deckRy(rx) {
-  return rx * CAMERA.deckRatio;
-}
 
 export class CorridorCamera {
   constructor() {

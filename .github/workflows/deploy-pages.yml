@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site/icons
-          cp index.html manifest.webmanifest sw.js _site/
+          cp index.html styles.css manifest.webmanifest sw.js _site/
           cp -R icons/. _site/icons/
           # Game source only — no docs, design mocks, scripts, or repo meta.
           cp -R src _site/src

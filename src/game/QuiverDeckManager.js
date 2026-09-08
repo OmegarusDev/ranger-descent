@@ -103,7 +103,6 @@ export const ARROW_DEFS = {
   },
 };
 
-export const ARROW_TYPES = Object.keys(ARROW_DEFS);
 
 const QUEUE_SIZE = CONFIG.QUEUE_SIZE || 4;
 const ALIASES = { normal: "wood", kinetic: "wood", frost: "ice", twin: "double" };

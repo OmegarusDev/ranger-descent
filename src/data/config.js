@@ -29,14 +29,8 @@ export const CONFIG = {
   ARROW_SPEED: 400,
 
   // Quiver
-  DECK_SIZE: 20,
   QUEUE_SIZE: 4,
   ARROW_MAX_LEVEL: 5,
 
-  // Coin
-  SOULS_PER_KILL: 1,
 
-  // Substrate
-  SUBSTRATE_COLS: 8,
-  SUBSTRATE_ROWS: 500,
 };

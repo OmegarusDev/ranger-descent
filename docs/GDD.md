@@ -339,8 +339,8 @@ When reaching an elevator, companions may "escape" (leave your side):
 | `src/game/CompanionManager.js` | Companion definitions, AI, formation |
 | `src/game/ElevatorManager.js` | Floor/elevator tracking |
 | `src/game/QuiverDeckManager.js` | Arrow deck, queue, fusion |
-| `src/game/AutoMagicSystem.js` | Hexes and prayers |
-| `src/game/SubstrateGrid.js` | Floor elemental reactions |
+| `src/game/AutoMagicSystem.js` | Hexes and prayers (dormant until Magic patch) |
+| ~~`src/game/SubstrateGrid.js`~~ | Removed — see `docs/SEQUEL-NOTES.md` (floor alchemy / 3D aim) |
 | `src/game/InputHandler.js` | Slingshot + melee input |
 | `src/game/SaveManager.js` | localStorage persistence |
 | `src/data/config.js` | Tunable constants |

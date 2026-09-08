@@ -59,9 +59,11 @@ Open `http://127.0.0.1:8877/?v=81` in your browser.
 - `src/game/` — simulation, enemies, quiver, progression
 - `src/data/` — config constants
 - `docs/GDD.md` — archived design notes (may lag the live game)
-- `docs/ENEMY-ROSTER.md` — archived roster notes (live stats are in `CorridorSim.js`)
+- `docs/ENEMY-ROSTER.md` — archived roster notes (live stats are in `enemyData.js`)
+- `docs/SEQUEL-NOTES.md` — shelved ideas (floor alchemy / 3D aim, etc.)
 
 ## Links
 
 - [Game Design Document (archived)](docs/GDD.md)
 - [Enemy Roster (archived)](docs/ENEMY-ROSTER.md)
+- [Sequel notes](docs/SEQUEL-NOTES.md)

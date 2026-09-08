@@ -66,12 +66,12 @@ export function quiverCapacityFromId(id) {
 export class GameStateManager {
   constructor() {
     this.phase = PHASES.HUB;
-    this.souls = 0;
-    this.totalSoulsEarned = 0;
+    this.coins = 0;
+    this.totalCoinsEarned = 0;
     this.runDistance = 0;
     this.enemiesKilled = 0;
     this.arrowsFired = 0;
-    this.runSouls = 0;
+    this.runCoins = 0;
 
     // Persistent stats (between runs). All start at 1.
     this.upgrades = {
@@ -102,10 +102,10 @@ export class GameStateManager {
 
     // Active run bonuses
     this.runBonuses = {
-      soulMultiplier: 1,
+      coinMultiplier: 1,
       damageMultiplier: 1,
       damageBoostT: 0,
-      soulBoostT: 0,
+      coinBoostT: 0,
       shieldActive: false,
       shieldHp: 0,
       instantBurst: 0,
@@ -125,7 +125,7 @@ export class GameStateManager {
 
     // Callbacks
     this.onPhaseChange = null;
-    this.onSoulsChange = null;
+    this.onCoinsChange = null;
     this.onDeath = null;
     this.onVictory = null;
   }
@@ -144,7 +144,7 @@ export class GameStateManager {
     this.runDistance = 0;
     this.enemiesKilled = 0;
     this.arrowsFired = 0;
-    this.runSouls = 0;
+    this.runCoins = 0;
     this.playerZ = 0;
     this.playerX = 0;
     this.runSpeed = 0;
@@ -152,10 +152,10 @@ export class GameStateManager {
     this.playerPoisonT = 0;
     this.playerPoisonDps = 0;
     this.runBonuses = {
-      soulMultiplier: 1,
+      coinMultiplier: 1,
       damageMultiplier: 1,
       damageBoostT: 0,
-      soulBoostT: 0,
+      coinBoostT: 0,
       shieldActive: false,
       shieldHp: 0,
       instantBurst: 0,
@@ -182,20 +182,20 @@ export class GameStateManager {
   }
 
   /** Award coin for a kill using that enemy's tier value. */
-  awardKillSouls(amount) {
-    const n = Math.max(0, Math.floor((amount || 0) * (this.runBonuses.soulMultiplier || 1) * this.getLootMultiplier()));
-    this.runSouls += n;
-    if (this.onSoulsChange) this.onSoulsChange(this.runSouls);
+  awardKillCoins(amount) {
+    const n = Math.max(0, Math.floor((amount || 0) * (this.runBonuses.coinMultiplier || 1) * this.getLootMultiplier()));
+    this.runCoins += n;
+    if (this.onCoinsChange) this.onCoinsChange(this.runCoins);
     return n;
   }
 
   /** Bank this run's purse into permanent coin (escape / elevator). */
-  bankSouls() {
-    const earned = this.runSouls || 0;
-    this.souls += earned;
-    this.totalSoulsEarned += earned;
-    this.runSouls = 0;
-    if (this.onSoulsChange) this.onSoulsChange(this.souls);
+  bankCoins() {
+    const earned = this.runCoins || 0;
+    this.coins += earned;
+    this.totalCoinsEarned += earned;
+    this.runCoins = 0;
+    if (this.onCoinsChange) this.onCoinsChange(this.coins);
     return earned;
   }
 
@@ -204,24 +204,24 @@ export class GameStateManager {
    * Already-banked coin is untouched.
    * @returns {{ kept: number, lost: number, purse: number }}
    */
-  discardRunSouls() {
-    const purse = this.runSouls || 0;
+  discardRunCoins() {
+    const purse = this.runCoins || 0;
     const kept = Math.floor(purse * 0.2);
     const lost = purse - kept;
-    this.runSouls = 0;
+    this.runCoins = 0;
     if (kept > 0) {
-      this.souls += kept;
-      this.totalSoulsEarned += kept;
+      this.coins += kept;
+      this.totalCoinsEarned += kept;
     }
-    if (this.onSoulsChange) this.onSoulsChange(this.souls);
+    if (this.onCoinsChange) this.onCoinsChange(this.coins);
     return { kept, lost, purse };
   }
 
   /** Spend coin on an upgrade. Returns true if successful. */
-  spendSouls(amount) {
-    if (this.souls < amount) return false;
-    this.souls -= amount;
-    if (this.onSoulsChange) this.onSoulsChange(this.souls);
+  spendCoins(amount) {
+    if (this.coins < amount) return false;
+    this.coins -= amount;
+    if (this.onCoinsChange) this.onCoinsChange(this.coins);
     return true;
   }
 
@@ -231,7 +231,7 @@ export class GameStateManager {
       distance: Math.floor(this.runDistance),
       enemiesKilled: this.enemiesKilled,
       arrowsFired: this.arrowsFired,
-      soulsEarned: this.runSouls || 0,
+      coinsEarned: this.runCoins || 0,
       playerHp: this.playerHp,
       playerMaxHp: this.playerMaxHp,
     };
@@ -279,10 +279,10 @@ export class GameStateManager {
     this.runBonuses.damageBoostT = duration || 0;
   }
 
-  /** Activate soul multiplier (from Prayer of Harvest). */
-  activateSoulMultiplier(multiplier, duration) {
-    this.runBonuses.soulMultiplier = multiplier;
-    this.runBonuses.soulBoostT = duration || 0;
+  /** Activate coin multiplier (from Prayer of Harvest). */
+  activateCoinMultiplier(multiplier, duration) {
+    this.runBonuses.coinMultiplier = multiplier;
+    this.runBonuses.coinBoostT = duration || 0;
   }
 
   tickBonuses(dt) {
@@ -290,9 +290,9 @@ export class GameStateManager {
       this.runBonuses.damageBoostT -= dt;
       if (this.runBonuses.damageBoostT <= 0) this.runBonuses.damageMultiplier = 1;
     }
-    if (this.runBonuses.soulBoostT > 0) {
-      this.runBonuses.soulBoostT -= dt;
-      if (this.runBonuses.soulBoostT <= 0) this.runBonuses.soulMultiplier = 1;
+    if (this.runBonuses.coinBoostT > 0) {
+      this.runBonuses.coinBoostT -= dt;
+      if (this.runBonuses.coinBoostT <= 0) this.runBonuses.coinMultiplier = 1;
     }
     if ((this.playerPoisonT || 0) > 0) {
       this.playerPoisonT -= dt;
@@ -353,7 +353,7 @@ export class GameStateManager {
     if (!STAT_MAX[upgradeId]) return false;
     if (this.isUpgradeMaxed(upgradeId)) return false;
     const cost = this.getUpgradeCost();
-    if (!this.spendSouls(cost)) return false;
+    if (!this.spendCoins(cost)) return false;
     this.upgrades[upgradeId] = this.getStat(upgradeId) + 1;
     this.applyUpgrades();
     return true;
@@ -485,8 +485,8 @@ export class GameStateManager {
   serialize() {
     return {
       phase: this.phase,
-      souls: this.souls,
-      totalSoulsEarned: this.totalSoulsEarned,
+      coins: this.coins,
+      totalCoinsEarned: this.totalCoinsEarned,
       upgrades: { ...this.upgrades },
       equipped: { ...this.equipped },
       ownedItems: [...(this.ownedItems || [])],
@@ -503,8 +503,8 @@ export class GameStateManager {
   deserialize(data) {
     if (!data) return;
     this.phase = PHASES.HUB;
-    this.souls = data.souls || 0;
-    this.totalSoulsEarned = data.totalSoulsEarned || 0;
+    this.coins = data.coins != null ? data.coins : (data.souls || 0);
+    this.totalCoinsEarned = data.totalCoinsEarned != null ? data.totalCoinsEarned : (data.totalSoulsEarned || 0);
     this.upgrades = migrateStats(data.upgrades);
     this.equipped = { ...(data.equipped || {}) };
     this.ownedItems = [...(data.ownedItems || [])];

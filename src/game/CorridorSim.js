@@ -1,173 +1,28 @@
 import { CONFIG } from "../data/config.js";
 import {
   QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
-  lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
 } from "./QuiverDeckManager.js";
-import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js";
+import {
+  ENEMY_DEFS,
+  BEHAVIOR_MAP,
+  scaleEnemyHp,
+  enemyHitWidth,
+  enemyFamily,
+  enemyThreat,
+  rollEnemyCoins,
+  rollEnemyItemDrop,
+  rollGroundFind,
+  hallHpBudget,
+  packIntoGroups,
+  composeWaveForHp,
+  enemyDisplayName,
+} from "./enemyData.js";
+
+export { ENEMY_DEFS };
 
 let _nextId = 1;
-
-export const ENEMY_DEFS = {
-  // coinMin/Max = purse drop on kill (₡). souls kept as display fallback.
-  slime:          { hp: 5,   speed: 9,   size: 0.85, color: "#b84a55", coinMin: 1, coinMax: 3, souls: 2, armor: "none", contactDmg: 4 },
-  slime_large:    { hp: 14,  speed: 7,   size: 1.3, color: "#c45a65", coinMin: 2, coinMax: 5, souls: 3, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
-  slime_huge:     { hp: 28,  speed: 5,   size: 1.75, color: "#d46a75", coinMin: 4, coinMax: 8, souls: 5, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
-  goblin_runt:    { hp: 7,   speed: 20,  size: 1.2, color: "#6aaa5a", coinMin: 1, coinMax: 7, souls: 3, armor: "none", contactDmg: 3 },
-  goblin_warrior: { hp: 14,  speed: 16,  size: 1.5, color: "#5a9a4a", coinMin: 3, coinMax: 8, souls: 5, armor: "none", contactDmg: 5 },
-  goblin_chieftain:{ hp: 22, speed: 13,  size: 2.0, color: "#4a8a3a", coinMin: 5, coinMax: 12, souls: 7, armor: "none", contactDmg: 7 },
-  imp:            { hp: 8,   speed: 24,  size: 1.1, color: "#d4892a", coinMin: 1, coinMax: 4, souls: 2, armor: "none", contactDmg: 3 },
-  scamp:          { hp: 12,  speed: 22,  size: 1.2, color: "#e0a030", coinMin: 2, coinMax: 6, souls: 3, armor: "none", contactDmg: 4 },
-  demon:          { hp: 20,  speed: 16,  size: 1.8, color: "#c04040", coinMin: 4, coinMax: 10, souls: 6, armor: "none", contactDmg: 7 },
-  skeleton:       { hp: 18,  speed: 11,  size: 2.1, color: "#c8c0b0", coinMin: 2, coinMax: 8, souls: 4, armor: "none", contactDmg: 7 },
-  skeleton_archer:{ hp: 12,  speed: 12,  size: 1.8, color: "#b0a898", coinMin: 2, coinMax: 7, souls: 3, armor: "none", contactDmg: 4 },
-  hauler:         { hp: 32,  speed: 8,   size: 2.4, color: "#8a96a0", coinMin: 5, coinMax: 12, souls: 6, armor: "heavy", contactDmg: 10 },
-  ghoul:          { hp: 10,  speed: 15,  size: 1.4, color: "#7a6a5a", coinMin: 1, coinMax: 5, souls: 2, armor: "none", contactDmg: 4 },
-  wight:          { hp: 16,  speed: 13,  size: 1.7, color: "#6a5a4a", coinMin: 2, coinMax: 7, souls: 3, armor: "none", contactDmg: 6 },
-  wraith:         { hp: 12,  speed: 18,  size: 1.3, color: "#8a7ab8", coinMin: 2, coinMax: 8, souls: 4, armor: "energy", contactDmg: 5 },
-  vampire:        { hp: 18,  speed: 17,  size: 1.5, color: "#a02020", coinMin: 3, coinMax: 9, souls: 5, armor: "none", contactDmg: 6, lifeSteal: true },
-  vampire_lord:   { hp: 28,  speed: 19,  size: 2.0, color: "#801010", coinMin: 5, coinMax: 14, souls: 8, armor: "none", contactDmg: 8, lifeSteal: true },
-  lich:           { hp: 22,  speed: 10,  size: 1.8, color: "#6040a0", coinMin: 4, coinMax: 11, souls: 6, armor: "none", summonRate: 5, contactDmg: 5 },
-  bat:            { hp: 4,   speed: 28,  size: 0.6, color: "#4a3a5a", coinMin: 1, coinMax: 2, souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
-  spider:         { hp: 6,   speed: 20,  size: 0.9, color: "#5a4a3a", coinMin: 1, coinMax: 4, souls: 2, armor: "none", contactDmg: 3, poison: 1 },
-  giant_spider:   { hp: 16,  speed: 16,  size: 1.5, color: "#4a3a2a", coinMin: 2, coinMax: 7, souls: 4, armor: "none", contactDmg: 5, poison: 3 },
-  orc:            { hp: 18,  speed: 14,  size: 1.7, color: "#5a7a4a", coinMin: 3, coinMax: 9, souls: 5, armor: "none", contactDmg: 7 },
-  ogre:           { hp: 28,  speed: 9,   size: 2.3, color: "#6a8a5a", coinMin: 5, coinMax: 12, souls: 7, armor: "heavy", contactDmg: 10 },
-  troll:          { hp: 22,  speed: 12,  size: 2.0, color: "#4a6a3a", coinMin: 4, coinMax: 10, souls: 6, armor: "none", contactDmg: 8, regen: 2 },
-  boss_grunt:     { hp: 200, speed: 10,  size: 3.3, color: "#c4305a", coinMin: 18, coinMax: 28, souls: 20, armor: "heavy", contactDmg: 12 },
-  boss_warden:    { hp: 250, speed: 8,   size: 3.3, color: "#3d9a8e", coinMin: 22, coinMax: 34, souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
-  boss_wraith:    { hp: 180, speed: 14,  size: 3.0, color: "#c9a227", coinMin: 24, coinMax: 36, souls: 30, armor: "energy", contactDmg: 15 },
-  boss_death_knight: { hp: 250, speed: 11, size: 3.6, color: "#2a2a3a", coinMin: 26, coinMax: 40, souls: 30, armor: "heavy", contactDmg: 15 },
-  boss_lich_king: { hp: 300, speed: 8,  size: 3.3, color: "#4a2a6a", coinMin: 30, coinMax: 48, souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
-  boss_spider_queen: { hp: 200, speed: 14, size: 3.0, color: "#3a2a1a", coinMin: 20, coinMax: 32, souls: 25, armor: "none", contactDmg: 12, poison: 5 },
-};
-
-/** Pretty name for loot lines. */
-function enemyDisplayName(type) {
-  return String(type || "foe").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-/**
- * Per-enemy drop tables. Chance is independent; most kills drop nothing but coins.
- * kind: arrow | potion | trinket
- */
-const ENEMY_LOOT = {
-  slime: [{ kind: "arrow", type: "flint", chance: 0.05 }],
-  slime_large: [{ kind: "arrow", type: "flint", chance: 0.08 }, { kind: "potion", id: "potion_salve", chance: 0.04 }],
-  slime_huge: [{ kind: "arrow", type: "iron", chance: 0.1 }, { kind: "potion", id: "potion_salve", chance: 0.08 }],
-  goblin_runt: [{ kind: "arrow", type: "flint", chance: 0.1 }, { kind: "arrow", type: "poison", chance: 0.03 }],
-  goblin_warrior: [
-    { kind: "arrow", type: "iron", chance: 0.09 },
-    { kind: "potion", id: "potion_bandage", chance: 0.06 },
-    { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.02 },
-  ],
-  goblin_chieftain: [
-    { kind: "arrow", type: "steel", chance: 0.08 },
-    { kind: "arrow", type: "piercing", chance: 0.07 },
-    { kind: "potion", id: "potion_tonic", chance: 0.08 },
-  ],
-  imp: [{ kind: "arrow", type: "fire", chance: 0.1 }, { kind: "arrow", type: "oil", chance: 0.05 }],
-  scamp: [{ kind: "arrow", type: "fire", chance: 0.08 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
-  demon: [{ kind: "arrow", type: "fire", chance: 0.12 }, { kind: "arrow", type: "shock", chance: 0.05 }],
-  skeleton: [{ kind: "arrow", type: "piercing", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.04 }],
-  skeleton_archer: [{ kind: "arrow", type: "piercing", chance: 0.14 }, { kind: "arrow", type: "double", chance: 0.06 }],
-  hauler: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.07 }],
-  ghoul: [{ kind: "arrow", type: "barbed", chance: 0.07 }, { kind: "potion", id: "potion_tonic", chance: 0.05 }],
-  wight: [{ kind: "arrow", type: "ice", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.05 }],
-  wraith: [{ kind: "arrow", type: "shock", chance: 0.09 }, { kind: "arrow", type: "silver", chance: 0.06 }],
-  vampire: [{ kind: "arrow", type: "silver", chance: 0.1 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
-  vampire_lord: [{ kind: "arrow", type: "silver", chance: 0.14 }, { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.06 }],
-  lich: [{ kind: "arrow", type: "ice", chance: 0.1 }, { kind: "arrow", type: "poison", chance: 0.08 }],
-  bat: [{ kind: "arrow", type: "poison", chance: 0.04 }],
-  spider: [{ kind: "arrow", type: "poison", chance: 0.08 }],
-  giant_spider: [{ kind: "arrow", type: "poison", chance: 0.12 }, { kind: "potion", id: "potion_tonic", chance: 0.07 }],
-  orc: [{ kind: "arrow", type: "iron", chance: 0.1 }, { kind: "arrow", type: "barbed", chance: 0.05 }],
-  ogre: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.08 }],
-  troll: [{ kind: "arrow", type: "iron", chance: 0.09 }, { kind: "potion", id: "potion_salve", chance: 0.09 }],
-  boss_grunt: [{ kind: "arrow", type: "steel", chance: 0.45 }, { kind: "potion", id: "potion_bandage", chance: 0.35 }],
-  boss_warden: [{ kind: "arrow", type: "shock", chance: 0.4 }, { kind: "potion", id: "potion_tonic", chance: 0.3 }],
-  boss_wraith: [{ kind: "arrow", type: "silver", chance: 0.45 }, { kind: "arrow", type: "ice", chance: 0.3 }],
-  boss_death_knight: [{ kind: "arrow", type: "steel", chance: 0.4 }, { kind: "arrow", type: "piercing", chance: 0.35 }],
-  boss_lich_king: [{ kind: "arrow", type: "ice", chance: 0.5 }, { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.4 }],
-  boss_spider_queen: [{ kind: "arrow", type: "poison", chance: 0.5 }, { kind: "potion", id: "potion_tonic", chance: 0.35 }],
-};
-
-const POTION_LABELS = {
-  potion_salve: "Herbal Remedy",
-  potion_bandage: "Field Bandage",
-  potion_tonic: "Clearing Tonic",
-};
-const TRINKET_LABELS = {
-  trinket_lucky_tooth: "Lucky Tooth",
-};
-
-function rollEnemyItemDrop(type) {
-  const table = ENEMY_LOOT[type];
-  if (!table || !table.length) return null;
-  for (const entry of table) {
-    if (Math.random() >= (entry.chance || 0)) continue;
-    if (entry.kind === "arrow") {
-      return { kind: "arrow", type: entry.type, level: 1, label: getArrowDef(entry.type).name || entry.type };
-    }
-    if (entry.kind === "potion") {
-      return { kind: "potion", itemId: entry.id, label: POTION_LABELS[entry.id] || entry.id };
-    }
-    if (entry.kind === "trinket") {
-      return { kind: "trinket", itemId: entry.id, label: TRINKET_LABELS[entry.id] || entry.id };
-    }
-  }
-  return null;
-}
-
-/** ~25% chance of a hall floor find after a clear. */
-function rollGroundFind(floorIndex, elevatorIndex) {
-  if (Math.random() >= 0.25) return null;
-  const r = Math.random();
-  if (r < 0.45) {
-    const amount = 2 + Math.floor(Math.random() * 4) + Math.floor(floorIndex / 2) + elevatorIndex;
-    return { kind: "coins", amount, label: `${amount} coin`, detail: "Loose purse on the stones." };
-  }
-  if (r < 0.8) {
-    const arrows = ["flint", "fire", "ice", "poison", "piercing", "iron", "double"];
-    const type = arrows[Math.floor(Math.random() * arrows.length)];
-    const score = lootProgressScore(floorIndex, elevatorIndex);
-    const cap = arrowLevelCapForProgress(score, { shop: false });
-    const level = rollArrowLevel(Math.random, cap, { favorHigh: false });
-    const def = getArrowDef(type);
-    return {
-      kind: "arrow",
-      type,
-      level,
-      label: level > 1 ? `${def.name} Lv${level}` : def.name,
-      detail: "A shaft kicked under a flagstone.",
-    };
-  }
-  const pots = ["potion_salve", "potion_bandage", "potion_tonic"];
-  const id = pots[Math.floor(Math.random() * pots.length)];
-  return { kind: "potion", itemId: id, label: POTION_LABELS[id] || id, detail: "A vial half-buried in grit." };
-}
-
-const BEHAVIOR_MAP = {
-  slime: "advance", slime_large: "advance", slime_huge: "advance",
-  goblin_runt: "swarm", goblin_warrior: "swarm_slow", goblin_chieftain: "swarm_slow",
-  imp: "notice", scamp: "notice", demon: "swarm_slow",
-  skeleton: "advance", skeleton_archer: "archer", hauler: "advance",
-  ghoul: "advance", wight: "advance", wraith: "zigzag",
-  vampire: "notice", vampire_lord: "notice", lich: "summoner",
-  bat: "hover", spider: "swarm", giant_spider: "swarm_slow",
-  orc: "swarm_slow", ogre: "advance", troll: "swarm_slow",
-  boss_grunt: "charge", boss_warden: "shielded", boss_wraith: "zigzag",
-  boss_death_knight: "charge", boss_lich_king: "summoner", boss_spider_queen: "swarm_slow",
-};
-
-/** Shot-economy HP: fodder gains +1 every 2 floors, elites +2. Elevators add 25%. */
-function scaleEnemyHp(base, floorIndex, elevatorIndex) {
-  const step = Math.floor((floorIndex || 0) / 2);
-  const per = (base || 1) >= 12 ? 2 : 1;
-  const elevMult = 1 + (elevatorIndex || 0) * 0.25;
-  return Math.max(1, Math.round((base + step * per) * elevMult));
-}
 
 function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
   const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
@@ -176,7 +31,7 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
     id: _nextId++, type, x: worldX, worldZ,
     behavior: BEHAVIOR_MAP[type] || "advance",
     hp, maxHp: hp, speed: d.speed, size: d.size,
-    color: d.color, souls: d.souls, armor: d.armor,
+    color: d.color, armor: d.armor,
     flying: d.flying || false,
     contactPoison: d.poison || 0,
     shieldHp: d.shieldHp || 0, maxShieldHp: d.shieldHp || 0,
@@ -206,7 +61,6 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
     damage, fireDamage: getArrowFireDamage(element, level), iceDamage: getArrowIceDamage(element, level),
     element: element || "normal", ownerId, level: level || 1,
     life: 4,
-    // pierce:1 → two hits on unarmoured (self + one behind). Armour punch stops travel.
     pierceLeft: 1 + pierceRanks,
     punchArmour: pierceRanks > 0,
     _hitIds: [],
@@ -214,138 +68,17 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
   };
 }
 
-/** Flat XZ hit size from silhouette width (no height / headshots). */
-export function enemyHitWidth(e) {
-  const sz = e.size || 1;
-  const type = e.type || "";
-  const flying = !!(e.flying || e.behavior === "hover");
-  let h;
-  if (flying) h = 11 + sz * 5;
-  else if (type.includes("slime")) h = 11 + sz * 8;
-  else if (type.includes("spider")) h = 9 + sz * 6;
-  else if (type.includes("boss")) h = 34 + sz * 5;
-  else h = 20 + sz * 8;
-  const aspect = flying ? 1.15 : type.includes("slime") ? 1.35 : 0.58;
-  return h * aspect * 1.1;
-}
-
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
-/** Visible fight band — full corridor half is wider than a portrait view. */
 const FIGHT_LANE = HALF_CORRIDOR * 0.22;
 const SEGMENT_LENGTH = 800;
-/** Fork sits this far ahead when the wave is over. */
 const JUNCTION_STOP = 180;
-/** Groups appear this far down the hall and walk in. */
 const PACK_NEAR = 420;
-
-export function enemyFamily(type = "") {
-  if (type.includes("slime")) return "slime";
-  if (type.includes("goblin")) return "goblin";
-  if (type.includes("skeleton") || type === "hauler") return "skeleton";
-  if (/ghoul|wight|wraith|lich|vampire/.test(type)) return "undead";
-  if (type.includes("spider")) return "spider";
-  if (type.includes("bat")) return "bat";
-  if (/imp|scamp|demon/.test(type)) return "demon";
-  if (/orc|ogre|troll/.test(type)) return "brute";
-  return "beast";
-}
-
-function enemyThreat(type, floorIndex, elevatorIndex) {
-  const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
-  return scaleEnemyHp(d.hp || 5, floorIndex, elevatorIndex);
-}
-
-function rollEnemyCoins(type) {
-  const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
-  const lo = d.coinMin != null ? d.coinMin : (d.souls || 1);
-  const hi = d.coinMax != null ? d.coinMax : lo;
-  if (hi <= lo) return lo;
-  return lo + Math.floor(Math.random() * (hi - lo + 1));
-}
-
-/**
- * Target total HP for a hall.
- * Gate curve: 5, 7, 10, 12, 14, 17, 19, 22, 24, then hall-10 spike (~28).
- * Higher floors / elevators add flat HP; F10 / last elevator spike further.
- */
-function hallHpBudget(floorIndex, sectionIndex, elevatorIndex) {
-  const elevs = CONFIG.ELEVATORS_PER_RUN || 10;
-  const hallBase = [5, 7, 10, 12, 14, 17, 19, 22, 24, 28];
-  const i = Math.max(0, Math.min(9, sectionIndex | 0));
-  let hp = hallBase[i] + floorIndex * 9 + elevatorIndex * 14;
-  if (sectionIndex >= 9) hp = Math.round(hp * 1.2);
-  if (floorIndex >= 9) hp = Math.round(hp * 1.28);
-  if (elevatorIndex >= elevs - 1) hp = Math.round(hp * 1.32);
-  return Math.max(5, hp);
-}
-
-function packIntoGroups(types) {
-  const groups = [];
-  for (let i = 0; i < types.length;) {
-    if (i + 1 < types.length && (types.length - i !== 3 || groups.length > 0)) {
-      groups.push([types[i], types[i + 1]]);
-      i += 2;
-    } else {
-      groups.push([types[i]]);
-      i += 1;
-    }
-  }
-  return groups.length ? groups : [["slime"]];
-}
-
-/**
- * Build a wave whose scaled HP is as close as possible to target.
- * DP over cheap units always finds a valid pack (never empty / never stuck).
- */
-function composeWaveForHp(roster, targetHp, floorIndex, elevatorIndex, maxCount = 5) {
-  const units = [];
-  for (const t of roster) {
-    const hp = enemyThreat(t, floorIndex, elevatorIndex);
-    if (hp > 0) units.push({ t, hp });
-  }
-  units.sort((a, b) => a.hp - b.hp || a.t.localeCompare(b.t));
-  const cheapest = units[0] || { t: "slime", hp: enemyThreat("slime", floorIndex, elevatorIndex) };
-  const want = Math.max(cheapest.hp, targetHp | 0);
-  const maxSum = want + cheapest.hp * 2;
-
-  // dp[s] = shortest type list that sums to s
-  const dp = new Array(maxSum + 1).fill(null);
-  dp[0] = [];
-  for (let s = 0; s <= maxSum; s++) {
-    const cur = dp[s];
-    if (!cur || cur.length >= maxCount) continue;
-    for (const u of units) {
-      const ns = s + u.hp;
-      if (ns > maxSum) continue;
-      const next = cur.length + 1;
-      if (!dp[ns] || dp[ns].length > next) dp[ns] = cur.concat(u.t);
-    }
-  }
-
-  let bestS = -1;
-  let bestScore = Infinity;
-  for (let s = cheapest.hp; s <= maxSum; s++) {
-    if (!dp[s]) continue;
-    const diff = Math.abs(s - want);
-    // Prefer exact, then slight overshoot, then undershoot; fewer foes on ties.
-    const score = diff * 10 + (s < want ? 3 : 0) + dp[s].length * 0.01;
-    if (score < bestScore) {
-      bestScore = score;
-      bestS = s;
-    }
-  }
-
-  const types = bestS > 0 ? dp[bestS] : [cheapest.t];
-  const threat = types.reduce((sum, t) => sum + enemyThreat(t, floorIndex, elevatorIndex), 0);
-  return { groups: packIntoGroups(types), threat, enemyTypes: [...new Set(types)], hp: threat };
-}
 
 export class CorridorSim {
   constructor() {
     this.state = new GameStateManager();
     this.quiver = new QuiverDeckManager();
-    this.substrates = new SubstrateGrid();
     this.autoMagic = new AutoMagicSystem();
     this.enemies = [];
     this.projectiles = [];
@@ -393,7 +126,7 @@ export class CorridorSim {
     this.waveGroups = [];
     this.groupGap = 0;
     this._pendingEncounter = null;
-    this._waveSoulBonus = 0;
+    this._waveCoinBonus = 0;
     this.waveLootLog = [];
     this.pendingWaveReport = null;
     this.lootPending = false;
@@ -431,7 +164,7 @@ export class CorridorSim {
     this.junctionChoices = null;
     this.junctionPending = false;
     this._pendingEncounter = null;
-    this._waveSoulBonus = 0;
+    this._waveCoinBonus = 0;
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnFrom = 0;
@@ -464,7 +197,6 @@ export class CorridorSim {
     this.hitStop = 0;
     this.quiver.capacity = this.state.getQuiverCapacity();
     this.quiver.prepareForRun(this.state.getCraftFillerType());
-    this.substrates.init();
     this.autoMagic.reset();
     this.state.startRun();
     this.state.applyUpgrades();
@@ -585,7 +317,6 @@ export class CorridorSim {
     this._tickProjectiles();
     this._tickEnemyProjectiles();
     this._tickAutoMagic();
-    this.substrates.tickReactions();
     const shuffleEvt = this.quiver.tick(this.dt);
     if (shuffleEvt) this.emit("quiver_shuffle");
 
@@ -673,7 +404,7 @@ export class CorridorSim {
     return { sectionIndex, floorIndex, elevatorIndex };
   }
 
-  _planEncounter(roster, target, depth, soulBonus) {
+  _planEncounter(roster, target, depth, coinBonus) {
     const built = composeWaveForHp(roster, target, depth.floorIndex, depth.elevatorIndex);
     const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
     const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
@@ -688,7 +419,7 @@ export class CorridorSim {
       threat: built.threat,
       enemyTypes: built.enemyTypes,
       families,
-      soulBonus,
+      coinBonus,
     };
   }
 
@@ -779,11 +510,11 @@ export class CorridorSim {
     this.waveQueue = [];
     if (this._pendingEncounter) {
       this.waveGroups = this._pendingEncounter.groups;
-      this._waveSoulBonus = this._pendingEncounter.soulBonus || 0;
+      this._waveCoinBonus = this._pendingEncounter.coinBonus || 0;
       this._pendingEncounter = null;
     } else {
       this.waveGroups = this._openingWave();
-      this._waveSoulBonus = 0;
+      this._waveCoinBonus = 0;
     }
     this.groupGap = 0.2;
     this.waveArrowsFired = 0;
@@ -993,7 +724,7 @@ export class CorridorSim {
     this.waveActive = true;
     this.waveQueue = [];
     this.waveGroups = [["boss_lich_king"], ["boss_death_knight", "wraith"]];
-    this._waveSoulBonus = 25;
+    this._waveCoinBonus = 25;
     this.groupGap = 0.35;
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
@@ -1243,7 +974,7 @@ export class CorridorSim {
   _killEnemy(e, index, def, relDist) {
     this.state.enemiesKilled++;
     const coins = rollEnemyCoins(e.type);
-    this.state.awardKillSouls(coins);
+    this.state.awardKillCoins(coins);
     const drop = rollEnemyItemDrop(e.type);
     if (drop && drop.kind === "arrow") {
       const score = lootProgressScore(this.floorIndex, this.elevatorIndex);
@@ -1345,7 +1076,7 @@ export class CorridorSim {
   _collectLootPiece(piece) {
     if (!piece) return { status: "none" };
     if (piece.kind === "coins") {
-      this.state.awardKillSouls(piece.amount || 0);
+      this.state.awardKillCoins(piece.amount || 0);
       return { status: "taken", label: piece.label };
     }
     if (piece.kind === "arrow") {
@@ -1396,9 +1127,9 @@ export class CorridorSim {
 
   _beginWaveLootSequence(nextAction) {
     const recovery = this._recoverArrows();
-    if (this._waveSoulBonus) {
-      this.state.awardKillSouls(this._waveSoulBonus);
-      this._waveSoulBonus = 0;
+    if (this._waveCoinBonus) {
+      this.state.awardKillCoins(this._waveCoinBonus);
+      this._waveCoinBonus = 0;
     }
     this.pendingWaveReport = this._buildWaveReport(recovery);
     this._afterLootAction = nextAction;
@@ -1548,11 +1279,6 @@ export class CorridorSim {
           this.hitStop = Math.max(this.hitStop, 0.045);
           this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: raw });
           this._applyStatus(p, e);
-          this.substrates.onArrowImpact(
-            Math.floor(p.x / CONFIG.CELL_SIZE),
-            Math.floor(relDist / CONFIG.CELL_SIZE),
-            p.element
-          );
           // Piercing: through unarmoured (continue) OR punch armour and stop.
           if (p.punchArmour && armored) {
             p.pierceLeft = 0;
@@ -1714,7 +1440,7 @@ export class CorridorSim {
   _applyPrayer(def) {
     switch (def.effect) {
       case "shield":          this.state.activateShield(30); break;
-      case "soul_multiplier": this.state.activateSoulMultiplier(2, def.duration); break;
+      case "coin_multiplier": this.state.activateCoinMultiplier(2, def.duration); break;
       case "damage_boost":    this.state.activateDamageBoost(1.5, def.duration); break;
       case "instant_burst":   this.state.activateInstantBurst(3); break;
     }
