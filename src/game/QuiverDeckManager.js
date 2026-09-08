@@ -253,6 +253,11 @@ export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0, elevUnl
   return picked;
 }
 
+export function isWoodType(type) {
+  const t = ALIASES[type] || type || "wood";
+  return t === "wood";
+}
+
 export function createArrow(type, level = 1) {
   const t = ALIASES[type] || type || "wood";
   return { type: t, level: Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, level)), id: _nextId++ };
@@ -298,12 +303,13 @@ export class QuiverDeckManager {
     }
   }
 
-  /** Hub / run-start: one loaded pile, extras back to collection. */
+  /** Hub / run-start: one loaded pile; overflow spares go to chest (never wood). */
   packForHub() {
     this.deck = [...this.queue, ...this.deck];
     this.queue = [];
     while (this.deck.length > this.capacity) {
-      this.storage.push(this.deck.pop());
+      const a = this.deck.pop();
+      if (a && !isWoodType(a.type)) this.storage.push(a);
     }
   }
 
@@ -350,8 +356,14 @@ export class QuiverDeckManager {
     return [...this.storage];
   }
 
+  isWoodType(type) {
+    return isWoodType(type);
+  }
+
   addToStorage(arrow) {
+    if (!arrow || isWoodType(arrow.type)) return false;
     this.storage.push(createArrow(arrow.type, arrow.level));
+    return true;
   }
 
   addToQuiver(arrow) {
@@ -365,10 +377,16 @@ export class QuiverDeckManager {
   moveArrowToStorage(quiverIndex) {
     const loaded = this.peekQuiver();
     if (quiverIndex < 0 || quiverIndex >= loaded.length) return false;
+    const inQueue = quiverIndex < this.queue.length;
     let arrow;
-    if (quiverIndex < this.queue.length) arrow = this.queue.splice(quiverIndex, 1)[0];
+    if (inQueue) arrow = this.queue.splice(quiverIndex, 1)[0];
     else arrow = this.deck.splice(quiverIndex - this.queue.length, 1)[0];
     if (!arrow) return false;
+    if (isWoodType(arrow.type)) {
+      if (inQueue) this.queue.splice(quiverIndex, 0, arrow);
+      else this.deck.splice(quiverIndex - this.queue.length, 0, arrow);
+      return false;
+    }
     this.storage.push(arrow);
     return true;
   }
@@ -391,7 +409,9 @@ export class QuiverDeckManager {
         old = this.deck[di];
         this.deck[di] = incoming;
       }
-      this.storage[storageIndex] = old;
+      this.storage.splice(storageIndex, 1);
+      if (old && !isWoodType(old.type)) this.storage.push(old);
+      // Wood displaced from the quiver is discarded, never chested.
       return true;
     }
     if (loaded.length >= this.capacity) {
@@ -433,9 +453,10 @@ export class QuiverDeckManager {
     const made = (data.deck || data.quiver || []).map((a) => createArrow(a.type, a.level));
     this.queue = [];
     this.deck = made.slice(0, this.capacity);
+    const overflow = made.slice(this.capacity).filter((a) => !isWoodType(a.type));
     this.storage = [
-      ...made.slice(this.capacity),
-      ...(data.storage || []).map((a) => createArrow(a.type, a.level)),
+      ...overflow,
+      ...(data.storage || []).map((a) => createArrow(a.type, a.level)).filter((a) => !isWoodType(a.type)),
     ];
     this._seeded = true;
   }

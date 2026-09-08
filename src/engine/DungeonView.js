@@ -6,7 +6,7 @@ import { CONFIG } from "../data/config.js?v=29";
 
 const NEAR = 6;
 const FAR = 640;
-const OPEN_LEN = 200;
+const OPEN_LEN = 240;
 const TORCH_EVERY = 160;
 const TILE_Z = CONFIG.CELL_SIZE || 40;
 
@@ -151,16 +151,22 @@ export class DungeonView {
     const turnU = motion && motion.turnU ? motion.turnU : 0;
     this.bob = Math.sin(playerZ * 0.11) * (walking ? 4.4 : 1.1) + Math.sin(time * 1.35) * 0.55;
     this.sway = Math.sin(playerZ * 0.055) * (walking ? 2.4 : 0.4)
-      + (turning ? Math.sin(turnU * Math.PI) * 5.5 * (motion.turnSign || 1) : 0);
+      + (turning ? Math.sin(turnU * Math.PI) * 7.2 * (motion.turnSign || 1) : 0);
     // Bank into the turn, peaking mid-corner, then settle.
     this.roll = turning
-      ? Math.sin(turnU * Math.PI) * 0.085 * (motion.turnSign || 1)
+      ? Math.sin(turnU * Math.PI) * 0.118 * (motion.turnSign || 1)
       : 0;
     // Pull the fork closer as you walk into it so the opening fills the frame.
     let j = junction && junction.dist < FAR && junction.dist > 8 ? junction : null;
     if (j && turning) {
-      const pull = 1 - Math.min(1, turnU * 1.15);
-      j = { ...j, dist: Math.max(28, j.dist * pull), pending: false };
+      const pull = 1 - Math.min(1, turnU * 1.35);
+      j = {
+        ...j,
+        dist: Math.max(22, j.dist * pull),
+        pending: false,
+        turnSign: motion.turnSign || 1,
+        turnU,
+      };
     }
     this.junction = j;
     this.hits = [];
@@ -180,6 +186,7 @@ export class DungeonView {
     this._paintEndDark(ctx);
     this._paintDecor(ctx);
     this._paintTorches(ctx);
+    this._paintOpeningDepth(ctx);
     this._drawScreenCobwebs(ctx);
     this._paintVignette(ctx);
     if (this.junction) this._drawOpenings();
@@ -840,6 +847,61 @@ export class DungeonView {
         names: this._prettyNames(choice),
         families: choice && choice.families ? choice.families.slice(0, 3) : [],
       });
+    }
+  }
+
+  /** Soft depth into side / ahead forks while approaching or turning. */
+  _paintOpeningDepth(ctx) {
+    const j = this.junction;
+    if (!j || j.dist > 320) return;
+    const near = this._frame(Math.max(40, j.dist));
+    const fog = this._fogK(near.dist);
+    const turnU = j.turnU || 0;
+    const turning = turnU > 0.02;
+    const glow = 0.22 + (1 - Math.min(1, j.dist / 280)) * 0.35;
+
+    const paintSide = (sign) => {
+      const edge = sign < 0 ? near.xl : near.xr;
+      const inward = edge + sign * Math.max(28, (near.xr - near.xl) * 0.42);
+      const midY = (near.yc + near.yf) * 0.52;
+      const g = ctx.createLinearGradient(edge, midY, inward, midY);
+      g.addColorStop(0, `rgba(18, 12, 8, ${0.05 * (1 - fog)})`);
+      g.addColorStop(0.35, `rgba(48, 34, 22, ${glow * (1 - fog * 0.5)})`);
+      g.addColorStop(1, `rgba(8, 5, 3, ${0.72 + glow * 0.15})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      if (sign < 0) {
+        ctx.moveTo(near.xl, near.yc);
+        ctx.lineTo(inward, near.yc + (near.yf - near.yc) * 0.08);
+        ctx.lineTo(inward, near.yf - (near.yf - near.yc) * 0.06);
+        ctx.lineTo(near.xl, near.yf);
+      } else {
+        ctx.moveTo(near.xr, near.yc);
+        ctx.lineTo(near.xr, near.yf);
+        ctx.lineTo(inward, near.yf - (near.yf - near.yc) * 0.06);
+        ctx.lineTo(inward, near.yc + (near.yf - near.yc) * 0.08);
+      }
+      ctx.closePath();
+      ctx.fill();
+      // Warm rim on the cut stone edge.
+      ctx.strokeStyle = `rgba(232, 197, 106, ${(0.18 + glow * 0.25) * (1 - fog)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(edge, near.yc + 4);
+      ctx.lineTo(edge, near.yf - 4);
+      ctx.stroke();
+    };
+
+    if (j.left && (!turning || (j.turnSign || 0) < 0)) paintSide(-1);
+    if (j.right && (!turning || (j.turnSign || 0) > 0)) paintSide(1);
+
+    if (j.forward && !turning) {
+      const mx = (near.xl + near.xr) / 2;
+      const g = ctx.createRadialGradient(mx, (near.yc + near.yf) * 0.55, 8, mx, (near.yc + near.yf) * 0.55, (near.xr - near.xl) * 0.55);
+      g.addColorStop(0, `rgba(40, 28, 16, ${0.2 * glow})`);
+      g.addColorStop(1, `rgba(6, 4, 3, ${0.55 + glow * 0.2})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(near.xl + 6, near.yc + 4, near.xr - near.xl - 12, near.yf - near.yc - 8);
     }
   }
 

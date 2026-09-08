@@ -2,7 +2,7 @@ import { CONFIG } from "../data/config.js?v=30";
 import {
   QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
   lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
-} from "./QuiverDeckManager.js?v=37";
+} from "./QuiverDeckManager.js?v=38";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js?v=43";
@@ -42,6 +42,111 @@ const ENEMY_DEFS = {
   boss_lich_king: { hp: 300, speed: 8,  size: 3.3, color: "#4a2a6a", coinMin: 30, coinMax: 48, souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
   boss_spider_queen: { hp: 200, speed: 14, size: 3.0, color: "#3a2a1a", coinMin: 20, coinMax: 32, souls: 25, armor: "none", contactDmg: 12, poison: 5 },
 };
+
+/** Pretty name for loot lines. */
+function enemyDisplayName(type) {
+  return String(type || "foe").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Per-enemy drop tables. Chance is independent; most kills drop nothing but coins.
+ * kind: arrow | potion | trinket
+ */
+const ENEMY_LOOT = {
+  slime: [{ kind: "arrow", type: "flint", chance: 0.05 }],
+  slime_large: [{ kind: "arrow", type: "flint", chance: 0.08 }, { kind: "potion", id: "potion_salve", chance: 0.04 }],
+  slime_huge: [{ kind: "arrow", type: "iron", chance: 0.1 }, { kind: "potion", id: "potion_salve", chance: 0.08 }],
+  goblin_runt: [{ kind: "arrow", type: "flint", chance: 0.1 }, { kind: "arrow", type: "poison", chance: 0.03 }],
+  goblin_warrior: [
+    { kind: "arrow", type: "iron", chance: 0.09 },
+    { kind: "potion", id: "potion_bandage", chance: 0.06 },
+    { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.02 },
+  ],
+  goblin_chieftain: [
+    { kind: "arrow", type: "steel", chance: 0.08 },
+    { kind: "arrow", type: "piercing", chance: 0.07 },
+    { kind: "potion", id: "potion_tonic", chance: 0.08 },
+  ],
+  imp: [{ kind: "arrow", type: "fire", chance: 0.1 }, { kind: "arrow", type: "oil", chance: 0.05 }],
+  scamp: [{ kind: "arrow", type: "fire", chance: 0.08 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
+  demon: [{ kind: "arrow", type: "fire", chance: 0.12 }, { kind: "arrow", type: "shock", chance: 0.05 }],
+  skeleton: [{ kind: "arrow", type: "piercing", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.04 }],
+  skeleton_archer: [{ kind: "arrow", type: "piercing", chance: 0.14 }, { kind: "arrow", type: "double", chance: 0.06 }],
+  hauler: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.07 }],
+  ghoul: [{ kind: "arrow", type: "barbed", chance: 0.07 }, { kind: "potion", id: "potion_tonic", chance: 0.05 }],
+  wight: [{ kind: "arrow", type: "ice", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.05 }],
+  wraith: [{ kind: "arrow", type: "shock", chance: 0.09 }, { kind: "arrow", type: "silver", chance: 0.06 }],
+  vampire: [{ kind: "arrow", type: "silver", chance: 0.1 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
+  vampire_lord: [{ kind: "arrow", type: "silver", chance: 0.14 }, { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.06 }],
+  lich: [{ kind: "arrow", type: "ice", chance: 0.1 }, { kind: "arrow", type: "poison", chance: 0.08 }],
+  bat: [{ kind: "arrow", type: "poison", chance: 0.04 }],
+  spider: [{ kind: "arrow", type: "poison", chance: 0.08 }],
+  giant_spider: [{ kind: "arrow", type: "poison", chance: 0.12 }, { kind: "potion", id: "potion_tonic", chance: 0.07 }],
+  orc: [{ kind: "arrow", type: "iron", chance: 0.1 }, { kind: "arrow", type: "barbed", chance: 0.05 }],
+  ogre: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.08 }],
+  troll: [{ kind: "arrow", type: "iron", chance: 0.09 }, { kind: "potion", id: "potion_salve", chance: 0.09 }],
+  boss_grunt: [{ kind: "arrow", type: "steel", chance: 0.45 }, { kind: "potion", id: "potion_bandage", chance: 0.35 }],
+  boss_warden: [{ kind: "arrow", type: "shock", chance: 0.4 }, { kind: "potion", id: "potion_tonic", chance: 0.3 }],
+  boss_wraith: [{ kind: "arrow", type: "silver", chance: 0.45 }, { kind: "arrow", type: "ice", chance: 0.3 }],
+  boss_death_knight: [{ kind: "arrow", type: "steel", chance: 0.4 }, { kind: "arrow", type: "piercing", chance: 0.35 }],
+  boss_lich_king: [{ kind: "arrow", type: "ice", chance: 0.5 }, { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.4 }],
+  boss_spider_queen: [{ kind: "arrow", type: "poison", chance: 0.5 }, { kind: "potion", id: "potion_tonic", chance: 0.35 }],
+};
+
+const POTION_LABELS = {
+  potion_salve: "Herbal Remedy",
+  potion_bandage: "Field Bandage",
+  potion_tonic: "Clearing Tonic",
+};
+const TRINKET_LABELS = {
+  trinket_lucky_tooth: "Lucky Tooth",
+};
+
+function rollEnemyItemDrop(type) {
+  const table = ENEMY_LOOT[type];
+  if (!table || !table.length) return null;
+  for (const entry of table) {
+    if (Math.random() >= (entry.chance || 0)) continue;
+    if (entry.kind === "arrow") {
+      return { kind: "arrow", type: entry.type, level: 1, label: getArrowDef(entry.type).name || entry.type };
+    }
+    if (entry.kind === "potion") {
+      return { kind: "potion", itemId: entry.id, label: POTION_LABELS[entry.id] || entry.id };
+    }
+    if (entry.kind === "trinket") {
+      return { kind: "trinket", itemId: entry.id, label: TRINKET_LABELS[entry.id] || entry.id };
+    }
+  }
+  return null;
+}
+
+/** ~25% chance of a hall floor find after a clear. */
+function rollGroundFind(floorIndex, elevatorIndex) {
+  if (Math.random() >= 0.25) return null;
+  const r = Math.random();
+  if (r < 0.45) {
+    const amount = 2 + Math.floor(Math.random() * 4) + Math.floor(floorIndex / 2) + elevatorIndex;
+    return { kind: "coins", amount, label: `${amount} coin`, detail: "Loose purse on the stones." };
+  }
+  if (r < 0.8) {
+    const arrows = ["flint", "fire", "ice", "poison", "piercing", "iron", "double"];
+    const type = arrows[Math.floor(Math.random() * arrows.length)];
+    const score = lootProgressScore(floorIndex, elevatorIndex);
+    const cap = arrowLevelCapForProgress(score, { shop: false });
+    const level = rollArrowLevel(Math.random, cap, { favorHigh: false });
+    const def = getArrowDef(type);
+    return {
+      kind: "arrow",
+      type,
+      level,
+      label: level > 1 ? `${def.name} Lv${level}` : def.name,
+      detail: "A shaft kicked under a flagstone.",
+    };
+  }
+  const pots = ["potion_salve", "potion_bandage", "potion_tonic"];
+  const id = pots[Math.floor(Math.random() * pots.length)];
+  return { kind: "potion", itemId: id, label: POTION_LABELS[id] || id, detail: "A vial half-buried in grit." };
+}
 
 const BEHAVIOR_MAP = {
   slime: "advance", slime_large: "advance", slime_huge: "advance",
@@ -249,6 +354,12 @@ export class CorridorSim {
     this.waveActive = false;
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
+    this.waveLootLog = [];
+    this.pendingWaveReport = null;
+    this.lootPending = false;
+    this._lootDelayT = -1;
+    this._afterLootAction = null;
+    this.runStash = { arrows: [], items: [] };
     this.runTime = 0;
     this.running = false;
     this._listeners = new Map();
@@ -265,7 +376,7 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnFrom = 0;
     this.turnT = 0;
-    this.turnDur = 0.78;
+    this.turnDur = 0.92;
     this.turnU = 0;
     this.turning = false;
     this._forwardCommit = false;
@@ -284,6 +395,12 @@ export class CorridorSim {
     this._pendingEncounter = null;
     this._waveSoulBonus = 0;
     this.pendingLoot = null;
+    this.waveLootLog = [];
+    this.pendingWaveReport = null;
+    this.lootPending = false;
+    this._lootDelayT = -1;
+    this._afterLootAction = null;
+    this.runStash = { arrows: [], items: [] };
     this.floorIndex = 0;
     this.sectionIndex = 0;
     this.elevatorIndex = 0;
@@ -335,6 +452,12 @@ export class CorridorSim {
     this.pathPts = [{ x: 0, y: 0 }];
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
+    this.waveLootLog = [];
+    this.pendingWaveReport = null;
+    this.lootPending = false;
+    this._lootDelayT = -1;
+    this._afterLootAction = null;
+    this.runStash = { arrows: [], items: [] };
     this.waveGroups = [];
     this.groupGap = 0;
     this.floorIndex = 0;
@@ -366,6 +489,20 @@ export class CorridorSim {
       return;
     }
 
+    if (this.lootPending || this._lootDelayT > 0) {
+      if (this._lootDelayT > 0) {
+        this._lootDelayT -= this.dt;
+        if (this._lootDelayT <= 0) {
+          this._lootDelayT = -1;
+          this.lootPending = true;
+          this.emit("wave_loot", { report: this.pendingWaveReport });
+        }
+      }
+      // Hold still while the hall report is up.
+      this._tickSpawning();
+      return;
+    }
+
     if (this.turning) {
       this.turnT += this.dt;
       this.turnU = Math.min(1, this.turnT / this.turnDur);
@@ -374,7 +511,7 @@ export class CorridorSim {
       const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
       this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
       // Walk into the corner while yawing — not a standing spin.
-      const step = CONFIG.PLAYER_SPEED * (1.15 + Math.sin(u * Math.PI) * 0.55);
+      const step = CONFIG.PLAYER_SPEED * (1.05 + Math.sin(u * Math.PI) * 0.85);
       this.playerWorldZ += step;
       const rad = ((this.heading + this.turnAngle) * Math.PI) / 180;
       this.mapX += Math.sin(rad) * step;
@@ -404,7 +541,7 @@ export class CorridorSim {
     } else if (this._approachingJunction || this._approachingElevator) {
       // Sprint to the fork / elevator shaft after a clear — never choose from mid-hall.
       const stopAt = this.segmentEndZ - JUNCTION_STOP;
-      const step = CONFIG.PLAYER_SPEED * 14;
+      const step = CONFIG.PLAYER_SPEED * 8.5;
       const nextZ = Math.min(stopAt, this.playerWorldZ + step);
       const moved = nextZ - this.playerWorldZ;
       this.playerWorldZ = nextZ;
@@ -468,7 +605,7 @@ export class CorridorSim {
     b.t -= this.dt;
     if (b.t > 0) return;
     this._pendingBurst = null;
-    if (this.state.phase !== "run" || this.junctionPending || this.turning || this._approachingJunction || this._approachingElevator) return;
+    if (this.state.phase !== "run" || this.lootPending || this._lootDelayT > 0 || this.junctionPending || this.turning || this._approachingJunction || this._approachingElevator) return;
     const arrow = this.quiver.fireArrow();
     if (!arrow) return;
     this.state.arrowsFired++;
@@ -559,10 +696,10 @@ export class CorridorSim {
 
   _showJunction() {
     if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
-    this.pendingLoot = this._rollWaveLoot();
+    this.pendingLoot = null;
     this.junctionPending = true;
     this.movingForward = false;
-    this.emit("junction_show", { choices: this.junctionChoices, loot: this.pendingLoot });
+    this.emit("junction_show", { choices: this.junctionChoices, loot: null });
   }
 
   chooseJunction(direction) {
@@ -655,6 +792,7 @@ export class CorridorSim {
     this.groupGap = 0.2;
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
+    this.waveLootLog = [];
     this.quiver.shuffleForWave();
     this._rollJunction();
     this.emit("wave_start", {
@@ -765,22 +903,15 @@ export class CorridorSim {
 
     if (this.waveGroups.length === 0 && this.enemies.length === 0) {
       this.waveActive = false;
-      this._recoverArrows();
-      if (this._waveSoulBonus) {
-        this.state.awardKillSouls(this._waveSoulBonus);
-        this._waveSoulBonus = 0;
-      }
-      this.emit("wave_end", { wave: this.waveIndex });
       if (this._finalBoss) {
-        this.state.victory();
+        this._beginWaveLootSequence("victory");
         return;
       }
-      // Floor 10 last hall → forced elevator (cannot fork past the shaft).
       if (this._isElevatorGate()) {
-        this._beginApproachToElevator();
+        this._beginWaveLootSequence("elevator");
         return;
       }
-      this._beginApproachToJunction();
+      this._beginWaveLootSequence("junction");
     }
   }
 
@@ -872,18 +1003,6 @@ export class CorridorSim {
     this.waveSpentArrows = [];
     this.quiver.shuffleForWave();
     this.emit("wave_start", { wave: this.waveIndex, floor: 0, section: 0, finalBoss: true });
-  }
-
-  /** Spent arrows may return to the quiver; chance from Luck (base 90%). */
-  _recoverArrows() {
-    const spent = this.waveSpentArrows || [];
-    this.waveSpentArrows = [];
-    this.waveArrowsFired = 0;
-    const chance = this.state.getArrowReturnChance();
-    for (const a of spent) {
-      if (Math.random() >= chance) continue;
-      if (!this.quiver.addToQuiver(a)) this.quiver.addToStorage(a);
-    }
   }
 
   // ─── Enemies ─────────────────────────────────────────────
@@ -1129,7 +1248,21 @@ export class CorridorSim {
     this.state.enemiesKilled++;
     const coins = rollEnemyCoins(e.type);
     this.state.awardKillSouls(coins);
-    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist, coins });
+    const drop = rollEnemyItemDrop(e.type);
+    if (drop && drop.kind === "arrow") {
+      const score = lootProgressScore(this.floorIndex, this.elevatorIndex);
+      const cap = arrowLevelCapForProgress(score, { shop: false });
+      drop.level = rollArrowLevel(Math.random, Math.max(1, cap - 1), { favorHigh: false });
+      const adef = getArrowDef(drop.type);
+      drop.label = drop.level > 1 ? `${adef.name} Lv${drop.level}` : adef.name;
+    }
+    this.waveLootLog = this.waveLootLog || [];
+    this.waveLootLog.push({
+      name: enemyDisplayName(e.type),
+      coins,
+      drop,
+    });
+    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist, coins, drop });
     if (def?.splitTo && !e._splitDone) {
       for (let s = 0; s < (def.splitCount || 2); s++) {
         const side = s ? 1 : -1;
@@ -1148,70 +1281,168 @@ export class CorridorSim {
     this.enemies.splice(index, 1);
   }
 
-  /** End-of-wave loot offered on the path-choice screen. */
-  _rollWaveLoot() {
-    const roll = Math.random();
-    // ~40% nothing — keeps forks clean early.
-    if (roll < 0.40) return null;
-    const r = Math.random();
-    if (r < 0.42) {
-      const amount = 2 + Math.floor(Math.random() * 5) + this.floorIndex + this.elevatorIndex;
-      return { kind: "coins", amount, label: `${amount} coin`, detail: "Loose purse from the hall." };
+  /** Spent arrows may return; wood never overflows to storage. */
+  _recoverArrows() {
+    const spent = this.waveSpentArrows || [];
+    this.waveSpentArrows = [];
+    this.waveArrowsFired = 0;
+    const chance = this.state.getArrowReturnChance();
+    const returned = [];
+    const broken = [];
+    for (const a of spent) {
+      if (Math.random() >= chance) {
+        broken.push({ type: a.type, level: a.level || 1 });
+        continue;
+      }
+      if (this.quiver.addToQuiver(a)) {
+        returned.push({ type: a.type, level: a.level || 1, where: "quiver" });
+      } else if (!this.quiver.isWoodType(a.type)) {
+        this.addToRunStashArrow(a);
+        returned.push({ type: a.type, level: a.level || 1, where: "stash" });
+      } else {
+        // Wood with a full quiver — shaft left behind.
+        broken.push({ type: a.type, level: a.level || 1, reason: "no_room" });
+      }
     }
-    if (r < 0.72) {
-      const arrows = ["fire", "ice", "poison", "piercing", "double", "flint", "iron"];
-      const arrow = arrows[Math.floor(Math.random() * arrows.length)];
-      const def = getArrowDef(arrow);
-      const score = lootProgressScore(this.floorIndex, this.elevatorIndex);
-      const cap = arrowLevelCapForProgress(score, { shop: false });
-      const level = rollArrowLevel(Math.random, cap, { favorHigh: false });
+    return { returned, broken };
+  }
+
+  addToRunStashArrow(arrow) {
+    if (!this.runStash) this.runStash = { arrows: [], items: [] };
+    if (this.quiver.isWoodType(arrow?.type)) return false;
+    this.runStash.arrows.push({ type: arrow.type, level: arrow.level || 1 });
+    return true;
+  }
+
+  addToRunStashItem(item) {
+    if (!this.runStash) this.runStash = { arrows: [], items: [] };
+    this.runStash.items.push(item);
+    return true;
+  }
+
+  /** Permanent keep: escape / victory. */
+  commitRunStash() {
+    const stash = this.runStash || { arrows: [], items: [] };
+    for (const a of stash.arrows || []) {
+      if (!this.quiver.isWoodType(a.type)) this.quiver.addToStorage(a);
+    }
+    if (!this.state.ownedItems) this.state.ownedItems = [];
+    for (const it of stash.items || []) {
+      if (it.kind === "potion" && it.itemId) {
+        if (!this.state.ownedItems.includes(it.itemId)) this.state.ownedItems.push(it.itemId);
+        const pouch = this.state.pouch || [];
+        const empty = pouch.findIndex((s) => !s);
+        if (empty >= 0) this.state.pouch[empty] = it.itemId;
+      } else if (it.itemId) {
+        if (!this.state.ownedItems.includes(it.itemId)) this.state.ownedItems.push(it.itemId);
+      }
+    }
+    this.runStash = { arrows: [], items: [] };
+  }
+
+  /** Death: run stash is lost in the dark. */
+  discardRunStash() {
+    this.runStash = { arrows: [], items: [] };
+  }
+
+  /** Try quiver / pouch; overflow goes to run stash (not wood). */
+  _collectLootPiece(piece) {
+    if (!piece) return { status: "none" };
+    if (piece.kind === "coins") {
+      this.state.awardKillSouls(piece.amount || 0);
+      return { status: "taken", label: piece.label };
+    }
+    if (piece.kind === "arrow") {
+      const arrow = { type: piece.type || piece.arrow, level: piece.level || 1 };
+      if (this.quiver.addToQuiver(arrow)) return { status: "quiver", label: piece.label };
+      if (this.addToRunStashArrow(arrow)) return { status: "stash", label: piece.label };
+      return { status: "lost", label: piece.label };
+    }
+    if (piece.kind === "potion") {
+      const pouch = this.state.pouch || [];
+      const empty = pouch.findIndex((s) => !s);
+      if (empty >= 0) {
+        if (!this.state.ownedItems) this.state.ownedItems = [];
+        if (!this.state.ownedItems.includes(piece.itemId)) this.state.ownedItems.push(piece.itemId);
+        this.state.pouch[empty] = piece.itemId;
+        return { status: "pouch", label: piece.label };
+      }
+      this.addToRunStashItem({ kind: "potion", itemId: piece.itemId, label: piece.label });
+      return { status: "stash", label: piece.label };
+    }
+    if (piece.kind === "trinket" || piece.kind === "gear") {
+      this.addToRunStashItem({ kind: piece.kind, itemId: piece.itemId, label: piece.label });
+      return { status: "stash", label: piece.label };
+    }
+    return { status: "none" };
+  }
+
+  _buildWaveReport(recovery) {
+    const kills = [...(this.waveLootLog || [])];
+    this.waveLootLog = [];
+    const ground = rollGroundFind(this.floorIndex, this.elevatorIndex);
+    const broken = (recovery?.broken || []).map((a) => {
+      const def = getArrowDef(a.type);
       return {
-        kind: "arrow",
-        arrow,
-        level,
-        label: level > 1 ? `${def.name || arrow} Lv${level}` : (def.name || arrow),
-        detail: def.desc || "A spare shaft for the chest.",
-        color: def.color,
+        type: a.type,
+        level: a.level || 1,
+        label: (a.level || 1) > 1 ? `${def.name} Lv${a.level}` : def.name,
+        reason: a.reason || "broke",
       };
-    }
-    if (r < 0.90) {
-      const pots = [
-        { id: "potion_salve", label: "Herbal Remedy", detail: "Bitter herbs for the pouch." },
-        { id: "potion_bandage", label: "Field Bandage", detail: "Wraps a wound between halls." },
-        { id: "potion_tonic", label: "Clearing Tonic", detail: "Burns out contact venom." },
-      ];
-      const pot = pots[Math.floor(Math.random() * pots.length)];
-      return { kind: "potion", itemId: pot.id, label: pot.label, detail: pot.detail };
-    }
-    // Rare scrap of gear — cheap hide scrap as armour token id handled in main.
+    });
     return {
-      kind: "gear",
-      itemId: "trinket_lucky_tooth",
-      label: "Lucky Tooth",
-      detail: "A goblin charm. Stow it with your kit.",
+      kills,
+      ground,
+      broken,
+      returned: recovery?.returned || [],
     };
+  }
+
+  _beginWaveLootSequence(nextAction) {
+    const recovery = this._recoverArrows();
+    if (this._waveSoulBonus) {
+      this.state.awardKillSouls(this._waveSoulBonus);
+      this._waveSoulBonus = 0;
+    }
+    this.pendingWaveReport = this._buildWaveReport(recovery);
+    this._afterLootAction = nextAction;
+    this._lootDelayT = 0.5;
+    this.lootPending = false;
+    this.movingForward = false;
+    this.emit("wave_end", { wave: this.waveIndex });
+  }
+
+  /** Player closed the hall spoils panel — collect picks and resume approach. */
+  acknowledgeWaveLoot() {
+    if (!this.lootPending && this._lootDelayT < 0) return;
+    this.lootPending = false;
+    this._lootDelayT = -1;
+    const report = this.pendingWaveReport;
+    this.pendingWaveReport = null;
+    if (report) {
+      for (const k of report.kills || []) {
+        if (k.drop) this._collectLootPiece(k.drop);
+      }
+      if (report.ground) this._collectLootPiece(report.ground);
+    }
+    this.emit("wave_loot_done", { report });
+    const next = this._afterLootAction;
+    this._afterLootAction = null;
+    if (next === "elevator") this._beginApproachToElevator();
+    else if (next === "victory") this.state.victory();
+    else this._beginApproachToJunction();
+  }
+
+  /** End-of-wave hall spoils (legacy single roll — unused; ground finds cover this). */
+  _rollWaveLoot() {
+    return null;
   }
 
   claimPendingLoot() {
     const loot = this.pendingLoot;
     if (!loot) return null;
     this.pendingLoot = null;
-    if (loot.kind === "coins") {
-      this.state.awardKillSouls(loot.amount || 0);
-    } else if (loot.kind === "arrow" && loot.arrow) {
-      this.quiver.addToStorage({ type: loot.arrow, level: loot.level || 1 });
-    } else if (loot.kind === "potion" && loot.itemId) {
-      if (!this.state.ownedItems) this.state.ownedItems = [];
-      if (!this.state.ownedItems.includes(loot.itemId)) this.state.ownedItems.push(loot.itemId);
-      const pouch = this.state.pouch || [];
-      const empty = pouch.findIndex((s) => !s);
-      if (empty >= 0) {
-        this.state.pouch[empty] = loot.itemId;
-      }
-    } else if (loot.kind === "gear" && loot.itemId) {
-      if (!this.state.ownedItems) this.state.ownedItems = [];
-      if (!this.state.ownedItems.includes(loot.itemId)) this.state.ownedItems.push(loot.itemId);
-    }
+    this._collectLootPiece(loot.kind === "arrow" ? { ...loot, type: loot.arrow } : loot);
     this.emit("loot_claimed", { loot });
     return loot;
   }
@@ -1220,6 +1451,36 @@ export class CorridorSim {
     if (!this.pendingLoot) return;
     this.pendingLoot = null;
     this.emit("loot_skipped");
+  }
+
+  /**
+   * Discard a loaded quiver shaft into the run stash (confirm in UI).
+   * Wood is destroyed — never stashed.
+   */
+  discardQuiverArrowToStash(quiverIndex) {
+    const loaded = this.quiver.peekQuiver();
+    if (quiverIndex < 0 || quiverIndex >= loaded.length) return { ok: false };
+    const arrow = loaded[quiverIndex];
+    if (this.quiver.isWoodType(arrow.type)) {
+      // Snap wood shafts — they are never stored.
+      if (quiverIndex < this.quiver.queue.length) this.quiver.queue.splice(quiverIndex, 1);
+      else this.quiver.deck.splice(quiverIndex - this.quiver.queue.length, 1);
+      return { ok: true, destroyed: true, arrow };
+    }
+    if (quiverIndex < this.quiver.queue.length) this.quiver.queue.splice(quiverIndex, 1);
+    else this.quiver.deck.splice(quiverIndex - this.quiver.queue.length, 1);
+    this.addToRunStashArrow(arrow);
+    return { ok: true, destroyed: false, arrow };
+  }
+
+  discardPouchToStash(slotIndex) {
+    const pouch = this.state.pouch || [];
+    const id = pouch[slotIndex];
+    if (!id) return { ok: false };
+    this.state.pouch[slotIndex] = null;
+    const label = POTION_LABELS[id] || id;
+    this.addToRunStashItem({ kind: "potion", itemId: id, label });
+    return { ok: true, itemId: id };
   }
 
   /**
@@ -1489,6 +1750,7 @@ export class CorridorSim {
    * @param {(worldX:number, dist:number) => {x:number,y:number,s?:number}} projectFn
    */
   tryDaggerAt(cssX, cssY, projectFn) {
+    if (this.lootPending || this._lootDelayT > 0) return false;
     if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return false;
     if (this.state.phase !== "run") return false;
     if (!this.state.equipped?.dagger) return false;
@@ -1545,6 +1807,7 @@ export class CorridorSim {
   }
 
   fireArrow(trajectory) {
+    if (this.lootPending || this._lootDelayT > 0) return null;
     if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return null;
     if (this.state.phase !== "run") return null;
     if (this.state.arrowCooldown > 0) return null;

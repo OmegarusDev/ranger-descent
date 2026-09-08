@@ -2,10 +2,10 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
-import { DungeonView } from "./engine/DungeonView.js?v=42";
+import { DungeonView } from "./engine/DungeonView.js?v=43";
 import { CONFIG } from "./data/config.js?v=30";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=37";
-import { CorridorSim } from "./game/CorridorSim.js?v=62";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js?v=38";
+import { CorridorSim } from "./game/CorridorSim.js?v=63";
 import { InputHandler } from "./game/InputHandler.js?v=17";
 import { STAT_INFO } from "./game/GameStateManager.js?v=43";
 
@@ -31,7 +31,6 @@ const phaseHub = $("#phase-hub");
 const phaseRun = $("#phase-run");
 const phaseDeath = $("#phase-death");
 const soulsEl = $("#souls-display");
-const quiverEl = $("#quiver-display");
 const hpFill = $("#hp-fill");
 const hpText = $("#hp-text");
 const waveEl = $("#wave-display");
@@ -74,14 +73,10 @@ function setPathChoice(on) {
   if (!active) {
     input.choiceMode = false;
     delete pathChoice.dataset.sig;
-    pathChoice.classList.remove("has-loot");
     return;
   }
   input.choiceMode = true;
-  const loot = sim.pendingLoot;
-  const lootSig = loot ? `${loot.kind}:${loot.label || loot.amount || loot.itemId || ""}:lv${loot.level || 0}` : "none";
-  // Avoid rebuilding button HTML every RAF (flicker / lost taps).
-  const sig = `${(sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|")}|${lootSig}`;
+  const sig = (sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|");
   if (wasActive && pathChoice.dataset.sig === sig) {
     const escapeSouls = document.getElementById("escape-souls");
     if (escapeSouls) {
@@ -91,13 +86,6 @@ function setPathChoice(on) {
     return;
   }
   pathChoice.dataset.sig = sig;
-  pathChoice.classList.toggle("has-loot", !!loot);
-  const lootTitle = document.getElementById("path-loot-title");
-  const lootDetail = document.getElementById("path-loot-detail");
-  if (loot && lootTitle) {
-    lootTitle.textContent = loot.kind === "coins" ? coinLabel(loot.amount) : (loot.label || "Spoils");
-    if (lootDetail) lootDetail.textContent = loot.detail || "";
-  }
 
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   const labels = { left: "‹ Left", forward: "Ahead", right: "Right ›" };
@@ -128,19 +116,12 @@ function setPathChoice(on) {
   }
 }
 
-function refreshPathLootUi() {
-  if (!pathChoice || !pathChoice.classList.contains("active")) return;
-  delete pathChoice.dataset.sig;
-  setPathChoice(true);
-  saveGame();
-}
-
 function escapeToSurface() {
   if (sim.state.phase !== "run" || !sim.junctionPending) return;
-  sim.skipPendingLoot();
   sim.junctionPending = false;
   setPathChoice(false);
   input.choiceMode = false;
+  sim.commitRunStash();
   sim.state.bankSouls();
   sim.quiver.packForHub();
   sim.running = false;
@@ -149,6 +130,114 @@ function escapeToSurface() {
   sim.state.enterHub();
   const hubSouls = document.getElementById("hub-souls");
   if (hubSouls) hubSouls.textContent = sim.state.souls;
+}
+
+function showWaveLoot(report) {
+  const panel = document.getElementById("wave-loot");
+  const body = document.getElementById("wave-loot-body");
+  if (!panel || !body) return;
+  const kills = report?.kills || [];
+  const broken = report?.broken || [];
+  const ground = report?.ground;
+
+  let killHtml = kills.map((k) => {
+    const drop = k.drop ? `<span class="gold">${k.drop.label}</span>` : `<span class="muted">—</span>`;
+    return `<div class="wave-loot-line"><span>${k.name}</span><span><span class="gold">${coinLabel(k.coins)}</span> · ${drop}</span></div>`;
+  }).join("");
+  if (!killHtml) killHtml = `<div class="wave-loot-empty">No foes left spoils worth naming.</div>`;
+
+  let groundHtml = ground
+    ? `<div class="wave-loot-line"><span>${ground.detail || "On the ground"}</span><span class="gold">${ground.kind === "coins" ? coinLabel(ground.amount) : ground.label}</span></div>`
+    : `<div class="wave-loot-empty">Nothing else on the floor.</div>`;
+
+  let brokeHtml = broken.map((b) => {
+    const why = b.reason === "no_room" ? "no room" : "broke";
+    return `<div class="wave-loot-line"><span class="broke">${b.label}</span><span class="muted">${why}</span></div>`;
+  }).join("");
+  if (!brokeHtml) brokeHtml = `<div class="wave-loot-empty">All spent shafts came back.</div>`;
+
+  body.innerHTML = `
+    <div class="wave-loot-section"><h4>From the fallen</h4>${killHtml}</div>
+    <div class="wave-loot-section"><h4>On the ground</h4>${groundHtml}</div>
+    <div class="wave-loot-section"><h4>Broken shafts</h4>${brokeHtml}</div>
+  `;
+  panel.classList.add("active");
+  setPathChoice(false);
+  closeRunBag();
+}
+
+function hideWaveLoot() {
+  const panel = document.getElementById("wave-loot");
+  if (panel) panel.classList.remove("active");
+}
+
+let _runBagPending = null;
+
+function closeRunBag() {
+  const panel = document.getElementById("run-bag");
+  if (panel) {
+    panel.classList.remove("active");
+    panel.setAttribute("aria-hidden", "true");
+  }
+  const conf = document.getElementById("run-bag-confirm");
+  if (conf) conf.classList.remove("active");
+  _runBagPending = null;
+}
+
+function openRunBag() {
+  if (sim.state.phase !== "run") return;
+  if (sim.lootPending || sim._lootDelayT > 0) return;
+  populateRunBag();
+  const panel = document.getElementById("run-bag");
+  if (panel) {
+    panel.classList.add("active");
+    panel.setAttribute("aria-hidden", "false");
+  }
+}
+
+function populateRunBag() {
+  const qEl = document.getElementById("run-bag-quiver");
+  const pEl = document.getElementById("run-bag-pouch");
+  const sEl = document.getElementById("run-bag-stash");
+  if (!qEl || !pEl || !sEl) return;
+  const loaded = sim.quiver.peekQuiver();
+  qEl.innerHTML = loaded.map((a, i) => {
+    const def = getArrowDef(a.type);
+    return `<button type="button" class="run-bag-cell" data-discard-arrow="${i}">
+      <span>${arrowShort(a.type)}</span>
+      <small>Lv${a.level || 1}</small>
+      <small>${isWoodType(a.type) ? "snap" : "stash"}</small>
+    </button>`;
+  }).join("") || `<div class="wave-loot-empty">Quiver empty</div>`;
+
+  const pouch = sim.state.pouch || [];
+  pEl.innerHTML = [0, 1].map((i) => {
+    const id = pouch[i];
+    if (!id) return `<div class="run-bag-cell"><small>empty</small></div>`;
+    const names = { potion_salve: "Remedy", potion_bandage: "Bandage", potion_tonic: "Tonic" };
+    return `<button type="button" class="run-bag-cell" data-discard-pouch="${i}">
+      <span>${names[id] || id}</span>
+      <small>stash</small>
+    </button>`;
+  }).join("");
+
+  const stash = sim.runStash || { arrows: [], items: [] };
+  const bits = [
+    ...(stash.arrows || []).map((a) => {
+      const def = getArrowDef(a.type);
+      return `<div class="run-bag-cell"><span>${arrowShort(a.type)}</span><small>Lv${a.level || 1}</small></div>`;
+    }),
+    ...(stash.items || []).map((it) => `<div class="run-bag-cell"><span>${it.label || it.itemId}</span><small>stashed</small></div>`),
+  ];
+  sEl.innerHTML = bits.join("") || `<div class="wave-loot-empty">Nothing stashed this delve</div>`;
+}
+
+function askRunBagDiscard(pending, text) {
+  _runBagPending = pending;
+  const conf = document.getElementById("run-bag-confirm");
+  const confText = document.getElementById("run-bag-confirm-text");
+  if (confText) confText.textContent = text;
+  if (conf) conf.classList.add("active");
 }
 
 // ─── Input ───────────────────────────────────────────────────
@@ -215,20 +304,24 @@ sim.state.onPhaseChange = (phase) => {
 
   if (phase === "death" || phase === "victory") {
     const stats = sim.state.getRunStats();
+    if (phase === "victory") sim.commitRunStash();
+    else sim.discardRunStash();
     const earned = phase === "victory" ? sim.state.bankSouls() : 0;
     const deathCoin = phase === "death" ? sim.state.discardRunSouls() : null;
     sim.quiver.packForHub();
+    hideWaveLoot();
+    closeRunBag();
     saveGame();
     if (deathStats) {
       const soulLine = phase === "victory"
-        ? `<div style="font-size:1.4em;margin-top:8px;color:#c9a227">+${coinLabel(earned)} banked</div>`
-        : `<div style="font-size:1.15em;margin-top:8px;color:#8a7348">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<br><span style="color:#c9b48a">Vault coin is safe.</span></div>`;
+        ? `<div class="end-coin banked">+${coinLabel(earned)} banked</div>`
+        : `<div class="end-coin">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<span class="end-safe">Vault coin is safe.</span></div>`;
       deathStats.innerHTML = `
-        <div style="font-size:${phase === "victory" ? "1.6em" : "1.15em"};max-width:22em;margin:0 auto;color:${phase === "victory" ? "#5aaf8a" : "#e8dcc4"};line-height:1.45">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall. Most of the delve's coin scatters into the dark."}</div>
-        <div>Reached: <b>${sim.getProgressLabel()}</b></div>
-        <div>Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
-        <div>Kills: <b>${stats.enemiesKilled}</b></div>
-        <div>Arrows: <b>${stats.arrowsFired}</b></div>
+        <div class="end-story ${phase === "victory" ? "victory" : "defeat"}">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall. Most of the delve's coin scatters into the dark."}</div>
+        <div class="end-stat">Reached: <b>${sim.getProgressLabel()}</b></div>
+        <div class="end-stat">Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
+        <div class="end-stat">Kills: <b>${stats.enemiesKilled}</b></div>
+        <div class="end-stat">Arrows: <b>${stats.arrowsFired}</b></div>
         ${soulLine}
       `;
     }
@@ -306,28 +399,25 @@ sim.on("notebook_found", (e) => {
   saveGame();
 });
 
+sim.on("wave_loot", (e) => {
+  showWaveLoot(e.report);
+});
+
+sim.on("wave_loot_done", () => {
+  hideWaveLoot();
+  saveGame();
+});
+
 sim.on("run_start", () => {
   setPathChoice(false);
+  hideWaveLoot();
+  closeRunBag();
   input.reset();
   input.blockUntil = performance.now() + 280;
 });
 
 if (pathChoice) {
   pathChoice.addEventListener("pointerup", (e) => {
-    if (e.target.closest("#btn-loot-take")) {
-      e.preventDefault();
-      e.stopPropagation();
-      sim.claimPendingLoot();
-      refreshPathLootUi();
-      return;
-    }
-    if (e.target.closest("#btn-loot-skip")) {
-      e.preventDefault();
-      e.stopPropagation();
-      sim.skipPendingLoot();
-      refreshPathLootUi();
-      return;
-    }
     if (e.target.closest("#btn-escape")) {
       e.preventDefault();
       e.stopPropagation();
@@ -343,6 +433,57 @@ if (pathChoice) {
     }
   });
 }
+
+document.getElementById("btn-wave-loot-ok")?.addEventListener("click", () => {
+  sim.acknowledgeWaveLoot();
+});
+
+document.getElementById("btn-run-bag")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  openRunBag();
+});
+document.getElementById("btn-run-bag-close")?.addEventListener("click", () => closeRunBag());
+document.getElementById("run-bag")?.addEventListener("click", (e) => {
+  if (e.target.id === "run-bag") closeRunBag();
+  const arrowBtn = e.target.closest("[data-discard-arrow]");
+  if (arrowBtn) {
+    const i = Number(arrowBtn.dataset.discardArrow);
+    const a = sim.quiver.peekQuiver()[i];
+    if (!a) return;
+    const wood = isWoodType(a.type);
+    askRunBagDiscard(
+      { kind: "arrow", index: i },
+      wood
+        ? `Snap this wood shaft? It cannot be stashed.`
+        : `Send ${getArrowDef(a.type).name} to the run stash? Recover it only if you escape.`
+    );
+    return;
+  }
+  const pouchBtn = e.target.closest("[data-discard-pouch]");
+  if (pouchBtn) {
+    const i = Number(pouchBtn.dataset.discardPouch);
+    askRunBagDiscard(
+      { kind: "pouch", index: i },
+      "Send this pouch item to the run stash? Recover it only if you escape."
+    );
+  }
+});
+document.getElementById("btn-run-bag-cancel")?.addEventListener("click", () => {
+  const conf = document.getElementById("run-bag-confirm");
+  if (conf) conf.classList.remove("active");
+  _runBagPending = null;
+});
+document.getElementById("btn-run-bag-confirm")?.addEventListener("click", () => {
+  if (!_runBagPending) return;
+  if (_runBagPending.kind === "arrow") sim.discardQuiverArrowToStash(_runBagPending.index);
+  if (_runBagPending.kind === "pouch") sim.discardPouchToStash(_runBagPending.index);
+  _runBagPending = null;
+  const conf = document.getElementById("run-bag-confirm");
+  if (conf) conf.classList.remove("active");
+  populateRunBag();
+  saveGame();
+});
 
 // ─── UI Buttons ───────────────────────────────────────────────
 function startDungeonRun() {
@@ -933,9 +1074,14 @@ function populatePack(state) {
         onPick: () => {},
       });
       options.push({
-        label: "Store in chest",
-        sub: "Clear this slot",
+        label: isWoodType(current.type) ? "Cannot store wood" : "Store in chest",
+        sub: isWoodType(current.type) ? "Wood shafts stay crafted, never chested" : "Clear this slot",
         onPick: () => {
+          if (isWoodType(current.type)) {
+            packNote = "Wood arrows are never sent to storage.";
+            populateHub();
+            return;
+          }
           q.setQuiverSlot(slotIndex, null);
           saveGame();
           populateHub();
@@ -1335,12 +1481,6 @@ function populateHub() {
 // ─── UI Update ────────────────────────────────────────────────
 function updateUI() {
   if (soulsEl) soulsEl.textContent = sim.state.phase === "run" ? (sim.state.runSouls || 0) : sim.state.souls;
-  if (quiverEl) {
-    const q = sim.quiver;
-    quiverEl.textContent = sim.state.phase === "run"
-      ? `Arrows ${q.quiverCount}`
-      : `Deck ${q.quiverCount}/${q.capacity}`;
-  }
   if (hpFill) hpFill.style.width = `${(sim.state.playerHp / sim.state.playerMaxHp) * 100}%`;
   if (hpText) hpText.textContent = `${Math.ceil(sim.state.playerHp)} / ${sim.state.playerMaxHp}`;
   if (waveEl) waveEl.textContent = sim.getProgressLabel ? sim.getProgressLabel() : `Fl. 1`;
@@ -1371,9 +1511,11 @@ function updateUI() {
         runQuiver.dataset.sig = sig;
         runQuiver.innerHTML = queue.map((a, i) => {
           const def = getArrowDef(a.type);
+          const lv = a.level || 1;
           return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="border-color:${def.color}">
             <div class="rq-mark">${arrowShort(a.type)}</div>
             <div class="rq-tag">${i === 0 ? "Ready" : "Next"}</div>
+            ${lv > 1 ? `<div class="rq-lv">Lv${lv}</div>` : ""}
           </div>`;
         }).join("") || `<div class="run-quiver-card"><div class="rq-mark">—</div><div class="rq-tag">Empty</div></div>`;
       }
@@ -1466,6 +1608,7 @@ function getJunctionView() {
       pending: false,
       choices: sim.junctionChoices,
       turnU: sim.turnU || 0,
+      turnSign: sim._pendingTurnDir === "left" ? -1 : 1,
     };
   }
   if (sim._forwardCommit) {
