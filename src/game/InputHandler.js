@@ -3,10 +3,9 @@
  *
  * Simple: the drag vector in screen space directly becomes the arrow
  * velocity in world space. No camera unprojection needed.
- *   - Drag left/right → arrow lateral velocity
- *   - Drag down → arrow forward (toward enemies, +dist)
- *   - Drag up → arrow backward (away from enemies)
- *   - Power = drag distance
+ *   - Drag left/right → lateral aim
+ *   - Drag distance → power / forward speed
+ *   - Flat XZ shots only (no vertical aim)
  */
 import { CONFIG } from "../data/config.js?v=29";
 

@@ -1046,7 +1046,7 @@ export class DungeonView {
     const dist = p.dist;
     if (dist == null || dist < -6 || dist > FAR) return;
     const ctx = this.ctx;
-    const py = p.y != null ? p.y : 18;
+    const py = 12;
     if (enemy) {
       const sp = this.project(p.x, dist, py);
       const r = Math.max(2.2, 3.2 * sp.s);
@@ -1061,7 +1061,7 @@ export class DungeonView {
       return;
     }
     const tip = this.project(p.x, dist, py);
-    const tail = this.project(p.x, dist + 16, Math.max(4, py - 4));
+    const tail = this.project(p.x, dist + 16, py);
     ctx.save();
     ctx.strokeStyle = "#e8d8b0";
     ctx.lineWidth = Math.max(1.6, 2.4 * tip.s * 0.08);
@@ -1089,7 +1089,7 @@ export class DungeonView {
       const t = trail[i];
       const td = t.dist != null ? t.dist : t.worldZ - this.playerZ;
       if (td < 8) continue;
-      const tp = this.project(t.x, td, t.y != null ? t.y : 16);
+      const tp = this.project(t.x, td, py);
       ctx.globalAlpha = ((i + 1) / trail.length) * 0.28;
       ctx.fillStyle = "#e8d8b0";
       ctx.fillRect(tp.x, tp.y, 2, 2);

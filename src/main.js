@@ -2,12 +2,12 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
-import { DungeonView } from "./engine/DungeonView.js?v=41";
+import { DungeonView } from "./engine/DungeonView.js?v=42";
 import { CONFIG } from "./data/config.js?v=30";
 import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=34";
 import { STAT_INFO } from "./game/GameStateManager.js?v=40";
-import { CorridorSim } from "./game/CorridorSim.js?v=52";
-import { InputHandler } from "./game/InputHandler.js?v=15";
+import { CorridorSim } from "./game/CorridorSim.js?v=54";
+import { InputHandler } from "./game/InputHandler.js?v=17";
 
 /** Player-facing coin mark (colon sign — C with bars). */
 const COIN = "₡";

@@ -88,11 +88,11 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
   };
 }
 
-function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, y = 18, vy = 0, level = 1) {
+function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, level = 1) {
   const def = getArrowDef(element);
   const pierceRanks = def.pierce != null ? def.pierce : 0;
   return {
-    id: _nextId++, x: worldX, worldZ, y, vx, vz, vy,
+    id: _nextId++, x: worldX, worldZ, vx, vz,
     damage, fireDamage: getArrowFireDamage(element, level), iceDamage: getArrowIceDamage(element, level),
     element: element || "normal", ownerId, level: level || 1,
     life: 4,
@@ -104,8 +104,8 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, y = 
   };
 }
 
-/** World-space body size matching DungeonView silhouette (width × height). */
-export function enemyBodyDims(e) {
+/** Flat XZ hit size from silhouette width (no height / headshots). */
+export function enemyHitWidth(e) {
   const sz = e.size || 1;
   const type = e.type || "";
   const flying = !!(e.flying || e.behavior === "hover");
@@ -116,9 +116,7 @@ export function enemyBodyDims(e) {
   else if (type.includes("boss")) h = 34 + sz * 5;
   else h = 20 + sz * 8;
   const aspect = flying ? 1.15 : type.includes("slime") ? 1.35 : 0.58;
-  const w = h * aspect;
-  const footY = flying ? 20 : 0;
-  return { w, h, flying, footY };
+  return h * aspect;
 }
 
 const CONTACT_DIST = 30;
@@ -423,7 +421,7 @@ export class CorridorSim {
       this.playerWorldX, this.playerWorldZ + 18,
       b.vx, b.vz,
       getArrowDamage(arrow.type, arrow.level), arrow.type, "player",
-      16, b.vy || 0, arrow.level
+      b.level || arrow.level
     ));
   }
 
@@ -1083,9 +1081,8 @@ export class CorridorSim {
       const p = this.projectiles[i];
       p.x += p.vx * this.dt;
       p.worldZ += p.vz * this.dt;
-      if (p.vy) p.y = (p.y ?? 18) + p.vy * this.dt;
       p.life -= this.dt;
-      p._trail.push({ x: p.x, worldZ: p.worldZ, y: p.y ?? 18 });
+      p._trail.push({ x: p.x, worldZ: p.worldZ });
       if (p._trail.length > 8) p._trail.shift();
 
       const relDist = p.worldZ - this.playerWorldZ;
@@ -1096,17 +1093,11 @@ export class CorridorSim {
       for (let j = this.enemies.length - 1; j >= 0; j--) {
         const e = this.enemies[j];
         if (p._hitIds && p._hitIds.includes(e.id)) continue;
-        const body = enemyBodyDims(e);
-        const halfW = body.w * 0.5;
-        // Thin depth slab so lateral + height aim matter; thickness scales with width.
-        const halfD = Math.max(4, body.w * 0.28);
-        const yLo = body.flying ? body.footY - body.h * 0.35 : 0;
-        const yHi = body.flying ? body.footY + body.h * 0.55 : body.h;
+        const halfW = enemyHitWidth(e) * 0.5;
+        const halfD = Math.max(6, halfW * 0.64);
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
-        const py = p.y ?? 18;
         if (Math.abs(dx) > halfW || Math.abs(ddist) > halfD) continue;
-        if (py < yLo || py > yHi) continue;
         {
           if (!p._hitIds) p._hitIds = [];
           p._hitIds.push(e.id);
@@ -1313,15 +1304,13 @@ export class CorridorSim {
     const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
     const vx = aim.x * spd * 0.35;
     const vz = spd * 0.75;
-    // aim.y is up-negative in slingshot space → raise arrow height when aiming up.
-    const vy = -(aim.y || -1) * spd * 0.12;
 
     const dmg = getArrowDamage(arrow.type, arrow.level);
     const proj = createProjectile(
       this.playerWorldX, this.playerWorldZ + 18,
       vx, vz,
       dmg, arrow.type, "player",
-      16, vy, arrow.level
+      arrow.level
     );
     this.projectiles.push(proj);
     this.emit("arrow_fire", { arrow, projectile: proj });
@@ -1330,12 +1319,12 @@ export class CorridorSim {
         this.playerWorldX, this.playerWorldZ + 18,
         vx * 1.08 + 18, vz * 0.96,
         Math.max(1, Math.floor(dmg * 0.9)), "wood", "player",
-        16, vy, arrow.level
+        arrow.level
       ));
     }
 
     if (this.state.consumeBurst()) {
-      this._pendingBurst = { t: 0.08, vx: vx * 1.1, vz: vz * 1.1, vy, level: arrow.level };
+      this._pendingBurst = { t: 0.08, vx: vx * 1.1, vz: vz * 1.1, level: arrow.level };
     }
     return arrow;
   }
