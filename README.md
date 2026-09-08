@@ -6,11 +6,18 @@
     <img src="https://img.shields.io/badge/▶_PLAY_NOW-playable_in_browser-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Play Now" height="40" />
   </a>
 </p>
-<p align="center"><strong>No install.</strong> Works in the browser (desktop & mobile).</p>
+<p align="center"><strong>Installable PWA.</strong> On Android Chrome: Open site → menu → <em>Install app</em> / Add to Home screen. It updates itself each time you open it (when online).</p>
 
 # Ranger's Descent
 
 A roguelite dungeon crawler with on-rails corridor combat. You are the last Ranger — an archer bound to an endless descent through a shifting dungeon. Slingshot arrows at waves of enemies, navigate branching corridors, and grow stronger with every run.
+
+## Install (WebAPK / home screen)
+
+1. Open [the live game](https://omegarusdev.github.io/ranger-descent/) in **Chrome** (Android) or Safari (iOS).
+2. **Android:** browser menu → **Install app** / **Add to Home screen** — Chrome builds a lightweight WebAPK.
+3. **iOS:** Share → **Add to Home Screen**.
+4. Each cold open checks the live site for a new build and reloads onto it when online.
 
 ## Features
 
