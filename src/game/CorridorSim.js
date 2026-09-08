@@ -1,4 +1,4 @@
-import { CONFIG } from "../data/config.js?v=29";
+import { CONFIG } from "../data/config.js?v=30";
 import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=34";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
