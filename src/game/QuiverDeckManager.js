@@ -144,7 +144,7 @@ export class QuiverDeckManager {
     this.deck = [];
     this.queue = [];
     this.storage = [];
-    this.capacity = 10;
+    this.capacity = 8;
     this._shuffleDelay = 0;
     this._shuffling = false;
     this._seeded = false;

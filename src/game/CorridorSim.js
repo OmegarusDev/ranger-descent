@@ -2,7 +2,7 @@ import { CONFIG } from "../data/config.js?v=26";
 import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=31";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=34";
+import { GameStateManager } from "./GameStateManager.js?v=37";
 
 let _nextId = 1;
 
@@ -86,15 +86,32 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
   };
 }
 
-function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId) {
+function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, y = 18, vy = 0) {
   return {
-    id: _nextId++, x: worldX, worldZ, vx, vz,
+    id: _nextId++, x: worldX, worldZ, y, vx, vz, vy,
     damage, element: element || "normal", ownerId,
     life: 4,
     pierceLeft: element === "piercing" ? 3 : 1,
     _hitIds: [],
     _trail: [],
   };
+}
+
+/** World-space body size matching DungeonView silhouette (width × height). */
+export function enemyBodyDims(e) {
+  const sz = e.size || 1;
+  const type = e.type || "";
+  const flying = !!(e.flying || e.behavior === "hover");
+  let h;
+  if (flying) h = 11 + sz * 5;
+  else if (type.includes("slime")) h = 11 + sz * 8;
+  else if (type.includes("spider")) h = 9 + sz * 6;
+  else if (type.includes("boss")) h = 34 + sz * 5;
+  else h = 20 + sz * 8;
+  const aspect = flying ? 1.15 : type.includes("slime") ? 1.35 : 0.58;
+  const w = h * aspect;
+  const footY = flying ? 20 : 0;
+  return { w, h, flying, footY };
 }
 
 const CONTACT_DIST = 30;
@@ -190,9 +207,12 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnFrom = 0;
     this.turnT = 0;
-    this.turnDur = 0.42;
+    this.turnDur = 0.78;
     this.turnU = 0;
     this.turning = false;
+    this._forwardCommit = false;
+    this._forwardCommitT = 0;
+    this._approachingJunction = false;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -240,6 +260,9 @@ export class CorridorSim {
     this.turnT = 0;
     this.turnU = 0;
     this.turning = false;
+    this._forwardCommit = false;
+    this._forwardCommitT = 0;
+    this._approachingJunction = false;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -280,16 +303,59 @@ export class CorridorSim {
     if (this.turning) {
       this.turnT += this.dt;
       this.turnU = Math.min(1, this.turnT / this.turnDur);
-      const e = this.turnU * this.turnU * (3 - 2 * this.turnU);
+      // Ease-in-out with a slightly heavier settle into the new hall.
+      const u = this.turnU;
+      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
       this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
+      // Walk into the corner while yawing — not a standing spin.
+      const step = CONFIG.PLAYER_SPEED * (1.15 + Math.sin(u * Math.PI) * 0.55);
+      this.playerWorldZ += step;
+      const rad = ((this.heading + this.turnAngle) * Math.PI) / 180;
+      this.mapX += Math.sin(rad) * step;
+      this.mapZ += Math.cos(rad) * step;
+      this.state.playerZ = this.playerWorldZ;
+      this.state.runDistance = this.playerWorldZ;
       if (this.turnU >= 1) {
         this.turnAngle = this.turnTarget;
         this.turning = false;
         this.turnComplete();
       }
+    } else if (this._forwardCommit) {
+      this._forwardCommitT += this.dt;
+      const u = Math.min(1, this._forwardCommitT / 0.38);
+      const step = CONFIG.PLAYER_SPEED * (1.4 + (1 - u) * 0.8);
+      this.playerWorldZ += step;
+      const rad = (this.heading * Math.PI) / 180;
+      this.mapX += Math.sin(rad) * step;
+      this.mapZ += Math.cos(rad) * step;
+      this.state.playerZ = this.playerWorldZ;
+      this.state.runDistance = this.playerWorldZ;
+      if (u >= 1) {
+        this._forwardCommit = false;
+        this._forwardCommitT = 0;
+        this._advanceSegment();
+      }
+    } else if (this._approachingJunction) {
+      // Sprint to the fork after an early clear — don't choose from mid-hall.
+      const stopAt = this.segmentEndZ - JUNCTION_STOP;
+      const step = CONFIG.PLAYER_SPEED * 14;
+      const nextZ = Math.min(stopAt, this.playerWorldZ + step);
+      const moved = nextZ - this.playerWorldZ;
+      this.playerWorldZ = nextZ;
+      const rad = (this.heading * Math.PI) / 180;
+      this.mapX += Math.sin(rad) * moved;
+      this.mapZ += Math.cos(rad) * moved;
+      this.state.playerZ = this.playerWorldZ;
+      this.state.runDistance = this.playerWorldZ;
+      if (this.playerWorldZ >= stopAt - 0.01) {
+        this.playerWorldZ = stopAt;
+        this._approachingJunction = false;
+        this.movingForward = false;
+        this._showJunction();
+      }
     }
 
-    if (this.movingForward && !this.junctionPending && !this.turning) {
+    if (this.movingForward && !this.junctionPending && !this.turning && !this._forwardCommit && !this._approachingJunction) {
       this.playerWorldZ += CONFIG.PLAYER_SPEED;
       const rad = (this.heading * Math.PI) / 180;
       this.mapX += Math.sin(rad) * CONFIG.PLAYER_SPEED;
@@ -400,6 +466,7 @@ export class CorridorSim {
     this.emit("junction_chosen", { direction });
     if (direction === "left" || direction === "right") {
       this.turning = true;
+      this._forwardCommit = false;
       this.turnFrom = 0;
       this.turnAngle = 0;
       this.turnTarget = direction === "left" ? -90 : 90;
@@ -411,13 +478,16 @@ export class CorridorSim {
       this.turnAngle = 0;
       this.turnTarget = 0;
       this.turnU = 0;
-      this._advanceSegment();
+      this._forwardCommit = true;
+      this._forwardCommitT = 0;
+      this.movingForward = false;
     }
   }
 
   turnComplete() {
     if (this._pendingTurnDir === "left") this.heading -= 90;
     else if (this._pendingTurnDir === "right") this.heading += 90;
+    this.heading = ((this.heading % 360) + 360) % 360;
     this.pathPts.push({ x: this.mapX, y: this.mapZ });
     this.turnAngle = 0;
     this.turnTarget = 0;
@@ -545,7 +615,6 @@ export class CorridorSim {
     if (this.waveGroups.length === 0 && this.enemies.length === 0) {
       this.waveActive = false;
       this._recoverArrows();
-      this._closeSegmentToJunction();
       if (this._waveSoulBonus) {
         this.state.awardKillSouls(this._waveSoulBonus);
         this._waveSoulBonus = 0;
@@ -557,8 +626,23 @@ export class CorridorSim {
         this.state.victory();
         return;
       }
-      this._showJunction();
+      this._beginApproachToJunction();
     }
+  }
+
+  /** After the fight, run to the real fork — never choose from mid-corridor. */
+  _beginApproachToJunction() {
+    const stopAt = this.segmentEndZ - JUNCTION_STOP;
+    if (this.playerWorldZ >= stopAt - 1) {
+      this.playerWorldZ = stopAt;
+      this.movingForward = false;
+      this._approachingJunction = false;
+      this._showJunction();
+      return;
+    }
+    this._approachingJunction = true;
+    this.movingForward = true;
+    this.junctionPending = false;
   }
 
   /** Each spent arrow has a 95% chance to return; the rest break. */
@@ -570,14 +654,6 @@ export class CorridorSim {
     for (const a of spent) {
       if (Math.random() >= chance) continue;
       if (!this.quiver.addToQuiver(a)) this.quiver.addToStorage(a);
-    }
-  }
-
-  /** After the fight, the fork sits just ahead — no empty march. */
-  _closeSegmentToJunction() {
-    const ahead = JUNCTION_STOP + 10;
-    if (this.segmentEndZ - this.playerWorldZ > ahead + 24) {
-      this.segmentEndZ = this.playerWorldZ + ahead;
     }
   }
 
@@ -854,8 +930,9 @@ export class CorridorSim {
       const p = this.projectiles[i];
       p.x += p.vx * this.dt;
       p.worldZ += p.vz * this.dt;
+      if (p.vy) p.y = (p.y ?? 18) + p.vy * this.dt;
       p.life -= this.dt;
-      p._trail.push({ x: p.x, worldZ: p.worldZ });
+      p._trail.push({ x: p.x, worldZ: p.worldZ, y: p.y ?? 18 });
       if (p._trail.length > 8) p._trail.shift();
 
       const relDist = p.worldZ - this.playerWorldZ;
@@ -865,11 +942,19 @@ export class CorridorSim {
 
       for (let j = this.enemies.length - 1; j >= 0; j--) {
         const e = this.enemies[j];
+        if (p._hitIds && p._hitIds.includes(e.id)) continue;
+        const body = enemyBodyDims(e);
+        const halfW = body.w * 0.5;
+        // Thin depth slab so lateral + height aim matter; thickness scales with width.
+        const halfD = Math.max(4, body.w * 0.28);
+        const yLo = body.flying ? body.footY - body.h * 0.35 : 0;
+        const yHi = body.flying ? body.footY + body.h * 0.55 : body.h;
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
-        const hitR = (e.size * CONFIG.CELL_SIZE) * 0.7;
-        if (p._hitIds && p._hitIds.includes(e.id)) continue;
-        if (dx * dx + ddist * ddist < hitR * hitR) {
+        const py = p.y ?? 18;
+        if (Math.abs(dx) > halfW || Math.abs(ddist) > halfD) continue;
+        if (py < yLo || py > yHi) continue;
+        {
           if (!p._hitIds) p._hitIds = [];
           p._hitIds.push(e.id);
           const raw = this._calcDamage(p, e);
@@ -1011,7 +1096,7 @@ export class CorridorSim {
   // ─── Arrow Firing ────────────────────────────────────────
 
   fireArrow(trajectory) {
-    if (this.junctionPending || this.turning) return null;
+    if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction) return null;
     if (this.state.phase !== "run") return null;
     if (this.state.arrowCooldown > 0) return null;
     const arrow = this.quiver.fireArrow();
@@ -1026,12 +1111,15 @@ export class CorridorSim {
     const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
     const vx = aim.x * spd * 0.35;
     const vz = spd * 0.75;
+    // aim.y is up-negative in slingshot space → raise arrow height when aiming up.
+    const vy = -(aim.y || -1) * spd * 0.12;
 
     const dmg = getArrowDamage(arrow.type, arrow.level);
     const proj = createProjectile(
       this.playerWorldX, this.playerWorldZ + 18,
       vx, vz,
-      dmg, arrow.type, "player"
+      dmg, arrow.type, "player",
+      16, vy
     );
     this.projectiles.push(proj);
     this.emit("arrow_fire", { arrow, projectile: proj });
@@ -1039,7 +1127,8 @@ export class CorridorSim {
       this.projectiles.push(createProjectile(
         this.playerWorldX, this.playerWorldZ + 18,
         vx * 1.08 + 18, vz * 0.96,
-        dmg, "wood", "player"
+        dmg, "wood", "player",
+        16, vy
       ));
     }
 
@@ -1052,8 +1141,9 @@ export class CorridorSim {
           this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
           this.waveSpentArrows.push({ type: b.type, level: b.level });
           this.projectiles.push(createProjectile(
-            this.playerWorldX, this.playerWorldZ, vx * 1.1, vz * 1.1,
-            getArrowDamage(b.type, b.level), b.type, "player"
+            this.playerWorldX, this.playerWorldZ + 18, vx * 1.1, vz * 1.1,
+            getArrowDamage(b.type, b.level), b.type, "player",
+            16, vy
           ));
         }
       }, 80);

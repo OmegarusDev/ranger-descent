@@ -63,7 +63,7 @@ export const PRAYER_DEFS = [
   {
     id: "prayer_harvest",
     name: "Prayer of Harvest",
-    description: "Doubles Soul drops for a short time.",
+    description: "Doubles coin drops for a short time.",
     cooldown: 18.0,
     duration: 6.0,
     effect: "soul_multiplier",

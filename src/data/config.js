@@ -29,7 +29,7 @@ export const CONFIG = {
   QUEUE_SIZE: 4,
   ARROW_MAX_LEVEL: 5,
 
-  // Souls
+  // Coin
   SOULS_PER_KILL: 1,
 
   // Substrate

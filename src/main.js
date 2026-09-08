@@ -2,13 +2,19 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
-import { DungeonView } from "./engine/DungeonView.js?v=37";
+import { DungeonView } from "./engine/DungeonView.js?v=40";
 import { withAlpha } from "./engine/drawUtil.js";
-import { CorridorSim } from "./game/CorridorSim.js?v=43";
+import { CorridorSim } from "./game/CorridorSim.js?v=47";
 import { InputHandler } from "./game/InputHandler.js?v=14";
-import { CONFIG } from "./data/config.js?v=26";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=31";
-import { STAT_INFO } from "./game/GameStateManager.js?v=34";
+import { CONFIG } from "./data/config.js?v=27";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=32";
+import { STAT_INFO } from "./game/GameStateManager.js?v=37";
+
+/** Player-facing coin mark (colon sign — C with bars). */
+const COIN = "₡";
+function coinLabel(n) {
+  return `${COIN}${Math.max(0, Math.floor(n || 0))}`;
+}
 
 // ─── Bootstrap ────────────────────────────────────────────────
 const canvas = document.getElementById("game");
@@ -84,8 +90,30 @@ function setPathChoice(on) {
     const unique = [...new Set(families)].slice(0, 3);
     const icons = unique.map((f) => `<span class="path-icon">${familyIconSvg(f)}</span>`).join("");
     const names = prettyPathNames(choice);
-    const bonus = choice && choice.soulBonus ? `<span class="path-souls">+${choice.soulBonus} souls</span>` : `<span class="path-souls path-souls-quiet">safer</span>`;
+    const bonus = choice && choice.soulBonus ? `<span class="path-souls">+${coinLabel(choice.soulBonus)}</span>` : `<span class="path-souls path-souls-quiet">safer</span>`;
     btn.innerHTML = `<span class="path-dir">${labels[dir]}</span><span class="path-icons">${icons}</span>${names ? `<small>${names}</small>` : ""}${bonus}`;
+  }
+  const escapeSouls = document.getElementById("escape-souls");
+  if (escapeSouls) {
+    const n = sim.state.runSouls || 0;
+    escapeSouls.textContent = n > 0 ? `Bank ${coinLabel(n)} and leave` : "Leave with nothing from this delve";
+  }
+}
+
+function escapeToSurface() {
+  if (sim.state.phase !== "run" || !sim.junctionPending) return;
+  sim.junctionPending = false;
+  setPathChoice(false);
+  input.choiceMode = false;
+  const earned = sim.state.bankSouls();
+  sim.quiver.packForHub();
+  sim.running = false;
+  saveGame();
+  sim.state.enterHub();
+  const soulsEl = document.getElementById("hub-souls");
+  if (soulsEl) soulsEl.textContent = sim.state.souls;
+  if (earned > 0) {
+    // brief hub feedback via souls count is enough
   }
 }
 
@@ -150,17 +178,21 @@ sim.state.onPhaseChange = (phase) => {
 
   if (phase === "death" || phase === "victory") {
     const stats = sim.state.getRunStats();
-    const earned = sim.state.bankSouls();
+    const earned = phase === "victory" ? sim.state.bankSouls() : 0;
+    const deathCoin = phase === "death" ? sim.state.discardRunSouls() : null;
     sim.quiver.packForHub();
     saveGame();
     if (deathStats) {
+      const soulLine = phase === "victory"
+        ? `<div style="font-size:1.4em;margin-top:8px;color:#c9a227">+${coinLabel(earned)} banked</div>`
+        : `<div style="font-size:1.15em;margin-top:8px;color:#8a7348">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<br><span style="color:#c9b48a">Vault coin is safe.</span></div>`;
       deathStats.innerHTML = `
-        <div style="font-size:${phase === "victory" ? "1.6em" : "1.15em"};max-width:22em;margin:0 auto;color:${phase === "victory" ? "#5aaf8a" : "#e8dcc4"};line-height:1.45">${phase === "victory" ? "Elevator!" : "On the verge of death, you manage to crawl back to the surface"}</div>
+        <div style="font-size:${phase === "victory" ? "1.6em" : "1.15em"};max-width:22em;margin:0 auto;color:${phase === "victory" ? "#5aaf8a" : "#e8dcc4"};line-height:1.45">${phase === "victory" ? "Elevator!" : "You fall. Most of the delve's coin scatters into the dark."}</div>
         <div>Reached: <b>${sim.getProgressLabel()}</b></div>
         <div>Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
         <div>Kills: <b>${stats.enemiesKilled}</b></div>
         <div>Arrows: <b>${stats.arrowsFired}</b></div>
-        <div style="font-size:1.4em;margin-top:8px;color:#c9a227">+${earned} Souls</div>
+        ${soulLine}
       `;
     }
   }
@@ -218,6 +250,12 @@ sim.on("run_start", () => {
 
 if (pathChoice) {
   pathChoice.addEventListener("pointerup", (e) => {
+    if (e.target.closest("#btn-escape")) {
+      e.preventDefault();
+      e.stopPropagation();
+      escapeToSurface();
+      return;
+    }
     const btn = e.target.closest("[data-dir]");
     if (!btn) return;
     e.preventDefault();
@@ -392,12 +430,62 @@ for (const mat of ARMOUR_MATERIALS) {
 
 const SHOP_ARROWS_ALL = getShopArrowCatalog();
 
-const SHOP_QUIVERS = [
-  { id: "quiver_basic",  name: "Hide Quiver",   slot: "quiver", cost: 0,   desc: "A stitched hide tube. Ten shafts.", stats: "10 Capacity", icon: "🏹", section: "quivers" },
-  { id: "quiver_small",  name: "Small Quiver",  slot: "quiver", cost: 40,  desc: "Holds 12 arrows",  stats: "12 Capacity", icon: "🏹", section: "quivers" },
-  { id: "quiver_medium", name: "Medium Quiver", slot: "quiver", cost: 80,  desc: "Holds 16 arrows",  stats: "16 Capacity", icon: "🏹", section: "quivers" },
-  { id: "quiver_large",  name: "Large Quiver",  slot: "quiver", cost: 150, desc: "Holds 20 arrows",  stats: "20 Capacity", icon: "🏹", section: "quivers" },
-];
+const SHOP_QUIVERS = (() => {
+  const names = {
+    8: "Hide Quiver",
+    10: "Cord Quiver",
+    12: "Small Quiver",
+    14: "Field Quiver",
+    16: "Hunter Quiver",
+    18: "Ranger Quiver",
+    20: "Deep Quiver",
+    22: "War Quiver",
+    24: "Ashwood Quiver",
+    26: "Great Quiver",
+    28: "Vault Quiver",
+    30: "Enduring Quiver",
+  };
+  const list = [];
+  for (let cap = 8; cap <= 30; cap += 2) {
+    const step = (cap - 8) / 2;
+    const cost = step === 0 ? 0 : 20 + step * 25 + Math.floor(step * step * 4);
+    list.push({
+      id: cap === 8 ? "quiver_basic" : `quiver_${cap}`,
+      name: names[cap] || `${cap}-Shaft Quiver`,
+      slot: "quiver",
+      cost,
+      capacity: cap,
+      desc: cap === 8 ? "A stitched hide tube. Eight shafts." : `Holds ${cap} arrows.`,
+      stats: `${cap} Capacity`,
+      icon: "🏹",
+      section: "quivers",
+    });
+  }
+  return list;
+})();
+
+/** Legacy shop ids → capacity. */
+const QUIVER_CAP_BY_ID = {
+  quiver_basic: 8,
+  quiver_small: 12,
+  quiver_medium: 16,
+  quiver_large: 20,
+};
+for (const q of SHOP_QUIVERS) QUIVER_CAP_BY_ID[q.id] = q.capacity;
+
+function quiverCapFromId(id) {
+  if (!id) return 8;
+  if (QUIVER_CAP_BY_ID[id] != null) return QUIVER_CAP_BY_ID[id];
+  const m = /^quiver_(\d+)$/.exec(id);
+  if (m) return Math.max(8, Math.min(30, parseInt(m[1], 10)));
+  return 8;
+}
+
+/** Always the next 3 upgrades after the equipped quiver's capacity. */
+function getShopQuivers(state) {
+  const cur = quiverCapFromId(state.equipped?.quiver);
+  return SHOP_QUIVERS.filter((q) => q.capacity > cur).slice(0, 3);
+}
 
 const STARTER_GEAR = [
   { id: "bow_hunting", name: "Hunting Bow", slot: "bow", desc: "Your constant. Always strung.", stats: "Starter bow", icon: "🏹", section: "weapons" },
@@ -909,7 +997,7 @@ function populateHub() {
     trainingList.innerHTML = `
       <div class="train-summary">
         <span>Level ${charLevel}</span>
-        <span>Next ${cost} souls</span>
+        <span>Next ${coinLabel(cost)}</span>
         <span>HP ${state.playerMaxHp}</span>
         <span>CD ${cd.toFixed(2)}s</span>
         <span>Dmg +${state.getStrengthBonus()}</span>
@@ -928,7 +1016,7 @@ function populateHub() {
         </div>
         <div class="train-right">
           <span class="train-level">${lvl} / 20</span>
-          <span class="train-cost">${maxed ? "MAX" : cost + " souls"}</span>
+          <span class="train-cost">${maxed ? "MAX" : coinLabel(cost)}</span>
           <button class="train-buy ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
         </div>
       </div>`;
@@ -949,6 +1037,7 @@ function populateHub() {
     const owned = state.ownedItems || [];
     const armourItems = getShopArmour(state);
     const arrowItems = getShopArrows(state);
+    const quiverItems = getShopQuivers(state);
     const allItems = [
       ...SHOP_ARROWS_ALL,
       ...SHOP_QUIVERS,
@@ -956,7 +1045,7 @@ function populateHub() {
     ];
     const sections = [
       { id: "arrows",  label: "Arrows",  items: arrowItems },
-      { id: "quivers", label: "Quivers", items: SHOP_QUIVERS.filter((q) => q.cost > 0) },
+      { id: "quivers", label: "Quivers", items: quiverItems },
       { id: "armour",  label: "Armour",  items: armourItems },
     ];
     shopList.innerHTML = sections.map(section => {
@@ -974,7 +1063,7 @@ function populateHub() {
               <div class="shop-name" style="color:${qualColor}">${item.name}</div>
               <div class="shop-desc">${item.desc}<br><span style="color:#8a7348">${item.stats}</span></div>
               <div class="shop-bottom">
-                <span class="shop-cost">${isOwned ? "Owned" : item.cost + " souls"}</span>
+                <span class="shop-cost">${isOwned ? "Owned" : coinLabel(item.cost)}</span>
                 <button class="shop-buy ${isOwned ? 'owned' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${isOwned ? "Owned" : "Buy"}</button>
               </div>
             </div>`;
@@ -1036,7 +1125,7 @@ function populateHub() {
           <div class="bestiary-stat"><span class="bestiary-stat-val">${e.hp}</span><span class="bestiary-stat-label">HP</span></div>
           <div class="bestiary-stat"><span class="bestiary-stat-val">${e.dmg}</span><span class="bestiary-stat-label">DMG</span></div>
           <div class="bestiary-stat"><span class="bestiary-stat-val">${e.speed}</span><span class="bestiary-stat-label">SPD</span></div>
-          <div class="bestiary-stat"><span class="bestiary-stat-val">${e.souls}</span><span class="bestiary-stat-label">Souls</span></div>
+          <div class="bestiary-stat"><span class="bestiary-stat-val">${e.souls}</span><span class="bestiary-stat-label">${COIN}</span></div>
         </div>
       </div>`;
     }).join("");
@@ -1154,9 +1243,45 @@ function drawMinimap() {
 }
 
 function getJunctionView() {
-  if (sim.state.phase !== "run" || !sim.junctionPending) return null;
-  if (!sim.junctionChoices || !sim.junctionChoices.length) return null;
-  const dirs = new Set(sim.junctionChoices.map((c) => c.direction));
+  if (sim.state.phase !== "run") return null;
+  // Keep fork openings visible while approaching / turning / choosing.
+  if (!sim.junctionPending && !sim.turning && !sim._forwardCommit && !sim._approachingJunction) return null;
+  if (!sim.junctionChoices || !sim.junctionChoices.length) {
+    // Choices are rolled at wave start; if missing during approach, still show geometry.
+    if (!sim._approachingJunction) return null;
+  }
+  const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
+  if (sim.turning && sim._pendingTurnDir) {
+    return {
+      dist: Math.max(70, sim.segmentEndZ - sim.playerWorldZ),
+      left: sim._pendingTurnDir === "left",
+      right: sim._pendingTurnDir === "right",
+      forward: false,
+      pending: false,
+      choices: sim.junctionChoices,
+      turnU: sim.turnU || 0,
+    };
+  }
+  if (sim._forwardCommit) {
+    return {
+      dist: Math.max(55, sim.segmentEndZ - sim.playerWorldZ),
+      left: false,
+      right: false,
+      forward: true,
+      pending: false,
+      choices: sim.junctionChoices,
+    };
+  }
+  if (sim._approachingJunction) {
+    return {
+      dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
+      left: dirs.has("left"),
+      right: dirs.has("right"),
+      forward: dirs.has("forward"),
+      pending: false,
+      choices: sim.junctionChoices || [],
+    };
+  }
   return {
     dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
     left: dirs.has("left"),
@@ -1173,7 +1298,7 @@ function drawCorridor(ctx) {
   const t = Number.isFinite(sim.runTime) ? sim.runTime : 0;
   dungeon.yaw = (sim.turnAngle || 0) * Math.PI / 180;
   dungeon.drawHall(ctx, sim.playerWorldZ, t, getJunctionView(), {
-    walking: sim.movingForward && !sim.turning && !sim.junctionPending,
+    walking: (sim.movingForward || sim.turning || sim._forwardCommit || sim._approachingJunction) && !sim.junctionPending,
     turning: !!sim.turning,
     turnU: sim.turnU || 0,
     turnSign: Math.sign(sim.turnTarget || 0) || 1,
@@ -1306,7 +1431,7 @@ function loadGame() {
     if (sim.quiver.totalArrows > 0 && sim.quiver.totalArrows < 10) {
       const held = [...sim.quiver.peekQuiver(), ...sim.quiver.peekStorage()];
       if (held.length <= 6 && held.every((a) => a.type === "wood")) {
-        while (sim.quiver.totalArrows < 10) sim.quiver.addToStorage({ type: "wood", level: 1 });
+        while (sim.quiver.totalArrows < 8) sim.quiver.addToStorage({ type: "wood", level: 1 });
       }
     }
     sim.quiver.packForHub();

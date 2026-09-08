@@ -147,12 +147,22 @@ export class DungeonView {
     this.playerZ = playerZ;
     this.time = time;
     const walking = !!(motion && motion.walking);
+    const turning = !!(motion && motion.turning);
+    const turnU = motion && motion.turnU ? motion.turnU : 0;
     this.bob = Math.sin(playerZ * 0.11) * (walking ? 4.4 : 1.1) + Math.sin(time * 1.35) * 0.55;
-    this.sway = Math.sin(playerZ * 0.055) * (walking ? 2.4 : 0.4);
-    this.roll = motion && motion.turning
-      ? Math.sin((motion.turnU || 0) * Math.PI) * 0.048 * (motion.turnSign || 1)
+    this.sway = Math.sin(playerZ * 0.055) * (walking ? 2.4 : 0.4)
+      + (turning ? Math.sin(turnU * Math.PI) * 5.5 * (motion.turnSign || 1) : 0);
+    // Bank into the turn, peaking mid-corner, then settle.
+    this.roll = turning
+      ? Math.sin(turnU * Math.PI) * 0.085 * (motion.turnSign || 1)
       : 0;
-    this.junction = junction && junction.dist < FAR && junction.dist > 8 ? junction : null;
+    // Pull the fork closer as you walk into it so the opening fills the frame.
+    let j = junction && junction.dist < FAR && junction.dist > 8 ? junction : null;
+    if (j && turning) {
+      const pull = 1 - Math.min(1, turnU * 1.15);
+      j = { ...j, dist: Math.max(28, j.dist * pull), pending: false };
+    }
+    this.junction = j;
     this.hits = [];
 
     ctx.save();
@@ -1036,8 +1046,9 @@ export class DungeonView {
     const dist = p.dist;
     if (dist == null || dist < -6 || dist > FAR) return;
     const ctx = this.ctx;
+    const py = p.y != null ? p.y : 18;
     if (enemy) {
-      const sp = this.project(p.x, dist, 18);
+      const sp = this.project(p.x, dist, py);
       const r = Math.max(2.2, 3.2 * sp.s);
       ctx.fillStyle = "#c45a4a";
       ctx.beginPath();
@@ -1049,8 +1060,8 @@ export class DungeonView {
       ctx.fill();
       return;
     }
-    const tip = this.project(p.x, dist, 18);
-    const tail = this.project(p.x, dist + 16, 14);
+    const tip = this.project(p.x, dist, py);
+    const tail = this.project(p.x, dist + 16, Math.max(4, py - 4));
     ctx.save();
     ctx.strokeStyle = "#e8d8b0";
     ctx.lineWidth = Math.max(1.6, 2.4 * tip.s * 0.08);
@@ -1078,7 +1089,7 @@ export class DungeonView {
       const t = trail[i];
       const td = t.dist != null ? t.dist : t.worldZ - this.playerZ;
       if (td < 8) continue;
-      const tp = this.project(t.x, td, 16);
+      const tp = this.project(t.x, td, t.y != null ? t.y : 16);
       ctx.globalAlpha = ((i + 1) / trail.length) * 0.28;
       ctx.fillStyle = "#e8d8b0";
       ctx.fillRect(tp.x, tp.y, 2, 2);
@@ -1106,11 +1117,13 @@ export class DungeonView {
       this._strokeFill(ctx, "CHOOSE PATH", this.cssW / 2, titleY, "#e8c56a");
     }
 
+    // While HTML path-choice is up, only draw chevrons — icons/names live on the buttons.
+    const pending = !!(this.junction && this.junction.pending);
     for (const h of this.hits) {
       const cx = h.x + h.w / 2;
       const cy = h.y + h.h * 0.4;
-      const ready = !!(this.junction && this.junction.pending);
-      this._drawChevron(ctx, cx, cy - 28, h.dir, ready);
+      this._drawChevron(ctx, cx, cy - 28, h.dir, pending);
+      if (pending) continue;
       if (h.families && h.families.length) {
         const n = h.families.length;
         const gap = 34;
@@ -1123,7 +1136,7 @@ export class DungeonView {
         const tw = ctx.measureText(h.names).width;
         ctx.fillStyle = "rgba(8, 6, 4, 0.58)";
         ctx.fillRect(cx - tw / 2 - 10, cy + 28, tw + 20, labelSize + 10);
-        this._strokeFill(ctx, h.names, cx, cy + 36 + labelSize * 0.15, ready ? "#f3ead4" : "rgba(230, 214, 186, 0.88)");
+        this._strokeFill(ctx, h.names, cx, cy + 36 + labelSize * 0.15, "rgba(230, 214, 186, 0.88)");
       }
     }
     ctx.restore();

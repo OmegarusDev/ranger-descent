@@ -1,6 +1,6 @@
 /**
  * GameStateManager — controls state transitions between Hub Phase,
- * Run Phase, and Death/Victory Phase. Manages Soul currency and
+ * Run Phase, and Death/Victory Phase. Manages coin currency and
  * upgrade trees. No rendering dependencies.
  */
 
@@ -16,7 +16,7 @@ export const STAT_INFO = [
   { id: "endurance", name: "Endurance", desc: "Lowers arrow cooldown and raises max equip load." },
   { id: "strength", name: "Strength", desc: "Raises arrow damage." },
   { id: "dexterity", name: "Dexterity", desc: "Raises crit damage. Slightly lowers arrow cooldown." },
-  { id: "luck", name: "Luck", desc: "Raises crit chance, soul drops, shop finds, and arrow return." },
+  { id: "luck", name: "Luck", desc: "Raises crit chance, coin drops, shop finds, and arrow return." },
 ];
 
 const STAT_MAX = {
@@ -155,7 +155,7 @@ export class GameStateManager {
     if (this.onPhaseChange) this.onPhaseChange(this.phase);
   }
 
-  /** Award souls for a kill using that enemy's tier value. */
+  /** Award coin for a kill using that enemy's tier value. */
   awardKillSouls(amount) {
     const n = Math.max(0, Math.floor((amount || 0) * (this.runBonuses.soulMultiplier || 1) * this.getLootMultiplier()));
     this.runSouls += n;
@@ -163,7 +163,7 @@ export class GameStateManager {
     return n;
   }
 
-  /** Bank earned Souls (called on death/victory). */
+  /** Bank this run's purse into permanent coin (escape / elevator). */
   bankSouls() {
     const earned = this.runSouls || 0;
     this.souls += earned;
@@ -173,7 +173,25 @@ export class GameStateManager {
     return earned;
   }
 
-  /** Spend souls on an upgrade. Returns true if successful. */
+  /**
+   * Death: keep 20% of the unbanked purse (banked into permanent coin), lose 80%.
+   * Already-banked coin is untouched.
+   * @returns {{ kept: number, lost: number, purse: number }}
+   */
+  discardRunSouls() {
+    const purse = this.runSouls || 0;
+    const kept = Math.floor(purse * 0.2);
+    const lost = purse - kept;
+    this.runSouls = 0;
+    if (kept > 0) {
+      this.souls += kept;
+      this.totalSoulsEarned += kept;
+    }
+    if (this.onSoulsChange) this.onSoulsChange(this.souls);
+    return { kept, lost, purse };
+  }
+
+  /** Spend coin on an upgrade. Returns true if successful. */
   spendSouls(amount) {
     if (this.souls < amount) return false;
     this.souls -= amount;
@@ -345,11 +363,18 @@ export class GameStateManager {
   }
 
   getQuiverCapacity() {
-    const id = this.equipped.quiver;
-    if (id === "quiver_large") return 20;
-    if (id === "quiver_medium") return 16;
+    const id = this.equipped?.quiver;
+    if (!id) return 8;
+    if (id === "quiver_basic") return 8;
     if (id === "quiver_small") return 12;
-    return 10;
+    if (id === "quiver_medium") return 16;
+    if (id === "quiver_large") return 20;
+    const m = /^quiver_(\d+)$/.exec(id);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n)) return Math.max(8, Math.min(30, n));
+    }
+    return 8;
   }
 
   applyUpgrades() {

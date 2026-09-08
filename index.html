@@ -124,6 +124,10 @@
       padding: 6px 10px;
       border-radius: 2px;
     }
+    .coin-mark {
+      font-weight: 700;
+      letter-spacing: 0;
+    }
     .hub-icon-btn {
       width: 48px;
       height: 48px;
@@ -700,9 +704,15 @@
       inset: 0;
       z-index: 200;
       pointer-events: auto;
+      flex-direction: column;
     }
     #path-choice.active { display: flex; }
-    #path-choice button {
+    #path-choice .path-dirs {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    #path-choice .path-dirs button {
       flex: 1;
       height: 100%;
       min-height: 100%;
@@ -725,13 +735,13 @@
       justify-content: flex-start;
       gap: 8px;
     }
-    #path-choice button:active { background: rgba(201, 162, 39, 0.22); }
-    #path-choice button[hidden] { display: none; }
+    #path-choice .path-dirs button:active { background: rgba(201, 162, 39, 0.22); }
+    #path-choice .path-dirs button[hidden] { display: none; }
     #path-choice .path-dir { font-size: 0.95em; }
     #path-choice .path-icons { display: flex; gap: 6px; justify-content: center; }
     #path-choice .path-icon { width: 36px; height: 36px; display: block; }
     #path-choice .path-icon svg { width: 36px; height: 36px; display: block; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.65)); }
-    #path-choice button small {
+    #path-choice .path-dirs button small {
       display: block;
       font-family: "Chakra Petch", sans-serif;
       font-size: 0.58em;
@@ -747,6 +757,39 @@
       color: #e8c56a;
     }
     #path-choice .path-souls-quiet { color: #8a7348; }
+    #path-choice .path-escape {
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: 72px;
+      margin: 0;
+      padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+      border-radius: 0;
+      border: 3px solid #c9a227;
+      border-left: none;
+      border-right: none;
+      background: #1a120a;
+      color: #f0d78a;
+      font-family: "Cinzel", "Chakra Petch", serif;
+      font-size: 1.15em;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      box-shadow: inset 0 1px 0 rgba(232, 197, 106, 0.18), 0 -8px 24px rgba(0, 0, 0, 0.55);
+    }
+    #path-choice .path-escape:active {
+      background: #24180e;
+      color: #ffe9a8;
+    }
+    #path-choice .path-escape small {
+      display: block;
+      margin-top: 6px;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 0.72em;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #d4c09a;
+      text-transform: none;
+    }
 
     .hud-top {
       display: flex;
@@ -943,7 +986,7 @@
                 </button>
               </div>
               <div class="hub-chrome-right">
-                <span class="hub-souls">Souls: <span id="hub-souls">0</span></span>
+                <span class="hub-souls"><span class="coin-mark" aria-hidden="true">₡</span> <span id="hub-souls">0</span></span>
                 <button type="button" class="hub-icon-btn" id="btn-hub-options" aria-label="Options">
                   <span class="tip">Options</span>
                   <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
@@ -1083,8 +1126,8 @@
     <!-- Run HUD -->
     <div id="phase-run" class="phase">
       <div class="hud-top">
-        <span class="souls">Souls: <span id="souls-display">0</span></span>
-        <span class="wave" id="quiver-display">Arrows 0/6</span>
+        <span class="souls"><span class="coin-mark" aria-hidden="true">₡</span> <span id="souls-display">0</span></span>
+        <span class="wave" id="quiver-display" hidden>Arrows 0/6</span>
         <span class="wave" id="wave-display">Fl. 1  1/10</span>
         <span class="dist" id="distance-display">0 ahead</span>
         <span class="timer" id="timer-display">0:00</span>
@@ -1125,12 +1168,18 @@
     </div>
 
     <div id="path-choice">
-      <button type="button" data-dir="left">‹ Left</button>
-      <button type="button" data-dir="forward">Ahead</button>
-      <button type="button" data-dir="right">Right ›</button>
+      <div class="path-dirs">
+        <button type="button" data-dir="left">‹ Left</button>
+        <button type="button" data-dir="forward">Ahead</button>
+        <button type="button" data-dir="right">Right ›</button>
+      </div>
+      <button type="button" class="path-escape" id="btn-escape">
+        Escape to surface
+        <small id="escape-souls">Bank this delve's coin</small>
+      </button>
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=53"></script>
+  <script type="module" src="src/main.js?v=58"></script>
 </body>
 </html>
