@@ -255,17 +255,91 @@
       min-height: 0;
     }
     .hub-sheet-bottom {
-      padding: 12px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+      flex: 0 0 auto;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid rgba(201,162,39,0.22);
       display: flex;
       justify-content: center;
       gap: 10px;
+      background: rgba(12, 9, 7, 0.92);
     }
-    .hub-sheet-bottom button {
+    .hub-sheet-bottom #btn-start {
       width: min(380px, 92%);
-      padding: 22px 32px;
-      font-size: 1.25em;
+      max-width: 100%;
+      padding: 18px 28px;
+      font-size: 1.15em;
       letter-spacing: 2px;
+    }
+    #elev-modal {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(6, 4, 3, 0.72);
+    }
+    #elev-modal.open { display: flex; }
+    .elev-modal-card {
+      width: min(340px, 100%);
+      padding: 18px 16px 16px;
+      border: 1px solid rgba(201, 162, 39, 0.4);
+      border-radius: 3px;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(80, 52, 24, 0.4), transparent 60%),
+        linear-gradient(180deg, #1a130e 0%, #0e0a08 100%);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    }
+    .elev-modal-card h3 {
+      margin: 0 0 14px;
+      text-align: center;
+      font-family: "Cinzel", "Chakra Petch", serif;
+      font-size: 1.05em;
+      color: #e8c56a;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .elev-pick {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    button.elev-chip {
+      width: 100%;
+      min-width: 0;
+      min-height: 40px;
+      padding: 6px 4px;
+      margin: 0;
+      border: 1px solid rgba(201, 162, 39, 0.4);
+      border-radius: 2px;
+      background: rgba(24, 16, 10, 0.95);
+      color: #c9b48a;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 0.82em;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: none;
+    }
+    button.elev-chip:disabled {
+      opacity: 0.28;
+      color: #6a5a48;
+    }
+    button.elev-chip.selected {
+      border-color: #c9a227;
+      background: rgba(201, 162, 39, 0.3);
+      color: #f0d78a;
+    }
+    .elev-modal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .elev-modal-actions button {
+      flex: 1;
+      min-height: 44px;
+      padding: 10px 12px;
+      font-size: 0.95em;
     }
     .shop-chest-btn {
       margin-top: 12px;
@@ -306,9 +380,8 @@
       border-radius: 2px;
     }
     .pack button.pack-cell { min-height: 72px; }
-    .pack-quiver button.pack-cell { min-height: 80px; }
+    .pack-quiver button.pack-cell { min-height: 64px; }
     .pack-pouch button.pack-cell { min-height: 64px; }
-    .pack button.pack-slot-body { min-height: 76px; }
     .pack-cell {
       border: 2px solid rgba(201,162,39,0.28);
       background: rgba(16, 10, 6, 0.72);
@@ -321,8 +394,8 @@
     }
     .pack-cell-empty { background: rgba(8,6,4,0.35); border-style: dashed; }
     .pack-cell.sel, .pack-slot.sel { border-color: #e8c56a; box-shadow: 0 0 0 1px #e8c56a; }
-    .pack-cell-mark { font-weight: 700; font-size: 1.05em; }
-    .pack-cell-sub { color: #b89a68; font-size: 0.82em; text-align: center; line-height: 1.2; }
+    .pack-cell-mark { font-weight: 700; font-size: 0.95em; text-align: center; line-height: 1.15; }
+    .pack-cell-sub { color: #b89a68; font-size: 0.78em; text-align: center; line-height: 1.2; }
     .pack-mid {
       display: grid;
       grid-template-columns: 1.45fr 0.7fr;
@@ -719,8 +792,8 @@
       margin: 0;
       padding: 18% 8px 12px;
       border-radius: 0;
-      border: 3px solid rgba(201, 162, 39, 0.35);
-      background: rgba(12, 8, 5, 0.12);
+      border: 3px solid rgba(201, 162, 39, 0.45);
+      background: rgba(10, 7, 4, 0.42);
       color: #e8c56a;
       font-family: "Cinzel", "Chakra Petch", serif;
       font-size: 1.15em;
@@ -735,7 +808,7 @@
       justify-content: flex-start;
       gap: 8px;
     }
-    #path-choice .path-dirs button:active { background: rgba(201, 162, 39, 0.22); }
+    #path-choice .path-dirs button:active { background: rgba(201, 162, 39, 0.28); }
     #path-choice .path-dirs button[hidden] { display: none; }
     #path-choice .path-dir { font-size: 0.95em; }
     #path-choice .path-icons { display: flex; gap: 6px; justify-content: center; }
@@ -1025,7 +1098,7 @@
               <g transform="translate(50 52) rotate(5)">
                 <circle r="24" fill="#d4a430"/>
                 <circle r="16" fill="#8a6818"/>
-                <text y="7" text-anchor="middle" fill="#f3ead4" font-size="22" font-family="Cinzel, serif">¢</text>
+                <text y="7" text-anchor="middle" fill="#f3ead4" font-size="22" font-family="Cinzel, serif">₡</text>
               </g>
               <text x="50" y="104" text-anchor="middle" fill="#f0d8a0" font-family="Cinzel, serif" font-size="13" letter-spacing="2">SHOP</text>
             </svg>
@@ -1123,6 +1196,17 @@
       </div>
     </div>
 
+    <div id="elev-modal" aria-hidden="true">
+      <div class="elev-modal-card" role="dialog" aria-labelledby="elev-modal-title">
+        <h3 id="elev-modal-title">Elevator</h3>
+        <div class="elev-pick" id="elev-pick" aria-label="Choose elevator"></div>
+        <div class="elev-modal-actions">
+          <button type="button" class="btn-secondary" id="btn-elev-cancel">Back</button>
+          <button type="button" id="btn-elev-go">Descend</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Run HUD -->
     <div id="phase-run" class="phase">
       <div class="hud-top">
@@ -1141,7 +1225,7 @@
             stroke-dasharray="0 107" stroke-dashoffset="26.7"
             style="transform:rotate(-90deg);transform-origin:center;transition:stroke-dasharray 0.05s"/>
         </svg>
-        <span class="cooldown-label" id="cooldown-label">🏹</span>
+        <span class="cooldown-label" id="cooldown-label">RDY</span>
       </div>
 
       <div class="minimap-wrap">
@@ -1180,6 +1264,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=58"></script>
+  <script type="module" src="src/main.js?v=67"></script>
 </body>
 </html>

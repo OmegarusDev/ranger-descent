@@ -8,7 +8,7 @@
  *   - Drag up → arrow backward (away from enemies)
  *   - Power = drag distance
  */
-import { CONFIG } from "../data/config.js?v=26";
+import { CONFIG } from "../data/config.js?v=29";
 
 export class InputHandler {
   constructor(canvas) {

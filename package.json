@@ -1,10 +1,10 @@
 {
-  "name": "ranger-defense",
+  "name": "ranger-descent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx serve .",
+    "dev": "./scripts/serve-local.sh",
     "typecheck": "npx tsc --noEmit"
   }
 }

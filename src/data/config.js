@@ -15,9 +15,13 @@ export const CONFIG = {
   // On-rails movement
   PLAYER_SPEED: 0.2,
 
-  // Dungeon structure: 1 wave per hall, 10 halls per floor, 10 floors per elevator
+  // Dungeon: 10 halls/floor × 10 floors/block × 10 blocks → final boss.
+  // Start shafts: Gate (floors 1–10) plus unlockable E1–E9 (floor 11+). No E10.
   SECTIONS_PER_FLOOR: 10,
   FLOORS_PER_ELEVATOR: 10,
+  ELEVATORS_PER_RUN: 10,
+  /** Unlockable start elevators (E1–E9). Index 0 is Gate / surface. */
+  START_ELEVATORS: 9,
 
   // Slingshot
   SLINGSHOT_MAX_POWER: 24,

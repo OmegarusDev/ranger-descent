@@ -76,6 +76,10 @@ export class GameStateManager {
     this.pouch = [null, null];
     this.pouchCapacity = 2;
     this.hubVisits = 0;
+    /** Highest start elevator unlocked (0 = Gate only; 1–9 = E1–E9 after riding to floor 11+). */
+    this.maxElevatorUnlocked = 0;
+    /** Selected hub start elevator index (0 = Gate). */
+    this.selectedStartElevator = 0;
 
     // Active run bonuses
     this.runBonuses = {
@@ -125,6 +129,8 @@ export class GameStateManager {
     this.playerX = 0;
     this.runSpeed = 0;
     this.playerHp = this.playerMaxHp;
+    this.playerPoisonT = 0;
+    this.playerPoisonDps = 0;
     this.runBonuses = {
       soulMultiplier: 1,
       damageMultiplier: 1,
@@ -229,6 +235,13 @@ export class GameStateManager {
     return this.playerHp;
   }
 
+  /** Contact venom — stacks duration, ticks in tickBonuses. */
+  applyPlayerPoison(stacks = 1) {
+    const n = Math.max(1, Math.floor(stacks || 1));
+    this.playerPoisonT = Math.max(this.playerPoisonT || 0, 2.2 + n * 0.8);
+    this.playerPoisonDps = Math.max(this.playerPoisonDps || 0, 1.2 + n * 0.6);
+  }
+
   /** Heal the player. */
   healPlayer(amount) {
     this.playerHp = Math.min(this.playerMaxHp, this.playerHp + amount);
@@ -260,6 +273,16 @@ export class GameStateManager {
     if (this.runBonuses.soulBoostT > 0) {
       this.runBonuses.soulBoostT -= dt;
       if (this.runBonuses.soulBoostT <= 0) this.runBonuses.soulMultiplier = 1;
+    }
+    if ((this.playerPoisonT || 0) > 0) {
+      this.playerPoisonT -= dt;
+      // Direct HP — do not go through damagePlayer (armor would floor microticks to 1).
+      this.playerHp = Math.max(0, this.playerHp - (this.playerPoisonDps || 1.5) * dt);
+      if (this.playerHp <= 0) this.die();
+      if (this.playerPoisonT <= 0) {
+        this.playerPoisonT = 0;
+        this.playerPoisonDps = 0;
+      }
     }
   }
 
@@ -384,6 +407,31 @@ export class GameStateManager {
     this.arrowCooldown = 0;
   }
 
+  /** Unlock starting from this elevator index (1–9 = E1–E9). Gate is always available. */
+  unlockElevator(index) {
+    const maxStart = 9;
+    const i = Math.max(0, Math.min(maxStart, Math.floor(index || 0)));
+    if (i > this.maxElevatorUnlocked) this.maxElevatorUnlocked = i;
+    return this.maxElevatorUnlocked;
+  }
+
+  getMaxElevatorUnlocked() {
+    return Math.max(0, this.maxElevatorUnlocked || 0);
+  }
+
+  setStartElevator(index) {
+    const max = this.getMaxElevatorUnlocked();
+    const i = Math.max(0, Math.min(max, Math.floor(index || 0)));
+    this.selectedStartElevator = i;
+    return i;
+  }
+
+  getStartElevator() {
+    const max = this.getMaxElevatorUnlocked();
+    const sel = this.selectedStartElevator || 0;
+    return Math.max(0, Math.min(max, sel));
+  }
+
   /** Serialize for save/load. */
   serialize() {
     return {
@@ -398,6 +446,8 @@ export class GameStateManager {
       pouchCapacity: this.pouchCapacity || 2,
       playerMaxHp: this.playerMaxHp,
       hubVisits: this.hubVisits,
+      maxElevatorUnlocked: this.maxElevatorUnlocked || 0,
+      selectedStartElevator: this.getStartElevator(),
     };
   }
 
@@ -414,6 +464,9 @@ export class GameStateManager {
     while (this.pouch.length < 2) this.pouch.push(null);
     this.pouchCapacity = data.pouchCapacity || 2;
     this.hubVisits = data.hubVisits || 0;
+    this.maxElevatorUnlocked = Math.max(0, data.maxElevatorUnlocked || 0);
+    this.selectedStartElevator = data.selectedStartElevator || 0;
+    this.setStartElevator(this.selectedStartElevator);
     this.applyUpgrades();
   }
 }

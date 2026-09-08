@@ -2,13 +2,12 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
-import { DungeonView } from "./engine/DungeonView.js?v=40";
-import { withAlpha } from "./engine/drawUtil.js";
-import { CorridorSim } from "./game/CorridorSim.js?v=47";
-import { InputHandler } from "./game/InputHandler.js?v=14";
-import { CONFIG } from "./data/config.js?v=27";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=32";
-import { STAT_INFO } from "./game/GameStateManager.js?v=37";
+import { DungeonView } from "./engine/DungeonView.js?v=41";
+import { CONFIG } from "./data/config.js?v=30";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=34";
+import { STAT_INFO } from "./game/GameStateManager.js?v=40";
+import { CorridorSim } from "./game/CorridorSim.js?v=52";
+import { InputHandler } from "./game/InputHandler.js?v=15";
 
 /** Player-facing coin mark (colon sign — C with bars). */
 const COIN = "₡";
@@ -69,8 +68,26 @@ function familyIconSvg(family) {
 
 function setPathChoice(on) {
   if (!pathChoice) return;
-  pathChoice.classList.toggle("active", !!on);
-  if (!on) return;
+  const active = !!on;
+  const wasActive = pathChoice.classList.contains("active");
+  pathChoice.classList.toggle("active", active);
+  if (!active) {
+    input.choiceMode = false;
+    delete pathChoice.dataset.sig;
+    return;
+  }
+  input.choiceMode = true;
+  // Avoid rebuilding button HTML every RAF (flicker / lost taps).
+  const sig = (sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|");
+  if (wasActive && pathChoice.dataset.sig === sig) {
+    const escapeSouls = document.getElementById("escape-souls");
+    if (escapeSouls) {
+      const n = sim.state.runSouls || 0;
+      escapeSouls.textContent = n > 0 ? `Bank ${coinLabel(n)} and leave` : "Leave with nothing from this delve";
+    }
+    return;
+  }
+  pathChoice.dataset.sig = sig;
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   const labels = { left: "‹ Left", forward: "Ahead", right: "Right ›" };
   for (const btn of pathChoice.querySelectorAll("[data-dir]")) {
@@ -105,16 +122,14 @@ function escapeToSurface() {
   sim.junctionPending = false;
   setPathChoice(false);
   input.choiceMode = false;
-  const earned = sim.state.bankSouls();
+  sim.state.bankSouls();
   sim.quiver.packForHub();
   sim.running = false;
+  sim.state.hubVisits++;
   saveGame();
   sim.state.enterHub();
-  const soulsEl = document.getElementById("hub-souls");
-  if (soulsEl) soulsEl.textContent = sim.state.souls;
-  if (earned > 0) {
-    // brief hub feedback via souls count is enough
-  }
+  const hubSouls = document.getElementById("hub-souls");
+  if (hubSouls) hubSouls.textContent = sim.state.souls;
 }
 
 // ─── Input ───────────────────────────────────────────────────
@@ -187,7 +202,7 @@ sim.state.onPhaseChange = (phase) => {
         ? `<div style="font-size:1.4em;margin-top:8px;color:#c9a227">+${coinLabel(earned)} banked</div>`
         : `<div style="font-size:1.15em;margin-top:8px;color:#8a7348">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<br><span style="color:#c9b48a">Vault coin is safe.</span></div>`;
       deathStats.innerHTML = `
-        <div style="font-size:${phase === "victory" ? "1.6em" : "1.15em"};max-width:22em;margin:0 auto;color:${phase === "victory" ? "#5aaf8a" : "#e8dcc4"};line-height:1.45">${phase === "victory" ? "Elevator!" : "You fall. Most of the delve's coin scatters into the dark."}</div>
+        <div style="font-size:${phase === "victory" ? "1.6em" : "1.15em"};max-width:22em;margin:0 auto;color:${phase === "victory" ? "#5aaf8a" : "#e8dcc4"};line-height:1.45">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall. Most of the delve's coin scatters into the dark."}</div>
         <div>Reached: <b>${sim.getProgressLabel()}</b></div>
         <div>Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
         <div>Kills: <b>${stats.enemiesKilled}</b></div>
@@ -211,8 +226,9 @@ sim.on("arrow_fire", (e) => {
 
 const FX_TYPE = {
   ice: "frost", wood: "kinetic", flint: "kinetic", iron: "kinetic",
-  steel: "kinetic", silver: "kinetic", obsidian: "kinetic", moss: "poison",
-  oil: "acid", piercing: "kinetic", double: "kinetic", normal: "kinetic",
+  steel: "kinetic", silver: "kinetic", stun: "kinetic", piercing: "kinetic",
+  double: "kinetic", normal: "kinetic", barbed: "kinetic", oil: "acid",
+  poison: "poison", shock: "shock", fire: "fire",
 };
 sim.on("projectile_hit", (e) => {
   const fxType = FX_TYPE[e.projectile.element] || e.projectile.element;
@@ -242,6 +258,17 @@ sim.on("junction_chosen", () => {
   engine.punch(4);
 });
 
+sim.on("elevator_ride", (e) => {
+  setPathChoice(false);
+  input.choiceMode = false;
+  engine.punch(6);
+  saveGame();
+  const tip = document.getElementById("wave-display");
+  if (tip && e) {
+    tip.textContent = e.to === "final" ? "Final Boss" : `Elevator → E${e.to} unlocked`;
+  }
+});
+
 sim.on("run_start", () => {
   setPathChoice(false);
   input.reset();
@@ -267,7 +294,33 @@ if (pathChoice) {
 }
 
 // ─── UI Buttons ───────────────────────────────────────────────
-$("#btn-start").addEventListener("click", () => { try { sim.initRun(); } catch(err) { console.error("Init error:", err); } });
+function startDungeonRun() {
+  try {
+    closeElevatorModal();
+    closeHubSheets();
+    sim.initRun();
+  } catch (err) {
+    console.error("Init error:", err);
+  }
+}
+
+$("#btn-start").addEventListener("click", () => {
+  // New players skip the elevator popup until E1 (floor 11) is unlocked.
+  if (sim.state.getMaxElevatorUnlocked() < 1) {
+    startDungeonRun();
+    return;
+  }
+  openElevatorModal();
+});
+$("#btn-elev-cancel").addEventListener("click", () => {
+  closeElevatorModal();
+});
+$("#btn-elev-go").addEventListener("click", () => {
+  startDungeonRun();
+});
+$("#elev-modal").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeElevatorModal();
+});
 $("#btn-hub").addEventListener("click", () => {
   if (sim.state.phase === "death" || sim.state.phase === "victory") {
     sim.state.hubVisits++;
@@ -281,6 +334,7 @@ function closeHubSheets() {
   hidePackOverlays();
 }
 function openHubSheet(id) {
+  closeElevatorModal();
   closeHubSheets();
   const sheet = document.getElementById(id);
   if (sheet) sheet.classList.add("open");
@@ -576,7 +630,7 @@ function refreshShopCaches(state) {
   const visit = state.hubVisits || 0;
   if (_shopHubVisit !== visit || !_shopArmourCache || !_shopArrowCache) {
     _shopArmourCache = rollShopArmour(mulberry32(0x9E3779B9 + visit * 0x85ebca6b), state.getStat("luck"));
-    _shopArrowCache = rollShopArrows(3, mulberry32(0xC2B2AE35 + visit * 0x27d4eb2d));
+    _shopArrowCache = rollShopArrows(3, mulberry32(0xC2B2AE35 + visit * 0x27d4eb2d), visit);
     _shopHubVisit = visit;
   }
 }
@@ -635,6 +689,10 @@ function hidePackOverlays() {
   const picker = document.getElementById("pack-picker");
   const tip = document.getElementById("pack-tip");
   if (picker) {
+    if (picker._awayHandler) {
+      document.removeEventListener("pointerdown", picker._awayHandler, true);
+      picker._awayHandler = null;
+    }
     picker.hidden = true;
     picker.innerHTML = "";
   }
@@ -666,11 +724,20 @@ function showPackTip(item, anchorEl, clientX, clientY) {
   placeNear(tip, anchorEl, clientX, clientY);
 }
 
+function arrowPackLabel(type) {
+  const def = getArrowDef(type);
+  return (def.name || "Arrow").replace(/ Arrow$/i, "");
+}
+
 function openPackPicker(title, options, anchorEl, evt) {
   const picker = document.getElementById("pack-picker");
   if (!picker) return;
   const tip = document.getElementById("pack-tip");
   if (tip) tip.hidden = true;
+  if (picker._awayHandler) {
+    document.removeEventListener("pointerdown", picker._awayHandler, true);
+    picker._awayHandler = null;
+  }
   picker.innerHTML = `<div class="pack-picker-title">${title}</div>` + options.map((opt, i) =>
     `<button type="button" class="${opt.current ? "current" : ""}" data-pick="${i}">
       <span>${opt.label}</span>
@@ -685,6 +752,16 @@ function openPackPicker(title, options, anchorEl, evt) {
       hidePackOverlays();
       if (opt && opt.onPick) opt.onPick();
     });
+  });
+  // Close when tapping outside (defer so the opening click doesn't dismiss it).
+  requestAnimationFrame(() => {
+    const onAway = (e) => {
+      if (picker.hidden) return;
+      if (picker.contains(e.target)) return;
+      hidePackOverlays();
+    };
+    picker._awayHandler = onAway;
+    document.addEventListener("pointerdown", onAway, true);
   });
 }
 
@@ -712,16 +789,17 @@ function populatePack(state) {
     if (a) {
       const def = getArrowDef(a.type);
       cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}" title="${def.name}">
-        <span class="pack-cell-mark">${arrowShort(a.type)}</span>
-        <span class="pack-cell-sub">${def.name.replace(" Arrow", "")}</span>
-        <span class="pack-cell-sub">L${a.level}</span>
+        <span class="pack-cell-mark">${arrowPackLabel(a.type)}</span>
+        <span class="pack-cell-sub">Lv${a.level}</span>
       </button>`);
     } else {
       cells.push(`<button type="button" class="pack-cell pack-cell-empty" data-q-empty="${i}" aria-label="Empty quiver slot"></button>`);
     }
   }
   quiverSlots.innerHTML = cells.join("");
-  quiverSlots.style.gridTemplateColumns = `repeat(${Math.min(cap, 5)}, minmax(0, 1fr))`;
+  // Even capacities → equal rows (8 → 4+4, 10 → 5+5, …).
+  const cols = Math.max(2, Math.floor(cap / 2));
+  quiverSlots.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
   dollEl.innerHTML = DOLL_SLOTS.map((slot) => {
     const item = findItem(state.equipped?.[slot.id]);
@@ -752,8 +830,8 @@ function populatePack(state) {
       if (c.kind === "arrow") {
         const def = getArrowDef(c.arrow.type);
         return `<button type="button" class="pack-cell pack-cell-arrow" data-chest-a="${c.i}" style="border-color:${def.color}">
-          <span class="pack-cell-mark">${arrowShort(c.arrow.type)}</span>
-          <span class="pack-cell-sub">${def.name.replace(" Arrow", "")}</span>
+          <span class="pack-cell-mark">${arrowPackLabel(c.arrow.type)}</span>
+          <span class="pack-cell-sub">Lv${c.arrow.level}</span>
         </button>`;
       }
       return `<button type="button" class="pack-cell filled" data-chest-g="${c.id}">
@@ -785,7 +863,7 @@ function populatePack(state) {
       const def = getArrowDef(current.type);
       options.push({
         label: def.name,
-        sub: `Equipped · L${current.level}`,
+        sub: `Equipped · Lv${current.level}`,
         current: true,
         onPick: () => {},
       });
@@ -799,13 +877,13 @@ function populatePack(state) {
         },
       });
     } else {
-      options.push({ label: "Empty", sub: "No shaft here", current: true, onPick: () => {} });
+      options.push({ label: "Empty", sub: "No arrow here", current: true, onPick: () => {} });
     }
     stored.forEach((a, si) => {
       const def = getArrowDef(a.type);
       options.push({
         label: def.name,
-        sub: `Chest · L${a.level}`,
+        sub: `Chest · Lv${a.level}`,
         onPick: () => {
           q.setQuiverSlot(current ? slotIndex : loaded.length, si);
           saveGame();
@@ -814,9 +892,9 @@ function populatePack(state) {
       });
     });
     if (stored.length === 0 && !current) {
-      options.push({ label: "No spare shafts", sub: "Buy arrows in the shop", onPick: () => {} });
+      options.push({ label: "No spare arrows", sub: "Buy arrows in the shop", onPick: () => {} });
     }
-    openPackPicker(current ? "Change shaft" : "Load shaft", options, el, evt);
+    openPackPicker(current ? "Change arrow" : "Load arrow", options, el, evt);
   };
 
   quiverSlots.querySelectorAll("[data-q], [data-q-empty]").forEach((el) => {
@@ -974,6 +1052,54 @@ function populatePack(state) {
   });
 }
 
+function closeElevatorModal() {
+  const modal = document.getElementById("elev-modal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function openElevatorModal() {
+  renderElevatorPicker();
+  const modal = document.getElementById("elev-modal");
+  if (!modal) return;
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function renderElevatorPicker() {
+  const root = document.getElementById("elev-pick");
+  const goBtn = document.getElementById("btn-elev-go");
+  if (!root) return;
+  const state = sim.state;
+  const startElevs = CONFIG.START_ELEVATORS || 9;
+  const max = state.getMaxElevatorUnlocked();
+  const sel = state.getStartElevator();
+  const chips = [];
+  chips.push(
+    `<button type="button" class="elev-chip ${sel === 0 ? "selected" : ""}" data-elev="0" aria-label="Gate">Gate</button>`
+  );
+  for (let i = 1; i <= startElevs; i++) {
+    const locked = i > max;
+    const selected = i === sel;
+    chips.push(
+      `<button type="button" class="elev-chip ${selected ? "selected" : ""}" data-elev="${i}" ${locked ? "disabled" : ""} aria-label="Elevator ${i}">E${i}</button>`
+    );
+  }
+  root.innerHTML = chips.join("");
+  root.querySelectorAll("[data-elev]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.setStartElevator(Number(btn.dataset.elev));
+      saveGame();
+      renderElevatorPicker();
+    });
+  });
+  if (goBtn) {
+    goBtn.textContent = sel === 0 ? "Descend" : `Descend E${sel}`;
+  }
+}
+
 function populateHub() {
   const state = sim.state;
   ensureStarterKit(state);
@@ -983,6 +1109,7 @@ function populateHub() {
   state.applyUpgrades();
   const soulsEl = document.getElementById("hub-souls");
   if (soulsEl) soulsEl.textContent = state.souls;
+  renderElevatorPicker();
 
   // Training
   const trainingList = document.getElementById("training-list");
@@ -1166,21 +1293,27 @@ function updateUI() {
   if (runQuiver) {
     if (sim.state.phase === "run") {
       const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);
-      runQuiver.innerHTML = queue.map((a, i) => {
-        const def = getArrowDef(a.type);
-        return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="border-color:${def.color}">
-          <div class="rq-mark">${arrowShort(a.type)}</div>
-          <div class="rq-tag">${i === 0 ? "Ready" : "Next"}</div>
-        </div>`;
-      }).join("") || `<div class="run-quiver-card"><div class="rq-mark">—</div><div class="rq-tag">Empty</div></div>`;
-    } else {
+      const sig = queue.map((a) => `${a.type}:${a.level || 1}`).join(",") || "empty";
+      if (runQuiver.dataset.sig !== sig) {
+        runQuiver.dataset.sig = sig;
+        runQuiver.innerHTML = queue.map((a, i) => {
+          const def = getArrowDef(a.type);
+          return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="border-color:${def.color}">
+            <div class="rq-mark">${arrowShort(a.type)}</div>
+            <div class="rq-tag">${i === 0 ? "Ready" : "Next"}</div>
+          </div>`;
+        }).join("") || `<div class="run-quiver-card"><div class="rq-mark">—</div><div class="rq-tag">Empty</div></div>`;
+      }
+    } else if (runQuiver.dataset.sig !== "off") {
+      runQuiver.dataset.sig = "off";
       runQuiver.innerHTML = "";
     }
   }
 
   drawMinimap();
 
-  if (debugPanel) {
+  if (debugPanel && location.search.includes("debug=1")) {
+    debugPanel.style.display = "block";
     debugPanel.textContent = `wave=${sim.waveIndex} en=${sim.enemies.length} projs=${sim.projectiles.length}`;
   }
 
@@ -1245,10 +1378,10 @@ function drawMinimap() {
 function getJunctionView() {
   if (sim.state.phase !== "run") return null;
   // Keep fork openings visible while approaching / turning / choosing.
-  if (!sim.junctionPending && !sim.turning && !sim._forwardCommit && !sim._approachingJunction) return null;
+  if (!sim.junctionPending && !sim.turning && !sim._forwardCommit && !sim._approachingJunction && !sim._approachingElevator) return null;
   if (!sim.junctionChoices || !sim.junctionChoices.length) {
     // Choices are rolled at wave start; if missing during approach, still show geometry.
-    if (!sim._approachingJunction) return null;
+    if (!sim._approachingJunction && !sim._approachingElevator) return null;
   }
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   if (sim.turning && sim._pendingTurnDir) {
@@ -1270,6 +1403,17 @@ function getJunctionView() {
       forward: true,
       pending: false,
       choices: sim.junctionChoices,
+    };
+  }
+  if (sim._approachingElevator) {
+    return {
+      dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
+      left: false,
+      right: false,
+      forward: true,
+      pending: false,
+      choices: [],
+      elevator: true,
     };
   }
   if (sim._approachingJunction) {
@@ -1298,7 +1442,7 @@ function drawCorridor(ctx) {
   const t = Number.isFinite(sim.runTime) ? sim.runTime : 0;
   dungeon.yaw = (sim.turnAngle || 0) * Math.PI / 180;
   dungeon.drawHall(ctx, sim.playerWorldZ, t, getJunctionView(), {
-    walking: (sim.movingForward || sim.turning || sim._forwardCommit || sim._approachingJunction) && !sim.junctionPending,
+    walking: (sim.movingForward || sim.turning || sim._forwardCommit || sim._approachingJunction || sim._approachingElevator) && !sim.junctionPending,
     turning: !!sim.turning,
     turnU: sim.turnU || 0,
     turnSign: Math.sign(sim.turnTarget || 0) || 1,
@@ -1321,49 +1465,6 @@ function drawCorridor(ctx) {
 
   dungeon.drawOverlay(ctx, input);
   input.drawAimLine(ctx);
-}
-
-
-// ─── Arrow Queue (canvas backup; DOM strip is primary) ───────
-function drawArrowQueue(ctx) {
-  if (sim.state.phase !== "run") return;
-  const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);
-  if (!queue.length) return;
-  const startX = 14;
-  const y = canvas.clientHeight - 118;
-  const spacing = 58;
-
-  ctx.save();
-  ctx.font = '700 13px "Chakra Petch", sans-serif';
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  for (let i = 0; i < queue.length; i++) {
-    const a = queue[i];
-    const x = startX + i * spacing + 24;
-    const def = getArrowDef(a.type);
-    const col = def.color || "#d8d2c4";
-    const ready = i === 0;
-
-    ctx.fillStyle = "rgba(12, 8, 5, 0.78)";
-    ctx.fillRect(x - 24, y - 22, 48, 44);
-    ctx.strokeStyle = ready ? "#e8c56a" : withAlpha(col, 0.7);
-    ctx.lineWidth = ready ? 2.2 : 1.5;
-    ctx.strokeRect(x - 24, y - 22, 48, 44);
-
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(x, y - 8);
-    ctx.lineTo(x + 5, y + 2);
-    ctx.lineTo(x, y + 10);
-    ctx.lineTo(x - 5, y + 2);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#f3ead4";
-    ctx.fillText(def.short, x, y + 28);
-  }
-  ctx.restore();
 }
 
 // ─── Game Loop ────────────────────────────────────────────────
@@ -1400,7 +1501,6 @@ function gameLoop(now) {
         /* keep the loop alive */
       }
     });
-    drawArrowQueue(engine.ctx);
     updateUI();
   } catch (err) {
     console.error("Frame error:", err);

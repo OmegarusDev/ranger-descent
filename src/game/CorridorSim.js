@@ -1,8 +1,8 @@
-import { CONFIG } from "../data/config.js?v=26";
-import { QuiverDeckManager, getArrowDef, getArrowDamage } from "./QuiverDeckManager.js?v=31";
+import { CONFIG } from "../data/config.js?v=29";
+import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=34";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=37";
+import { GameStateManager } from "./GameStateManager.js?v=39";
 
 let _nextId = 1;
 
@@ -69,9 +69,11 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
     hp, maxHp: hp, speed: d.speed, size: d.size,
     color: d.color, souls: d.souls, armor: d.armor,
     flying: d.flying || false,
+    contactPoison: d.poison || 0,
     shieldHp: d.shieldHp || 0, maxShieldHp: d.shieldHp || 0,
     shieldRegen: d.shieldHp ? 2 : 0,
-    burnT: 0, poisonT: 0, slowT: 0, shredT: 0, oiledT: 0,
+    burnT: 0, burnDps: 0, poisonT: 0, poisonDps: 0, slowT: 0, slowFactor: 0.4,
+    shredT: 0, oiledT: 0, bleedT: 0, bleedDps: 0,
     _lateralTarget: 0, _lateralTimer: 0,
     _lurkT: 0,
     _chargeTimer: 2, _charging: false,
@@ -86,12 +88,17 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
   };
 }
 
-function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, y = 18, vy = 0) {
+function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, y = 18, vy = 0, level = 1) {
+  const def = getArrowDef(element);
+  const pierceRanks = def.pierce != null ? def.pierce : 0;
   return {
     id: _nextId++, x: worldX, worldZ, y, vx, vz, vy,
-    damage, element: element || "normal", ownerId,
+    damage, fireDamage: getArrowFireDamage(element, level), iceDamage: getArrowIceDamage(element, level),
+    element: element || "normal", ownerId, level: level || 1,
     life: 4,
-    pierceLeft: element === "piercing" ? 3 : 1,
+    // pierce:1 → two hits on unarmoured (self + one behind). Armour punch stops travel.
+    pierceLeft: 1 + pierceRanks,
+    punchArmour: pierceRanks > 0,
     _hitIds: [],
     _trail: [],
   };
@@ -213,6 +220,9 @@ export class CorridorSim {
     this._forwardCommit = false;
     this._forwardCommitT = 0;
     this._approachingJunction = false;
+    this._approachingElevator = false;
+    this._finalBoss = false;
+    this._pendingBurst = null;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -263,6 +273,9 @@ export class CorridorSim {
     this._forwardCommit = false;
     this._forwardCommitT = 0;
     this._approachingJunction = false;
+    this._approachingElevator = false;
+    this._finalBoss = false;
+    this._pendingBurst = null;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -273,7 +286,7 @@ export class CorridorSim {
     this.groupGap = 0;
     this.floorIndex = 0;
     this.sectionIndex = 0;
-    this.elevatorIndex = 0;
+    this.elevatorIndex = this.state.getStartElevator();
     this.hitStop = 0;
     this.quiver.capacity = this.state.getQuiverCapacity();
     this.quiver.prepareForRun();
@@ -335,8 +348,8 @@ export class CorridorSim {
         this._forwardCommitT = 0;
         this._advanceSegment();
       }
-    } else if (this._approachingJunction) {
-      // Sprint to the fork after an early clear — don't choose from mid-hall.
+    } else if (this._approachingJunction || this._approachingElevator) {
+      // Sprint to the fork / elevator shaft after a clear — never choose from mid-hall.
       const stopAt = this.segmentEndZ - JUNCTION_STOP;
       const step = CONFIG.PLAYER_SPEED * 14;
       const nextZ = Math.min(stopAt, this.playerWorldZ + step);
@@ -349,13 +362,18 @@ export class CorridorSim {
       this.state.runDistance = this.playerWorldZ;
       if (this.playerWorldZ >= stopAt - 0.01) {
         this.playerWorldZ = stopAt;
-        this._approachingJunction = false;
         this.movingForward = false;
-        this._showJunction();
+        if (this._approachingElevator) {
+          this._approachingElevator = false;
+          this._rideElevator();
+        } else {
+          this._approachingJunction = false;
+          this._showJunction();
+        }
       }
     }
 
-    if (this.movingForward && !this.junctionPending && !this.turning && !this._forwardCommit && !this._approachingJunction) {
+    if (this.movingForward && !this.junctionPending && !this.turning && !this._forwardCommit && !this._approachingJunction && !this._approachingElevator) {
       this.playerWorldZ += CONFIG.PLAYER_SPEED;
       const rad = (this.heading * Math.PI) / 180;
       this.mapX += Math.sin(rad) * CONFIG.PLAYER_SPEED;
@@ -375,6 +393,7 @@ export class CorridorSim {
       return;
     }
     this.state.tickBonuses(this.dt);
+    this._tickPendingBurst();
     this._tickProjectiles();
     this._tickEnemyProjectiles();
     this._tickAutoMagic();
@@ -387,6 +406,27 @@ export class CorridorSim {
     }
   }
 
+  _tickPendingBurst() {
+    const b = this._pendingBurst;
+    if (!b) return;
+    b.t -= this.dt;
+    if (b.t > 0) return;
+    this._pendingBurst = null;
+    if (this.state.phase !== "run" || this.junctionPending || this.turning || this._approachingJunction || this._approachingElevator) return;
+    const arrow = this.quiver.fireArrow();
+    if (!arrow) return;
+    this.state.arrowsFired++;
+    this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
+    this.waveSpentArrows = this.waveSpentArrows || [];
+    this.waveSpentArrows.push({ type: arrow.type, level: arrow.level });
+    this.projectiles.push(createProjectile(
+      this.playerWorldX, this.playerWorldZ + 18,
+      b.vx, b.vz,
+      getArrowDamage(arrow.type, arrow.level), arrow.type, "player",
+      16, b.vy || 0, arrow.level
+    ));
+  }
+
   _waveCleared() {
     return !this.waveActive
       && (!this.waveQueue || this.waveQueue.length === 0)
@@ -397,6 +437,11 @@ export class CorridorSim {
 
   _rollJunction() {
     const next = this._peekNextDepth();
+    if (next.elevatorGate) {
+      this.junctionChoices = null;
+      this.junctionPending = false;
+      return;
+    }
     const roster = this._rosterForFloorAt(next.floorIndex, next.elevatorIndex);
     const mid = hallBudget(next.floorIndex, next.sectionIndex, next.elevatorIndex);
     const plans = [
@@ -420,13 +465,18 @@ export class CorridorSim {
     const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
     let sectionIndex = this.sectionIndex + 1;
     let floorIndex = this.floorIndex;
-    let elevatorIndex = this.elevatorIndex;
+    const elevatorIndex = this.elevatorIndex;
     if (sectionIndex >= halls) {
       sectionIndex = 0;
       floorIndex++;
       if (floorIndex >= floors) {
-        floorIndex = 0;
-        elevatorIndex++;
+        // Past floor 10 is the elevator shaft — not a fork destination.
+        return {
+          sectionIndex: halls - 1,
+          floorIndex: floors - 1,
+          elevatorIndex,
+          elevatorGate: true,
+        };
       }
     }
     return { sectionIndex, floorIndex, elevatorIndex };
@@ -434,7 +484,10 @@ export class CorridorSim {
 
   _planEncounter(roster, target, depth, soulBonus) {
     const built = composeWaveForBudget(roster, target, depth.floorIndex, depth.elevatorIndex);
-    if (depth.floorIndex === 9 && depth.sectionIndex === 9) {
+    const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+    // Elevator guardian: last hall of floor 10 in each elevator block.
+    if (depth.floorIndex === floors - 1 && depth.sectionIndex === halls - 1) {
       const bosses = ["boss_grunt", "boss_warden", "boss_wraith", "boss_death_knight", "boss_spider_queen", "boss_lich_king"];
       built.groups.push([bosses[depth.elevatorIndex % bosses.length]]);
     }
@@ -503,9 +556,10 @@ export class CorridorSim {
     if (this.sectionIndex >= halls) {
       this.sectionIndex = 0;
       this.floorIndex++;
+      // Elevator bumps only via _rideElevator — never skip the shaft by forking.
       if (this.floorIndex >= floors) {
-        this.floorIndex = 0;
-        this.elevatorIndex++;
+        this.floorIndex = floors - 1;
+        this.sectionIndex = halls - 1;
       }
     }
     this.segmentIndex++;
@@ -550,11 +604,11 @@ export class CorridorSim {
     if (f >= 1 || e) r.push("imp");
     if (f >= 2) r.push("slime_large", "goblin_warrior", "bat");
     if (f >= 3) r.push("skeleton", "skeleton_archer", "ghoul");
-    if (f >= 4) r.push("spider", "wight");
+    if (f >= 4) r.push("spider", "wight", "giant_spider");
     if (f >= 5) r.push("orc", "scamp");
-    if (f >= 6) r.push("slime_huge", "troll");
+    if (f >= 6) r.push("slime_huge", "troll", "ogre");
     if (f >= 7) r.push("goblin_chieftain", "wraith");
-    if (f >= 8) r.push("vampire", "hauler");
+    if (f >= 8) r.push("vampire", "hauler", "vampire_lord");
     if (f >= 9 || e > 0) r.push("demon", "lich");
     return r;
   }
@@ -573,11 +627,20 @@ export class CorridorSim {
   }
 
   getProgressLabel() {
+    if (this._finalBoss) return "Final Boss";
     const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const startElevs = CONFIG.START_ELEVATORS || 9;
     const fl = this.floorIndex + 1;
     const hall = this.sectionIndex + 1;
-    if (this.elevatorIndex > 0) return `E${this.elevatorIndex + 1}  Fl. ${fl}  ${hall}/${halls}`;
-    return `Fl. ${fl}  ${hall}/${halls}`;
+    if (this.elevatorIndex <= 0) return `Gate  Fl. ${fl}  ${hall}/${halls}`;
+    return `E${this.elevatorIndex}/${startElevs}  Fl. ${fl}  ${hall}/${halls}`;
+  }
+
+  /** Last hall of floor 10 — elevator shaft, not a fork you can walk past. */
+  _isElevatorGate() {
+    const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
+    const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+    return this.floorIndex >= floors - 1 && this.sectionIndex >= halls - 1 && !this._finalBoss;
   }
 
   _groupGapSeconds() {
@@ -620,10 +683,13 @@ export class CorridorSim {
         this._waveSoulBonus = 0;
       }
       this.emit("wave_end", { wave: this.waveIndex });
-      const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
-      const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
-      if (this.floorIndex >= floors - 1 && this.sectionIndex >= halls - 1) {
+      if (this._finalBoss) {
         this.state.victory();
+        return;
+      }
+      // Floor 10 last hall → forced elevator (cannot fork past the shaft).
+      if (this._isElevatorGate()) {
+        this._beginApproachToElevator();
         return;
       }
       this._beginApproachToJunction();
@@ -637,15 +703,90 @@ export class CorridorSim {
       this.playerWorldZ = stopAt;
       this.movingForward = false;
       this._approachingJunction = false;
+      this._approachingElevator = false;
       this._showJunction();
       return;
     }
+    this._approachingElevator = false;
     this._approachingJunction = true;
     this.movingForward = true;
     this.junctionPending = false;
   }
 
-  /** Each spent arrow has a 95% chance to return; the rest break. */
+  /** After floor 10, sprint to the shaft — no left/right/ahead choice. */
+  _beginApproachToElevator() {
+    this.junctionChoices = null;
+    this.junctionPending = false;
+    this._approachingJunction = false;
+    const stopAt = this.segmentEndZ - JUNCTION_STOP;
+    if (this.playerWorldZ >= stopAt - 1) {
+      this.playerWorldZ = stopAt;
+      this.movingForward = false;
+      this._approachingElevator = false;
+      this._rideElevator();
+      return;
+    }
+    this._approachingElevator = true;
+    this.movingForward = true;
+  }
+
+  /**
+   * Ride the elevator after floor 10 of a block.
+   * Arriving at blocks 1–9 unlocks start shafts E1–E9. Clearing block 9 → final boss (no E10).
+   */
+  _rideElevator() {
+    this._approachingElevator = false;
+    this._approachingJunction = false;
+    this.junctionPending = false;
+    this.junctionChoices = null;
+    this._pendingEncounter = null;
+    const elevs = CONFIG.ELEVATORS_PER_RUN || 10;
+    // Finished the last hall of the final floor-block → final boss (no E10 start).
+    if (this.elevatorIndex >= elevs - 1) {
+      this.emit("elevator_ride", { to: "final" });
+      this._enterFinalBoss();
+      return;
+    }
+    const from = this.elevatorIndex;
+    this.elevatorIndex++;
+    this.state.unlockElevator(this.elevatorIndex);
+    this.floorIndex = 0;
+    this.sectionIndex = 0;
+    this.segmentIndex++;
+    this.segmentStartZ = this.playerWorldZ;
+    this.segmentEndZ = this.playerWorldZ + SEGMENT_LENGTH;
+    this.movingForward = true;
+    this.turnAngle = 0;
+    this.turning = false;
+    this._forwardCommit = false;
+    this.emit("elevator_ride", { from, to: this.elevatorIndex, unlocked: this.elevatorIndex });
+    this._startWave();
+  }
+
+  _enterFinalBoss() {
+    this._finalBoss = true;
+    this.floorIndex = 0;
+    this.sectionIndex = 0;
+    this.segmentIndex++;
+    this.segmentStartZ = this.playerWorldZ;
+    this.segmentEndZ = this.playerWorldZ + SEGMENT_LENGTH;
+    this.movingForward = true;
+    this.junctionChoices = null;
+    this.junctionPending = false;
+    this._pendingEncounter = null;
+    this.waveIndex++;
+    this.waveActive = true;
+    this.waveQueue = [];
+    this.waveGroups = [["boss_lich_king"], ["boss_death_knight", "wraith"]];
+    this._waveSoulBonus = 25;
+    this.groupGap = 0.35;
+    this.waveArrowsFired = 0;
+    this.waveSpentArrows = [];
+    this.quiver.shuffleForWave();
+    this.emit("wave_start", { wave: this.waveIndex, floor: 0, section: 0, finalBoss: true });
+  }
+
+  /** Spent arrows may return to the quiver; chance from Luck (base 90%). */
   _recoverArrows() {
     const spent = this.waveSpentArrows || [];
     this.waveSpentArrows = [];
@@ -666,7 +807,7 @@ export class CorridorSim {
       const e = this.enemies[i];
       const relDist = e.worldZ - this.playerWorldZ;
       e.dist = relDist;
-      const spd = e.speed * dt * (e.slowT > 0 ? 0.4 : 1);
+      const spd = e.speed * dt * (e.slowT > 0 ? (e.slowFactor || 0.4) : 1);
       if (e._hitStun > 0) e._hitStun = Math.max(0, e._hitStun - dt);
       if (e._squash > 0) e._squash = Math.max(0, e._squash - dt * 5.5);
       if (e._contactCd > 0) e._contactCd = Math.max(0, e._contactCd - dt);
@@ -847,8 +988,18 @@ export class CorridorSim {
       const dist = e.worldZ - this.playerWorldZ;
       e.dist = dist;
 
-      if (e.burnT > 0) { e.burnT -= dt; e.hp -= 4 * dt; }
-      if (e.poisonT > 0) { e.poisonT -= dt; e.hp -= 2.5 * dt; }
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        e.hp -= (e.burnDps || 3) * dt;
+      }
+      if (e.poisonT > 0) {
+        e.poisonT -= dt;
+        e.hp -= (e.poisonDps || 2.5) * dt;
+      }
+      if (e.bleedT > 0) {
+        e.bleedT -= dt;
+        e.hp -= (e.bleedDps || 2) * dt;
+      }
       if (e.slowT > 0) e.slowT -= dt;
       if (e.shredT > 0) e.shredT -= dt;
       if (e.oiledT > 0) e.oiledT -= dt;
@@ -871,6 +1022,8 @@ export class CorridorSim {
       if (dist < CONTACT_DIST && dist > 6 && onAxis && (e._contactCd || 0) <= 0) {
         const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
         this.state.damagePlayer(dmg);
+        const poison = e.contactPoison || def?.poison || 0;
+        if (poison > 0) this.state.applyPlayerPoison(poison);
         this.emit("player_hit", { damage: dmg, enemy: e });
         e._contactCd = 0.95;
         e._hitStun = 0.32;
@@ -957,7 +1110,8 @@ export class CorridorSim {
         {
           if (!p._hitIds) p._hitIds = [];
           p._hitIds.push(e.id);
-          const raw = this._calcDamage(p, e);
+          const armored = e.armor === "heavy" || e.armor === "insulated";
+          const raw = this._calcDamage(p, e, { punchArmour: !!(p.punchArmour && armored) });
           let dmg = raw;
           if (e.shieldHp > 0) {
             const absorbed = Math.min(e.shieldHp, dmg);
@@ -978,7 +1132,12 @@ export class CorridorSim {
             Math.floor(relDist / CONFIG.CELL_SIZE),
             p.element
           );
-          p.pierceLeft = (p.pierceLeft || 1) - 1;
+          // Piercing: through unarmoured (continue) OR punch armour and stop.
+          if (p.punchArmour && armored) {
+            p.pierceLeft = 0;
+          } else {
+            p.pierceLeft = (p.pierceLeft || 1) - 1;
+          }
           if (p.pierceLeft <= 0) this.projectiles.splice(i, 1);
           break;
         }
@@ -986,44 +1145,87 @@ export class CorridorSim {
     }
   }
 
-  _calcDamage(proj, enemy) {
-    let d = proj.damage;
+  _calcDamage(proj, enemy, opts = {}) {
+    let phys = proj.damage;
+    let fire = proj.fireDamage || 0;
+    let frost = proj.iceDamage || 0;
     const el = proj.element;
     const def = getArrowDef(el);
     if (def.vsUndead && /skeleton|ghoul|wight|wraith|lich|vampire/.test(enemy.type || "")) {
-      d *= def.vsUndead;
+      phys *= def.vsUndead;
+      fire *= def.vsUndead;
+      frost *= def.vsUndead;
     }
-    const soft = el === "wood" || el === "flint" || el === "normal" || el === "kinetic";
-    if (enemy.armor === "heavy" && soft) d *= 0.5;
-    else if (enemy.armor === "heavy" && el === "iron") d *= 0.8;
-    if (enemy.armor === "insulated" && (el === "fire" || el === "shock")) d *= 0.5;
-    if (enemy.armor === "energy") { d *= 0.7; if (proj.ownerId === "player") this.state.damagePlayer(Math.floor(proj.damage * 0.3)); }
-    if (enemy.shredT > 0) d = proj.damage;
+    if (def.vsEnergy && enemy.armor === "energy") {
+      phys *= def.vsEnergy;
+    }
+    const soft = !def.hardTip && (el === "wood" || el === "flint" || el === "normal" || el === "kinetic"
+      || el === "fire" || el === "ice" || el === "poison" || el === "oil" || el === "stun"
+      || el === "double" || el === "barbed");
+    // Soft shafts half vs heavy — unless this is a pierce armour-punch.
+    if (enemy.armor === "heavy" && soft && !opts.punchArmour) phys *= 0.5;
+    else if (enemy.armor === "heavy" && el === "iron" && !opts.punchArmour) phys *= 0.85;
+    if (enemy.armor === "insulated") {
+      fire *= 0.45;
+      if (el === "shock") phys *= 0.55;
+    }
+    if (enemy.armor === "energy" && !def.vsEnergy) {
+      phys *= 0.7;
+      if (proj.ownerId === "player") this.state.damagePlayer(Math.floor(proj.damage * 0.25));
+    }
+    if (enemy.shredT > 0) phys = Math.max(phys, proj.damage);
     if (proj.ownerId === "player") {
-      d += this.state.getStrengthBonus();
-      d *= this.state.runBonuses.damageMultiplier || 1;
-      if (Math.random() < this.state.getCritChance()) d *= this.state.getCritMultiplier();
+      const str = this.state.getStrengthBonus();
+      phys += str;
+      fire = fire > 0 ? fire + str * 0.35 : 0;
+      frost = frost > 0 ? frost + str * 0.25 : 0;
+      const mult = this.state.runBonuses.damageMultiplier || 1;
+      phys *= mult;
+      fire *= mult;
+      frost *= mult;
+      if (Math.random() < this.state.getCritChance()) {
+        const crit = this.state.getCritMultiplier();
+        phys *= crit;
+        fire *= crit;
+        frost *= crit;
+      }
     }
-    return Math.max(1, Math.floor(d));
+    return Math.max(1, Math.floor(phys + fire + frost));
   }
 
   _applyStatus(proj, e) {
     const el = proj.element;
+    const def = getArrowDef(el);
     if (el === "fire") {
-      if (e.slowT > 0) e.slowT = 0;
-      if (e.oiledT > 0) {
+      if (e.slowT > 0) { e.slowT = 0; e.slowFactor = 0.4; }
+      const oiled = e.oiledT > 0;
+      if (oiled) {
         e.oiledT = 0;
-        e.burnT = Math.max(e.burnT, 5);
-        e.hp -= 6;
+        e.burnT = Math.max(e.burnT, (def.burn || 3) + 2.5);
+        e.burnDps = Math.max(e.burnDps || 0, (def.burnDps || 3) + 2);
+        e.hp -= 5; // flash ignition
       } else {
-        e.burnT = Math.max(e.burnT, 3);
+        e.burnT = Math.max(e.burnT, def.burn || 3.5);
+        e.burnDps = Math.max(e.burnDps || 0, def.burnDps || 3);
       }
     } else if (el === "ice" || el === "frost") {
-      if (e.burnT > 0) e.burnT = 0;
-      e.slowT = Math.max(e.slowT, 2);
-    } else if (el === "poison") e.poisonT = Math.max(e.poisonT, 4);
-    else if (el === "oil") e.oiledT = Math.max(e.oiledT, 6);
-    else if (el === "acid") e.shredT = Math.max(e.shredT, 3);
+      if (e.burnT > 0) { e.burnT = 0; e.burnDps = 0; }
+      e.slowT = Math.max(e.slowT, def.slow || 3.2);
+      e.slowFactor = Math.min(e.slowFactor || 1, def.slowFactor || 0.32);
+    } else if (el === "poison") {
+      e.poisonT = Math.max(e.poisonT, def.poison || 4);
+      e.poisonDps = Math.max(e.poisonDps || 0, def.poisonDps || 2.4);
+    } else if (el === "oil") {
+      e.oiledT = Math.max(e.oiledT, 6.5);
+    } else if (el === "acid") {
+      e.shredT = Math.max(e.shredT, 3);
+    } else if (el === "barbed") {
+      e.bleedT = Math.max(e.bleedT, def.bleed || 4);
+      e.bleedDps = Math.max(e.bleedDps || 0, def.bleedDps || 2);
+    } else if (el === "stun" || el === "shock") {
+      e._hitStun = Math.max(e._hitStun || 0, def.stun || 0.7);
+      e._charging = false;
+    }
   }
 
   _spawnEnemyProjectile(worldX, worldZ, damage, speed) {
@@ -1096,7 +1298,7 @@ export class CorridorSim {
   // ─── Arrow Firing ────────────────────────────────────────
 
   fireArrow(trajectory) {
-    if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction) return null;
+    if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return null;
     if (this.state.phase !== "run") return null;
     if (this.state.arrowCooldown > 0) return null;
     const arrow = this.quiver.fireArrow();
@@ -1119,7 +1321,7 @@ export class CorridorSim {
       this.playerWorldX, this.playerWorldZ + 18,
       vx, vz,
       dmg, arrow.type, "player",
-      16, vy
+      16, vy, arrow.level
     );
     this.projectiles.push(proj);
     this.emit("arrow_fire", { arrow, projectile: proj });
@@ -1127,26 +1329,13 @@ export class CorridorSim {
       this.projectiles.push(createProjectile(
         this.playerWorldX, this.playerWorldZ + 18,
         vx * 1.08 + 18, vz * 0.96,
-        dmg, "wood", "player",
-        16, vy
+        Math.max(1, Math.floor(dmg * 0.9)), "wood", "player",
+        16, vy, arrow.level
       ));
     }
 
     if (this.state.consumeBurst()) {
-      setTimeout(() => {
-        if (this.state.phase !== "run" || this.junctionPending) return;
-        const b = this.quiver.fireArrow();
-        if (b) {
-          this.state.arrowsFired++;
-          this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
-          this.waveSpentArrows.push({ type: b.type, level: b.level });
-          this.projectiles.push(createProjectile(
-            this.playerWorldX, this.playerWorldZ + 18, vx * 1.1, vz * 1.1,
-            getArrowDamage(b.type, b.level), b.type, "player",
-            16, vy
-          ));
-        }
-      }, 80);
+      this._pendingBurst = { t: 0.08, vx: vx * 1.1, vz: vz * 1.1, vy, level: arrow.level };
     }
     return arrow;
   }

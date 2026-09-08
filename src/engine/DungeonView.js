@@ -2,7 +2,7 @@
  * First-person dungeon hall — vector pinhole, full canvas resolution.
  * Warm torchlit stone. No pixel buffer.
  */
-import { CONFIG } from "../data/config.js";
+import { CONFIG } from "../data/config.js?v=29";
 
 const NEAR = 6;
 const FAR = 640;

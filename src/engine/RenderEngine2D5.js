@@ -1,15 +1,6 @@
 /**
- * RenderEngine2D5 — Standalone 2.5D rendering engine for corridor games.
- *
- * ZERO game logic. Handles:
- * - Viewport projection (pitch-shifted 3/4 perspective)
- * - Camera pan/zoom with damped glide
- * - Unified depth-sorting across all entity arrays
- * - Canvas setup and DPR handling
- * - Rendering pipeline orchestration
- *
- * Adapted from Tower Defense BoardView (boardView.js) and stripped of
- * all sim, game state, and gameplay dependencies.
+ * RenderEngine2D5 — canvas pipeline for Ranger Descent.
+ * Viewport, DPR, FX, and draw orchestration. No game rules.
  */
 import { CorridorCamera, CAMERA } from "./corridorCamera.js";
 import { FxSystem } from "./fx.js";
