@@ -780,6 +780,52 @@
       flex-direction: column;
     }
     #path-choice.active { display: flex; }
+    #path-choice .path-loot {
+      flex: 0 0 auto;
+      display: none;
+      padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 12px;
+      border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+      background: rgba(12, 8, 5, 0.88);
+      gap: 10px;
+      align-items: stretch;
+      justify-content: space-between;
+    }
+    #path-choice.has-loot .path-loot { display: flex; }
+    #path-choice .path-loot-body { flex: 1; min-width: 0; }
+    #path-choice .path-loot-kicker {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 0.68em;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #8a7348;
+      margin-bottom: 4px;
+    }
+    #path-choice .path-loot-title {
+      font-family: "Cinzel", "Chakra Petch", serif;
+      font-size: 1.05em;
+      color: #e8c56a;
+      letter-spacing: 0.06em;
+    }
+    #path-choice .path-loot-detail {
+      margin-top: 4px;
+      font-size: 0.82em;
+      color: #c9b48a;
+      line-height: 1.35;
+    }
+    #path-choice .path-loot-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 0 0 auto;
+      justify-content: center;
+    }
+    #path-choice .path-loot-actions button {
+      min-height: 40px;
+      padding: 8px 14px;
+      font-size: 0.85em;
+      letter-spacing: 0.06em;
+      width: auto;
+    }
     #path-choice .path-dirs {
       flex: 1;
       display: flex;
@@ -1252,6 +1298,17 @@
     </div>
 
     <div id="path-choice">
+      <div class="path-loot" id="path-loot" aria-live="polite">
+        <div class="path-loot-body">
+          <div class="path-loot-kicker">Hall spoils</div>
+          <div class="path-loot-title" id="path-loot-title">—</div>
+          <div class="path-loot-detail" id="path-loot-detail"></div>
+        </div>
+        <div class="path-loot-actions">
+          <button type="button" id="btn-loot-take">Take</button>
+          <button type="button" class="btn-secondary" id="btn-loot-skip">Leave</button>
+        </div>
+      </div>
       <div class="path-dirs">
         <button type="button" data-dir="left">‹ Left</button>
         <button type="button" data-dir="forward">Ahead</button>
@@ -1264,6 +1321,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=72"></script>
+  <script type="module" src="src/main.js?v=75"></script>
 </body>
 </html>

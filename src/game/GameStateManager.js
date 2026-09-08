@@ -100,6 +100,7 @@ export class GameStateManager {
     this.playerHp = 10;
     this.playerMaxHp = 10;
     this.arrowCooldown = 0;
+    this.daggerCooldown = 0;
     this.armorRating = 0;
     this.equipLoad = 0;
 
@@ -379,6 +380,16 @@ export class GameStateManager {
     return Math.max(0.2, cd);
   }
 
+  /** Close-work stab — a bit snappier than a full draw. */
+  getDaggerCooldown() {
+    const dex = this.getStat("dexterity");
+    return Math.max(0.35, 0.62 - dex * 0.012);
+  }
+
+  getDaggerDamage() {
+    return 2 + this.getStrengthBonus();
+  }
+
   /** Base 90% at Luck 1; +0.5% per point, cap 99%. */
   getArrowReturnChance() {
     const luck = this.getStat("luck");
@@ -405,6 +416,7 @@ export class GameStateManager {
     if (this.equipped?.amulet === "amulet_greenhorn") this.playerMaxHp += 2;
     this.playerHp = this.playerMaxHp;
     this.arrowCooldown = 0;
+    this.daggerCooldown = 0;
   }
 
   /** Unlock starting from this elevator index (1–9 = E1–E9). Gate is always available. */

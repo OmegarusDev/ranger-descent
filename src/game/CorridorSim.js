@@ -2,41 +2,42 @@ import { CONFIG } from "../data/config.js?v=30";
 import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=35";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=41";
+import { GameStateManager } from "./GameStateManager.js?v=42";
 
 let _nextId = 1;
 
 const ENEMY_DEFS = {
-  slime:          { hp: 5,   speed: 9,   size: 0.85, color: "#b84a55", souls: 1, armor: "none", contactDmg: 4 },
-  slime_large:    { hp: 14,  speed: 7,   size: 1.3, color: "#c45a65", souls: 2, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
-  slime_huge:     { hp: 28,  speed: 5,   size: 1.75, color: "#d46a75", souls: 4, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
-  goblin_runt:    { hp: 7,   speed: 20,  size: 1.2, color: "#6aaa5a", souls: 1, armor: "none", contactDmg: 3 },
-  goblin_warrior: { hp: 14,  speed: 16,  size: 1.5, color: "#5a9a4a", souls: 2, armor: "none", contactDmg: 5 },
-  goblin_chieftain:{ hp: 22, speed: 13,  size: 2.0, color: "#4a8a3a", souls: 4, armor: "none", contactDmg: 7 },
-  imp:            { hp: 8,   speed: 24,  size: 1.1, color: "#d4892a", souls: 1, armor: "none", contactDmg: 3 },
-  scamp:          { hp: 12,  speed: 22,  size: 1.2, color: "#e0a030", souls: 2, armor: "none", contactDmg: 4 },
-  demon:          { hp: 20,  speed: 16,  size: 1.8, color: "#c04040", souls: 4, armor: "none", contactDmg: 7 },
-  skeleton:       { hp: 18,  speed: 11,  size: 2.1, color: "#c8c0b0", souls: 3, armor: "none", contactDmg: 7 },
-  skeleton_archer:{ hp: 12,  speed: 12,  size: 1.8, color: "#b0a898", souls: 2, armor: "none", contactDmg: 4 },
-  hauler:         { hp: 32,  speed: 8,   size: 2.4, color: "#8a96a0", souls: 4, armor: "heavy", contactDmg: 10 },
-  ghoul:          { hp: 10,  speed: 15,  size: 1.4, color: "#7a6a5a", souls: 1, armor: "none", contactDmg: 4 },
-  wight:          { hp: 16,  speed: 13,  size: 1.7, color: "#6a5a4a", souls: 2, armor: "none", contactDmg: 6 },
-  wraith:         { hp: 12,  speed: 18,  size: 1.3, color: "#8a7ab8", souls: 2, armor: "energy", contactDmg: 5 },
-  vampire:        { hp: 18,  speed: 17,  size: 1.5, color: "#a02020", souls: 3, armor: "none", contactDmg: 6, lifeSteal: true },
-  vampire_lord:   { hp: 28,  speed: 19,  size: 2.0, color: "#801010", souls: 5, armor: "none", contactDmg: 8, lifeSteal: true },
-  lich:           { hp: 22,  speed: 10,  size: 1.8, color: "#6040a0", souls: 4, armor: "none", summonRate: 5, contactDmg: 5 },
-  bat:            { hp: 4,   speed: 28,  size: 0.6, color: "#4a3a5a", souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
-  spider:         { hp: 6,   speed: 20,  size: 0.9, color: "#5a4a3a", souls: 1, armor: "none", contactDmg: 3, poison: 1 },
-  giant_spider:   { hp: 16,  speed: 16,  size: 1.5, color: "#4a3a2a", souls: 2, armor: "none", contactDmg: 5, poison: 3 },
-  orc:            { hp: 18,  speed: 14,  size: 1.7, color: "#5a7a4a", souls: 3, armor: "none", contactDmg: 7 },
-  ogre:           { hp: 28,  speed: 9,   size: 2.3, color: "#6a8a5a", souls: 5, armor: "heavy", contactDmg: 10 },
-  troll:          { hp: 22,  speed: 12,  size: 2.0, color: "#4a6a3a", souls: 4, armor: "none", contactDmg: 8, regen: 2 },
-  boss_grunt:     { hp: 200, speed: 10,  size: 3.3, color: "#c4305a", souls: 20, armor: "heavy", contactDmg: 12 },
-  boss_warden:    { hp: 250, speed: 8,   size: 3.3, color: "#3d9a8e", souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
-  boss_wraith:    { hp: 180, speed: 14,  size: 3.0, color: "#c9a227", souls: 30, armor: "energy", contactDmg: 15 },
-  boss_death_knight: { hp: 250, speed: 11, size: 3.6, color: "#2a2a3a", souls: 30, armor: "heavy", contactDmg: 15 },
-  boss_lich_king: { hp: 300, speed: 8,  size: 3.3, color: "#4a2a6a", souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
-  boss_spider_queen: { hp: 200, speed: 14, size: 3.0, color: "#3a2a1a", souls: 25, armor: "none", contactDmg: 12, poison: 5 },
+  // coinMin/Max = purse drop on kill (₡). souls kept as display fallback.
+  slime:          { hp: 5,   speed: 9,   size: 0.85, color: "#b84a55", coinMin: 1, coinMax: 3, souls: 2, armor: "none", contactDmg: 4 },
+  slime_large:    { hp: 14,  speed: 7,   size: 1.3, color: "#c45a65", coinMin: 2, coinMax: 5, souls: 3, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
+  slime_huge:     { hp: 28,  speed: 5,   size: 1.75, color: "#d46a75", coinMin: 4, coinMax: 8, souls: 5, armor: "none", contactDmg: 8, splitTo: "slime_large", splitCount: 2 },
+  goblin_runt:    { hp: 7,   speed: 20,  size: 1.2, color: "#6aaa5a", coinMin: 1, coinMax: 7, souls: 3, armor: "none", contactDmg: 3 },
+  goblin_warrior: { hp: 14,  speed: 16,  size: 1.5, color: "#5a9a4a", coinMin: 3, coinMax: 8, souls: 5, armor: "none", contactDmg: 5 },
+  goblin_chieftain:{ hp: 22, speed: 13,  size: 2.0, color: "#4a8a3a", coinMin: 5, coinMax: 12, souls: 7, armor: "none", contactDmg: 7 },
+  imp:            { hp: 8,   speed: 24,  size: 1.1, color: "#d4892a", coinMin: 1, coinMax: 4, souls: 2, armor: "none", contactDmg: 3 },
+  scamp:          { hp: 12,  speed: 22,  size: 1.2, color: "#e0a030", coinMin: 2, coinMax: 6, souls: 3, armor: "none", contactDmg: 4 },
+  demon:          { hp: 20,  speed: 16,  size: 1.8, color: "#c04040", coinMin: 4, coinMax: 10, souls: 6, armor: "none", contactDmg: 7 },
+  skeleton:       { hp: 18,  speed: 11,  size: 2.1, color: "#c8c0b0", coinMin: 2, coinMax: 8, souls: 4, armor: "none", contactDmg: 7 },
+  skeleton_archer:{ hp: 12,  speed: 12,  size: 1.8, color: "#b0a898", coinMin: 2, coinMax: 7, souls: 3, armor: "none", contactDmg: 4 },
+  hauler:         { hp: 32,  speed: 8,   size: 2.4, color: "#8a96a0", coinMin: 5, coinMax: 12, souls: 6, armor: "heavy", contactDmg: 10 },
+  ghoul:          { hp: 10,  speed: 15,  size: 1.4, color: "#7a6a5a", coinMin: 1, coinMax: 5, souls: 2, armor: "none", contactDmg: 4 },
+  wight:          { hp: 16,  speed: 13,  size: 1.7, color: "#6a5a4a", coinMin: 2, coinMax: 7, souls: 3, armor: "none", contactDmg: 6 },
+  wraith:         { hp: 12,  speed: 18,  size: 1.3, color: "#8a7ab8", coinMin: 2, coinMax: 8, souls: 4, armor: "energy", contactDmg: 5 },
+  vampire:        { hp: 18,  speed: 17,  size: 1.5, color: "#a02020", coinMin: 3, coinMax: 9, souls: 5, armor: "none", contactDmg: 6, lifeSteal: true },
+  vampire_lord:   { hp: 28,  speed: 19,  size: 2.0, color: "#801010", coinMin: 5, coinMax: 14, souls: 8, armor: "none", contactDmg: 8, lifeSteal: true },
+  lich:           { hp: 22,  speed: 10,  size: 1.8, color: "#6040a0", coinMin: 4, coinMax: 11, souls: 6, armor: "none", summonRate: 5, contactDmg: 5 },
+  bat:            { hp: 4,   speed: 28,  size: 0.6, color: "#4a3a5a", coinMin: 1, coinMax: 2, souls: 1, armor: "none", flying: true, contactDmg: 2, poison: 2 },
+  spider:         { hp: 6,   speed: 20,  size: 0.9, color: "#5a4a3a", coinMin: 1, coinMax: 4, souls: 2, armor: "none", contactDmg: 3, poison: 1 },
+  giant_spider:   { hp: 16,  speed: 16,  size: 1.5, color: "#4a3a2a", coinMin: 2, coinMax: 7, souls: 4, armor: "none", contactDmg: 5, poison: 3 },
+  orc:            { hp: 18,  speed: 14,  size: 1.7, color: "#5a7a4a", coinMin: 3, coinMax: 9, souls: 5, armor: "none", contactDmg: 7 },
+  ogre:           { hp: 28,  speed: 9,   size: 2.3, color: "#6a8a5a", coinMin: 5, coinMax: 12, souls: 7, armor: "heavy", contactDmg: 10 },
+  troll:          { hp: 22,  speed: 12,  size: 2.0, color: "#4a6a3a", coinMin: 4, coinMax: 10, souls: 6, armor: "none", contactDmg: 8, regen: 2 },
+  boss_grunt:     { hp: 200, speed: 10,  size: 3.3, color: "#c4305a", coinMin: 18, coinMax: 28, souls: 20, armor: "heavy", contactDmg: 12 },
+  boss_warden:    { hp: 250, speed: 8,   size: 3.3, color: "#3d9a8e", coinMin: 22, coinMax: 34, souls: 25, armor: "insulated", shieldHp: 60, contactDmg: 10 },
+  boss_wraith:    { hp: 180, speed: 14,  size: 3.0, color: "#c9a227", coinMin: 24, coinMax: 36, souls: 30, armor: "energy", contactDmg: 15 },
+  boss_death_knight: { hp: 250, speed: 11, size: 3.6, color: "#2a2a3a", coinMin: 26, coinMax: 40, souls: 30, armor: "heavy", contactDmg: 15 },
+  boss_lich_king: { hp: 300, speed: 8,  size: 3.3, color: "#4a2a6a", coinMin: 30, coinMax: 48, souls: 40, armor: "none", summonRate: 3, contactDmg: 10 },
+  boss_spider_queen: { hp: 200, speed: 14, size: 3.0, color: "#3a2a1a", coinMin: 20, coinMax: 32, souls: 25, armor: "none", contactDmg: 12, poison: 5 },
 };
 
 const BEHAVIOR_MAP = {
@@ -117,7 +118,7 @@ export function enemyHitWidth(e) {
   else if (type.includes("boss")) h = 34 + sz * 5;
   else h = 20 + sz * 8;
   const aspect = flying ? 1.15 : type.includes("slime") ? 1.35 : 0.58;
-  return h * aspect;
+  return h * aspect * 1.1;
 }
 
 const CONTACT_DIST = 30;
@@ -147,8 +148,28 @@ function enemyThreat(type, floorIndex, elevatorIndex) {
   return scaleEnemyHp(d.hp || 5, floorIndex, elevatorIndex);
 }
 
-function hallBudget(floorIndex, sectionIndex, elevatorIndex) {
-  return 10 + floorIndex * 5 + elevatorIndex * 14 + Math.floor(sectionIndex * 1.5);
+function rollEnemyCoins(type) {
+  const d = ENEMY_DEFS[type] || ENEMY_DEFS.slime;
+  const lo = d.coinMin != null ? d.coinMin : (d.souls || 1);
+  const hi = d.coinMax != null ? d.coinMax : lo;
+  if (hi <= lo) return lo;
+  return lo + Math.floor(Math.random() * (hi - lo + 1));
+}
+
+/**
+ * Target total HP for a hall.
+ * Gate curve: 5, 7, 10, 12, 14, 17, 19, 22, 24, then hall-10 spike (~28).
+ * Higher floors / elevators add flat HP; F10 / last elevator spike further.
+ */
+function hallHpBudget(floorIndex, sectionIndex, elevatorIndex) {
+  const elevs = CONFIG.ELEVATORS_PER_RUN || 10;
+  const hallBase = [5, 7, 10, 12, 14, 17, 19, 22, 24, 28];
+  const i = Math.max(0, Math.min(9, sectionIndex | 0));
+  let hp = hallBase[i] + floorIndex * 9 + elevatorIndex * 14;
+  if (sectionIndex >= 9) hp = Math.round(hp * 1.2);
+  if (floorIndex >= 9) hp = Math.round(hp * 1.28);
+  if (elevatorIndex >= elevs - 1) hp = Math.round(hp * 1.32);
+  return Math.max(5, hp);
 }
 
 function packIntoGroups(types) {
@@ -165,23 +186,51 @@ function packIntoGroups(types) {
   return groups.length ? groups : [["slime"]];
 }
 
-function composeWaveForBudget(roster, target, floorIndex, elevatorIndex) {
-  const pool = roster.length <= 6 ? roster : [roster[0], roster[1], ...roster.slice(-4)];
-  const cost = (t) => enemyThreat(t, floorIndex, elevatorIndex);
-  let best = null;
-  let bestDiff = 999;
-  const walk = (arr, spent) => {
-    if (arr.length && Math.abs(spent - target) < bestDiff) {
-      bestDiff = Math.abs(spent - target);
-      best = arr.slice();
+/**
+ * Build a wave whose scaled HP is as close as possible to target.
+ * DP over cheap units always finds a valid pack (never empty / never stuck).
+ */
+function composeWaveForHp(roster, targetHp, floorIndex, elevatorIndex, maxCount = 5) {
+  const units = [];
+  for (const t of roster) {
+    const hp = enemyThreat(t, floorIndex, elevatorIndex);
+    if (hp > 0) units.push({ t, hp });
+  }
+  units.sort((a, b) => a.hp - b.hp || a.t.localeCompare(b.t));
+  const cheapest = units[0] || { t: "slime", hp: enemyThreat("slime", floorIndex, elevatorIndex) };
+  const want = Math.max(cheapest.hp, targetHp | 0);
+  const maxSum = want + cheapest.hp * 2;
+
+  // dp[s] = shortest type list that sums to s
+  const dp = new Array(maxSum + 1).fill(null);
+  dp[0] = [];
+  for (let s = 0; s <= maxSum; s++) {
+    const cur = dp[s];
+    if (!cur || cur.length >= maxCount) continue;
+    for (const u of units) {
+      const ns = s + u.hp;
+      if (ns > maxSum) continue;
+      const next = cur.length + 1;
+      if (!dp[ns] || dp[ns].length > next) dp[ns] = cur.concat(u.t);
     }
-    if (arr.length >= 4 || spent >= target + 4) return;
-    for (const t of pool) walk([...arr, t], spent + cost(t));
-  };
-  walk([], 0);
-  const types = best && best.length ? best : [pool[0] || "slime"];
-  const threat = types.reduce((s, t) => s + cost(t), 0);
-  return { groups: packIntoGroups(types), threat, enemyTypes: [...new Set(types)] };
+  }
+
+  let bestS = -1;
+  let bestScore = Infinity;
+  for (let s = cheapest.hp; s <= maxSum; s++) {
+    if (!dp[s]) continue;
+    const diff = Math.abs(s - want);
+    // Prefer exact, then slight overshoot, then undershoot; fewer foes on ties.
+    const score = diff * 10 + (s < want ? 3 : 0) + dp[s].length * 0.01;
+    if (score < bestScore) {
+      bestScore = score;
+      bestS = s;
+    }
+  }
+
+  const types = bestS > 0 ? dp[bestS] : [cheapest.t];
+  const threat = types.reduce((sum, t) => sum + enemyThreat(t, floorIndex, elevatorIndex), 0);
+  return { groups: packIntoGroups(types), threat, enemyTypes: [...new Set(types)], hp: threat };
 }
 
 export class CorridorSim {
@@ -231,6 +280,7 @@ export class CorridorSim {
     this.groupGap = 0;
     this._pendingEncounter = null;
     this._waveSoulBonus = 0;
+    this.pendingLoot = null;
     this.floorIndex = 0;
     this.sectionIndex = 0;
     this.elevatorIndex = 0;
@@ -263,6 +313,7 @@ export class CorridorSim {
     this.junctionPending = false;
     this._pendingEncounter = null;
     this._waveSoulBonus = 0;
+    this.pendingLoot = null;
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnFrom = 0;
@@ -403,6 +454,9 @@ export class CorridorSim {
     if (this.state.arrowCooldown > 0) {
       this.state.arrowCooldown = Math.max(0, this.state.arrowCooldown - this.dt);
     }
+    if (this.state.daggerCooldown > 0) {
+      this.state.daggerCooldown = Math.max(0, this.state.daggerCooldown - this.dt);
+    }
   }
 
   _tickPendingBurst() {
@@ -441,12 +495,12 @@ export class CorridorSim {
       this.junctionPending = false;
       return;
     }
-    const roster = this._rosterForFloorAt(next.floorIndex, next.elevatorIndex);
-    const mid = hallBudget(next.floorIndex, next.sectionIndex, next.elevatorIndex);
+    const roster = this._rosterForFloorAt(next.floorIndex, next.elevatorIndex, next.sectionIndex);
+    const mid = hallHpBudget(next.floorIndex, next.sectionIndex, next.elevatorIndex);
     const plans = [
-      this._planEncounter(roster, Math.round(mid * 0.75), next, 0),
+      this._planEncounter(roster, Math.round(mid * 0.78), next, 0),
       this._planEncounter(roster, mid, next, 1),
-      this._planEncounter(roster, Math.round(mid * 1.4), next, 2),
+      this._planEncounter(roster, Math.round(mid * 1.38), next, 2),
     ];
     const dirs = ["left", "forward", "right"];
     for (let i = dirs.length - 1; i > 0; i--) {
@@ -482,7 +536,7 @@ export class CorridorSim {
   }
 
   _planEncounter(roster, target, depth, soulBonus) {
-    const built = composeWaveForBudget(roster, target, depth.floorIndex, depth.elevatorIndex);
+    const built = composeWaveForHp(roster, target, depth.floorIndex, depth.elevatorIndex);
     const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
     const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
     // Elevator guardian: last hall of floor 10 in each elevator block.
@@ -502,9 +556,10 @@ export class CorridorSim {
 
   _showJunction() {
     if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
+    this.pendingLoot = this._rollWaveLoot();
     this.junctionPending = true;
     this.movingForward = false;
-    this.emit("junction_show", { choices: this.junctionChoices });
+    this.emit("junction_show", { choices: this.junctionChoices, loot: this.pendingLoot });
   }
 
   chooseJunction(direction) {
@@ -515,6 +570,7 @@ export class CorridorSim {
     this.junctionPending = false;
     this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
+    this.pendingLoot = null;
     this.emit("junction_chosen", { direction });
     if (direction === "left" || direction === "right") {
       this.turning = true;
@@ -595,13 +651,15 @@ export class CorridorSim {
   }
 
   _rosterForFloor() {
-    return this._rosterForFloorAt(this.floorIndex, this.elevatorIndex);
+    return this._rosterForFloorAt(this.floorIndex, this.elevatorIndex, this.sectionIndex);
   }
 
-  _rosterForFloorAt(f, e) {
+  _rosterForFloorAt(f, e, sectionIndex = 0) {
+    // Floor 1: slime + goblin. Hall 10 unlocks warrior for the miniboss spike.
     const r = ["slime", "goblin_runt"];
-    if (f >= 1 || e) r.push("imp");
-    if (f >= 2) r.push("slime_large", "goblin_warrior", "bat");
+    if (f >= 1 || e > 0) r.push("imp");
+    if (f >= 2 || e > 0) r.push("slime_large", "goblin_warrior", "bat");
+    else if (sectionIndex >= 9) r.push("goblin_warrior");
     if (f >= 3) r.push("skeleton", "skeleton_archer", "ghoul");
     if (f >= 4) r.push("spider", "wight", "giant_spider");
     if (f >= 5) r.push("orc", "scamp");
@@ -612,17 +670,17 @@ export class CorridorSim {
     return r;
   }
 
-  _openingWave() {
-    if (this.elevatorIndex === 0 && this.floorIndex === 0 && this.sectionIndex === 0) {
-      return [["slime", "slime"]];
-    }
-    const built = composeWaveForBudget(
-      this._rosterForFloor(),
-      hallBudget(this.floorIndex, this.sectionIndex, this.elevatorIndex),
-      this.floorIndex,
-      this.elevatorIndex
+  _waveForDepth(floorIndex, sectionIndex, elevatorIndex) {
+    return composeWaveForHp(
+      this._rosterForFloorAt(floorIndex, elevatorIndex, sectionIndex),
+      hallHpBudget(floorIndex, sectionIndex, elevatorIndex),
+      floorIndex,
+      elevatorIndex
     );
-    return built.groups;
+  }
+
+  _openingWave() {
+    return this._waveForDepth(this.floorIndex, this.sectionIndex, this.elevatorIndex).groups;
   }
 
   getProgressLabel() {
@@ -845,10 +903,11 @@ export class CorridorSim {
           }
           break;
         case "swarm": {
+          // Low-level goblins: full-strength sidestep, but much less often.
           e._swarmTimer = (e._swarmTimer || 0) + dt;
           e._swarmDodgeSeq = e._swarmDodgeSeq || [-1, 1, 1, -1];
           e._swarmDodgeIdx = e._swarmDodgeIdx || 0;
-          const walkDur = 1.6;
+          const walkDur = 3.1;
           const dodgeDur = 0.2;
           const cycleT = e._swarmTimer % (walkDur + dodgeDur);
           if (cycleT < walkDur) {
@@ -1054,8 +1113,9 @@ export class CorridorSim {
 
   _killEnemy(e, index, def, relDist) {
     this.state.enemiesKilled++;
-    this.state.awardKillSouls(e.souls || def?.souls || 1);
-    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist });
+    const coins = rollEnemyCoins(e.type);
+    this.state.awardKillSouls(coins);
+    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist, coins });
     if (def?.splitTo && !e._splitDone) {
       for (let s = 0; s < (def.splitCount || 2); s++) {
         const side = s ? 1 : -1;
@@ -1072,6 +1132,76 @@ export class CorridorSim {
       }
     }
     this.enemies.splice(index, 1);
+  }
+
+  /** End-of-wave loot offered on the path-choice screen. */
+  _rollWaveLoot() {
+    const roll = Math.random();
+    // ~40% nothing — keeps forks clean early.
+    if (roll < 0.40) return null;
+    const r = Math.random();
+    if (r < 0.42) {
+      const amount = 2 + Math.floor(Math.random() * 5) + this.floorIndex + this.elevatorIndex;
+      return { kind: "coins", amount, label: `${amount} coin`, detail: "Loose purse from the hall." };
+    }
+    if (r < 0.72) {
+      const arrows = ["fire", "ice", "poison", "piercing", "double"];
+      const arrow = arrows[Math.floor(Math.random() * arrows.length)];
+      const def = getArrowDef(arrow);
+      return {
+        kind: "arrow",
+        arrow,
+        label: def.name || arrow,
+        detail: def.desc || "A spare shaft for the chest.",
+        color: def.color,
+      };
+    }
+    if (r < 0.90) {
+      const pots = [
+        { id: "potion_salve", label: "Herbal Remedy", detail: "Bitter herbs for the pouch." },
+        { id: "potion_bandage", label: "Field Bandage", detail: "Wraps a wound between halls." },
+        { id: "potion_tonic", label: "Clearing Tonic", detail: "Burns out contact venom." },
+      ];
+      const pot = pots[Math.floor(Math.random() * pots.length)];
+      return { kind: "potion", itemId: pot.id, label: pot.label, detail: pot.detail };
+    }
+    // Rare scrap of gear — cheap hide scrap as armour token id handled in main.
+    return {
+      kind: "gear",
+      itemId: "trinket_lucky_tooth",
+      label: "Lucky Tooth",
+      detail: "A goblin charm. Stow it with your kit.",
+    };
+  }
+
+  claimPendingLoot() {
+    const loot = this.pendingLoot;
+    if (!loot) return null;
+    this.pendingLoot = null;
+    if (loot.kind === "coins") {
+      this.state.awardKillSouls(loot.amount || 0);
+    } else if (loot.kind === "arrow" && loot.arrow) {
+      this.quiver.addToStorage({ type: loot.arrow, level: 1 });
+    } else if (loot.kind === "potion" && loot.itemId) {
+      if (!this.state.ownedItems) this.state.ownedItems = [];
+      if (!this.state.ownedItems.includes(loot.itemId)) this.state.ownedItems.push(loot.itemId);
+      const pouch = this.state.pouch || [];
+      const empty = pouch.findIndex((s) => !s);
+      if (empty >= 0) {
+        this.state.pouch[empty] = loot.itemId;
+      }
+    } else if (loot.kind === "gear" && loot.itemId) {
+      if (!this.state.ownedItems) this.state.ownedItems = [];
+      if (!this.state.ownedItems.includes(loot.itemId)) this.state.ownedItems.push(loot.itemId);
+    }
+    this.emit("loot_claimed", { loot });
+    return loot;
+  }
+
+  skipPendingLoot() {
+    if (!this.pendingLoot) return;
+    this.pendingLoot = null;
+    this.emit("loot_skipped");
   }
 
   /**
@@ -1138,8 +1268,8 @@ export class CorridorSim {
       for (let j = this.enemies.length - 1; j >= 0; j--) {
         const e = this.enemies[j];
         if (p._hitIds && p._hitIds.includes(e.id)) continue;
-        const halfW = enemyHitWidth(e) * 0.5;
-        const halfD = Math.max(6, halfW * 0.64);
+        const halfW = enemyHitWidth(e) * 0.58;
+        const halfD = Math.max(8, halfW * 0.72);
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
         if (Math.abs(dx) > halfW || Math.abs(ddist) > halfD) continue;
@@ -1332,6 +1462,69 @@ export class CorridorSim {
   }
 
   // ─── Arrow Firing ────────────────────────────────────────
+
+  /**
+   * Tap a foe that is already in your face (and preferably off to the side)
+   * to stab with the equipped dagger. Very short range only.
+   * @param {number} cssX
+   * @param {number} cssY
+   * @param {(worldX:number, dist:number) => {x:number,y:number,s?:number}} projectFn
+   */
+  tryDaggerAt(cssX, cssY, projectFn) {
+    if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return false;
+    if (this.state.phase !== "run") return false;
+    if (!this.state.equipped?.dagger) return false;
+    if ((this.state.daggerCooldown || 0) > 0) return false;
+    if (typeof projectFn !== "function") return false;
+
+    const MELEE_DIST = 44;
+    const MELEE_LAT = 58;
+    let best = null;
+    let bestScore = Infinity;
+
+    for (const e of this.enemies) {
+      const dist = e.worldZ - this.playerWorldZ;
+      if (dist < 6 || dist > MELEE_DIST) continue;
+      const dx = Math.abs(e.x - this.playerWorldX);
+      if (dx > MELEE_LAT) continue;
+      // Prefer side targets; dead-center only if extremely close.
+      if (dx < 10 && dist > 28) continue;
+
+      const p = projectFn(e.x, dist);
+      if (!p) continue;
+      const sd = Math.hypot((p.x || 0) - cssX, (p.y || 0) - cssY);
+      const hitR = Math.max(36, 26 * (p.s || 1));
+      if (sd > hitR) continue;
+      if (sd < bestScore) {
+        bestScore = sd;
+        best = e;
+      }
+    }
+    if (!best) return false;
+
+    const raw = this.state.getDaggerDamage();
+    let dmg = raw;
+    if (best.shieldHp > 0) {
+      const absorbed = Math.min(best.shieldHp, dmg);
+      best.shieldHp -= absorbed;
+      dmg -= absorbed;
+    }
+    if (dmg > 0) best.hp -= dmg;
+    best._hitFlash = 1;
+    best._hitStun = Math.max(best._hitStun || 0, 0.18);
+    best._squash = 1;
+    best.worldZ += 10;
+    best.x += Math.sign(best.x - this.playerWorldX || 1) * 5;
+    this.hitStop = Math.max(this.hitStop, 0.055);
+    this.state.daggerCooldown = this.state.getDaggerCooldown();
+    const relDist = best.worldZ - this.playerWorldZ;
+    this.emit("dagger_hit", { enemy: best, x: best.x, dist: relDist, damage: raw });
+    if (best.hp <= 0) {
+      const idx = this.enemies.indexOf(best);
+      if (idx >= 0) this._killEnemy(best, idx, ENEMY_DEFS[best.type], relDist);
+    }
+    return true;
+  }
 
   fireArrow(trajectory) {
     if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return null;

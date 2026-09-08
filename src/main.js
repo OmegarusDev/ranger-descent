@@ -5,9 +5,9 @@ import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
 import { DungeonView } from "./engine/DungeonView.js?v=42";
 import { CONFIG } from "./data/config.js?v=30";
 import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, createArrow } from "./game/QuiverDeckManager.js?v=35";
-import { STAT_INFO } from "./game/GameStateManager.js?v=41";
-import { CorridorSim } from "./game/CorridorSim.js?v=57";
+import { CorridorSim } from "./game/CorridorSim.js?v=60";
 import { InputHandler } from "./game/InputHandler.js?v=17";
+import { STAT_INFO } from "./game/GameStateManager.js?v=42";
 
 /** Player-facing coin mark (colon sign — C with bars). */
 const COIN = "₡";
@@ -74,11 +74,14 @@ function setPathChoice(on) {
   if (!active) {
     input.choiceMode = false;
     delete pathChoice.dataset.sig;
+    pathChoice.classList.remove("has-loot");
     return;
   }
   input.choiceMode = true;
+  const loot = sim.pendingLoot;
+  const lootSig = loot ? `${loot.kind}:${loot.label || loot.amount || loot.itemId || ""}` : "none";
   // Avoid rebuilding button HTML every RAF (flicker / lost taps).
-  const sig = (sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|");
+  const sig = `${(sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|")}|${lootSig}`;
   if (wasActive && pathChoice.dataset.sig === sig) {
     const escapeSouls = document.getElementById("escape-souls");
     if (escapeSouls) {
@@ -88,6 +91,14 @@ function setPathChoice(on) {
     return;
   }
   pathChoice.dataset.sig = sig;
+  pathChoice.classList.toggle("has-loot", !!loot);
+  const lootTitle = document.getElementById("path-loot-title");
+  const lootDetail = document.getElementById("path-loot-detail");
+  if (loot && lootTitle) {
+    lootTitle.textContent = loot.kind === "coins" ? coinLabel(loot.amount) : (loot.label || "Spoils");
+    if (lootDetail) lootDetail.textContent = loot.detail || "";
+  }
+
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   const labels = { left: "‹ Left", forward: "Ahead", right: "Right ›" };
   for (const btn of pathChoice.querySelectorAll("[data-dir]")) {
@@ -117,8 +128,16 @@ function setPathChoice(on) {
   }
 }
 
+function refreshPathLootUi() {
+  if (!pathChoice || !pathChoice.classList.contains("active")) return;
+  delete pathChoice.dataset.sig;
+  setPathChoice(true);
+  saveGame();
+}
+
 function escapeToSurface() {
   if (sim.state.phase !== "run" || !sim.junctionPending) return;
+  sim.skipPendingLoot();
   sim.junctionPending = false;
   setPathChoice(false);
   input.choiceMode = false;
@@ -161,7 +180,10 @@ input.onDragEnd = (angle, power, vector) => {
 };
 
 input.onTap = (x, y) => {
-  tryChoosePath(x, y);
+  if (tryChoosePath(x, y)) return;
+  if (sim.state.phase === "run" && !sim.junctionPending) {
+    sim.tryDaggerAt(x, y, (wx, dist) => dungeon.project(wx, dist));
+  }
 };
 
 window.addEventListener("keydown", (e) => {
@@ -230,6 +252,12 @@ const FX_TYPE = {
   double: "kinetic", normal: "kinetic", barbed: "kinetic", oil: "acid",
   poison: "poison", shock: "shock", fire: "fire",
 };
+sim.on("dagger_hit", (e) => {
+  engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, "kinetic");
+  engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage));
+  engine.punch(4.2);
+});
+
 sim.on("projectile_hit", (e) => {
   const fxType = FX_TYPE[e.projectile.element] || e.projectile.element;
   engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, fxType);
@@ -277,6 +305,20 @@ sim.on("run_start", () => {
 
 if (pathChoice) {
   pathChoice.addEventListener("pointerup", (e) => {
+    if (e.target.closest("#btn-loot-take")) {
+      e.preventDefault();
+      e.stopPropagation();
+      sim.claimPendingLoot();
+      refreshPathLootUi();
+      return;
+    }
+    if (e.target.closest("#btn-loot-skip")) {
+      e.preventDefault();
+      e.stopPropagation();
+      sim.skipPendingLoot();
+      refreshPathLootUi();
+      return;
+    }
     if (e.target.closest("#btn-escape")) {
       e.preventDefault();
       e.stopPropagation();
@@ -390,17 +432,17 @@ document.querySelectorAll("[data-close-sheet]").forEach((btn) => {
 })();
 
 const ENEMY_DEFS_BESTIARY = [
-  { id: "slime",          name: "Slime",           hp: 5,   dmg: 4,  speed: 9,   souls: 1, armor: "None",   color: "#b84a55", behavior: "Oozes forward with a slow, wet pulse" },
-  { id: "slime_large",    name: "Large Slime",     hp: 14,  dmg: 6,  speed: 7,   souls: 2, armor: "None",   color: "#c45a65", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
-  { id: "slime_huge",     name: "Huge Slime",      hp: 28,  dmg: 8,  speed: 5,   souls: 4, armor: "None",   color: "#d46a75", behavior: "Massive slime that splits into 2 Large Slimes" },
-  { id: "goblin_runt",    name: "Goblin Runt",     hp: 7,   dmg: 3,  speed: 20,  souls: 1, armor: "None",   color: "#6aaa5a", behavior: "Walks forward, then dodges side to side in a rhythm" },
-  { id: "goblin_warrior", name: "Goblin Warrior",  hp: 14,  dmg: 5,  speed: 16,  souls: 2, armor: "None",   color: "#5a9a4a", behavior: "Tougher goblin with slower, heavier dodges" },
-  { id: "goblin_chieftain",name: "Goblin Chieftain",hp: 22, dmg: 7,  speed: 13,  souls: 4, armor: "None",   color: "#4a8a3a", behavior: "Powerful goblin leader, slow but devastating" },
-  { id: "imp",            name: "Imp",             hp: 8,   dmg: 3,  speed: 24,  souls: 1, armor: "None",   color: "#d4892a", behavior: "Walks slowly, then notices player and charges" },
-  { id: "scamp",          name: "Scamp",           hp: 12,  dmg: 4,  speed: 22,  souls: 2, armor: "None",   color: "#e0a030", behavior: "Faster imp variant, charges quickly" },
-  { id: "demon",          name: "Demon",           hp: 20,  dmg: 7,  speed: 16,  souls: 4, armor: "None",   color: "#c04040", behavior: "Slow, heavy, devastating charger" },
-  { id: "skeleton",       name: "Skeleton",        hp: 18,  dmg: 7,  speed: 11,  souls: 3, armor: "None",   color: "#c8c0b0", behavior: "Slow undead warrior with a sharp blade" },
-  { id: "skeleton_archer",name: "Skeleton Archer",  hp: 12,  dmg: 4,  speed: 12,  souls: 2, armor: "None",   color: "#b0a898", behavior: "Stops at range and fires bone arrows at you" },
+  { id: "slime",          name: "Slime",           hp: 5,   dmg: 4,  speed: 9,   souls: "1–3₡", armor: "None",   color: "#b84a55", behavior: "Oozes forward with a slow, wet pulse" },
+  { id: "slime_large",    name: "Large Slime",     hp: 14,  dmg: 6,  speed: 7,   souls: "2–5₡", armor: "None",   color: "#c45a65", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
+  { id: "slime_huge",     name: "Huge Slime",      hp: 28,  dmg: 8,  speed: 5,   souls: "4–8₡", armor: "None",   color: "#d46a75", behavior: "Massive slime that splits into 2 Large Slimes" },
+  { id: "goblin_runt",    name: "Goblin Runt",     hp: 7,   dmg: 3,  speed: 20,  souls: "1–7₡", armor: "None",   color: "#6aaa5a", behavior: "Walks forward, then dodges side to side in a rhythm" },
+  { id: "goblin_warrior", name: "Goblin Warrior",  hp: 14,  dmg: 5,  speed: 16,  souls: "3–8₡", armor: "None",   color: "#5a9a4a", behavior: "Heavier goblin — floor-1 hall boss with escorts" },
+  { id: "goblin_chieftain",name: "Goblin Chieftain",hp: 22, dmg: 7,  speed: 13,  souls: "5–12₡", armor: "None",   color: "#4a8a3a", behavior: "Powerful goblin leader, slow but devastating" },
+  { id: "imp",            name: "Imp",             hp: 8,   dmg: 3,  speed: 24,  souls: "1–4₡", armor: "None",   color: "#d4892a", behavior: "Notices you, then charges the lane" },
+  { id: "scamp",          name: "Scamp",           hp: 12,  dmg: 4,  speed: 22,  souls: "2–6₡", armor: "None",   color: "#e0a030", behavior: "Faster imp variant, charges quickly" },
+  { id: "demon",          name: "Demon",           hp: 20,  dmg: 7,  speed: 16,  souls: "4–10₡", armor: "None",   color: "#c04040", behavior: "Slow, heavy, devastating charger" },
+  { id: "skeleton",       name: "Skeleton",        hp: 18,  dmg: 7,  speed: 11,  souls: "2–8₡", armor: "None",   color: "#c8c0b0", behavior: "Steady advance down the hall" },
+  { id: "skeleton_archer",name: "Skeleton Archer",  hp: 12,  dmg: 4,  speed: 12,  souls: "2–7₡", armor: "None",   color: "#b0a898", behavior: "Stops at range and fires bone arrows at you" },
   { id: "ghoul",          name: "Ghoul",           hp: 10,  dmg: 4,  speed: 15,  souls: 1, armor: "None",   color: "#7a6a5a", behavior: "Shambling undead" },
   { id: "wight",          name: "Wight",           hp: 16,  dmg: 6,  speed: 13,  souls: 2, armor: "None",   color: "#6a5a4a", behavior: "Tougher ghoul, steady advance" },
   { id: "wraith",         name: "Wraith",          hp: 12,  dmg: 5,  speed: 18,  souls: 2, armor: "Energy", color: "#8a7ab8", behavior: "Phases through attacks, zigzags unpredictably" },
@@ -548,7 +590,10 @@ const STARTER_GEAR = [
   { id: "bow_hunting", name: "Hunting Bow", slot: "bow", desc: "Your constant. Always strung.", stats: "Starter bow", icon: "🏹", section: "weapons" },
   { id: "dagger_iron", name: "Iron Dagger", slot: "dagger", desc: "When they reach you, you trade blows.", stats: "Close work", icon: "🗡", section: "weapons" },
   { id: "amulet_greenhorn", name: "Greenhorn Charm", slot: "amulet", desc: "A luck-stone for the unblooded.", stats: "+2 HP while worn", icon: "◆", section: "jewels" },
-  { id: "potion_salve", name: "Herbal Remedy", slot: "potion", desc: "A bitter draught of crushed herbs. Fits the pouch.", stats: "Consumable", icon: "✚", section: "potions" },
+  { id: "potion_salve", name: "Herbal Remedy", slot: "potion", cost: 12, desc: "A bitter draught of crushed herbs. Fits the pouch.", stats: "Consumable", icon: "✚", section: "potions" },
+  { id: "potion_bandage", name: "Field Bandage", slot: "potion", cost: 10, desc: "Linen and resin. Bind a wound between halls.", stats: "Consumable", icon: "✚", section: "potions" },
+  { id: "potion_tonic", name: "Clearing Tonic", slot: "potion", cost: 14, desc: "Burns contact venom out of the blood.", stats: "Consumable", icon: "✚", section: "potions" },
+  { id: "trinket_lucky_tooth", name: "Lucky Tooth", slot: "amulet", cost: 18, desc: "A goblin charm. More superstition than steel.", stats: "Trinket", icon: "◆", section: "jewels" },
 ];
 
 const DOLL_SLOTS = [
@@ -1168,13 +1213,10 @@ function populateHub() {
     const armourItems = getShopArmour(state);
     const arrowItems = getShopArrows(state);
     const quiverItems = getShopQuivers(state);
-    const allItems = [
-      ...SHOP_ARROWS_ALL,
-      ...SHOP_QUIVERS,
-      ...armourItems,
-    ];
+    const potionItems = STARTER_GEAR.filter((i) => i.section === "potions" && i.cost);
     const sections = [
       { id: "arrows",  label: "Arrows",  items: arrowItems },
+      { id: "potions", label: "Supplies", items: potionItems },
       { id: "quivers", label: "Quivers", items: quiverItems },
       { id: "armour",  label: "Armour",  items: armourItems },
     ];
@@ -1183,7 +1225,7 @@ function populateHub() {
         <div class="shop-section-title" data-toggle="${section.id}">${section.label} ▾</div>
         <div class="shop-section-items" id="shop-section-${section.id}">
           ${section.items.map(item => {
-            const repeatable = item.section === "arrows";
+            const repeatable = item.section === "arrows" || item.section === "potions";
             const isOwned = !repeatable && owned.includes(item.id);
             const afford = state.souls >= item.cost;
             const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
@@ -1216,14 +1258,23 @@ function populateHub() {
     shopList.querySelectorAll(".shop-buy").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.item;
-        const item = allItems.find(i => i.id === id);
+        const item = arrowItems.find((i) => i.id === id)
+          || potionItems.find((i) => i.id === id)
+          || quiverItems.find((i) => i.id === id)
+          || armourItems.find((i) => i.id === id)
+          || findItem(id);
         if (!item || !state.spendSouls(item.cost)) return;
         if (!state.ownedItems) state.ownedItems = [];
         if (item.section === "arrows") {
-          const arrow = { type: item.element || "normal", level: 1 };
+          const arrow = { type: item.element || item.type || "wood", level: 1 };
           sim.quiver.addToStorage(arrow);
-        } else {
+        } else if (item.section === "potions") {
           state.ownedItems.push(id);
+          const pouch = state.pouch || [];
+          const empty = pouch.findIndex((s) => !s);
+          if (empty >= 0) state.pouch[empty] = id;
+        } else {
+          if (!state.ownedItems.includes(id)) state.ownedItems.push(id);
           if (item.section === "quivers") {
             if (!state.equipped) state.equipped = {};
             state.equipped.quiver = id;
