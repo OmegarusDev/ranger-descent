@@ -4,8 +4,8 @@
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
 import { DungeonView } from "./engine/DungeonView.js?v=42";
 import { CONFIG } from "./data/config.js?v=30";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=36";
-import { CorridorSim } from "./game/CorridorSim.js?v=61";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=37";
+import { CorridorSim } from "./game/CorridorSim.js?v=62";
 import { InputHandler } from "./game/InputHandler.js?v=17";
 import { STAT_INFO } from "./game/GameStateManager.js?v=43";
 
@@ -79,7 +79,7 @@ function setPathChoice(on) {
   }
   input.choiceMode = true;
   const loot = sim.pendingLoot;
-  const lootSig = loot ? `${loot.kind}:${loot.label || loot.amount || loot.itemId || ""}` : "none";
+  const lootSig = loot ? `${loot.kind}:${loot.label || loot.amount || loot.itemId || ""}:lv${loot.level || 0}` : "none";
   // Avoid rebuilding button HTML every RAF (flicker / lost taps).
   const sig = `${(sim.junctionChoices || []).map((c) => `${c.direction}:${c.soulBonus || 0}`).join("|")}|${lootSig}`;
   if (wasActive && pathChoice.dataset.sig === sig) {
@@ -688,7 +688,12 @@ function refreshShopCaches(state) {
   const visit = state.hubVisits || 0;
   if (_shopHubVisit !== visit || !_shopArmourCache || !_shopArrowCache) {
     _shopArmourCache = rollShopArmour(mulberry32(0x9E3779B9 + visit * 0x85ebca6b), state.getStat("luck"));
-    _shopArrowCache = rollShopArrows(3, mulberry32(0xC2B2AE35 + visit * 0x27d4eb2d), visit);
+    _shopArrowCache = rollShopArrows(
+      3,
+      mulberry32(0xC2B2AE35 + visit * 0x27d4eb2d),
+      visit,
+      state.getMaxElevatorUnlocked()
+    );
     _shopHubVisit = visit;
   }
 }
@@ -1277,7 +1282,10 @@ function populateHub() {
         if (!item || !state.spendSouls(item.cost)) return;
         if (!state.ownedItems) state.ownedItems = [];
         if (item.section === "arrows") {
-          const arrow = { type: item.element || item.type || "wood", level: 1 };
+          const arrow = {
+            type: item.element || item.type || "wood",
+            level: item.level || 1,
+          };
           sim.quiver.addToStorage(arrow);
         } else if (item.section === "potions") {
           state.ownedItems.push(id);

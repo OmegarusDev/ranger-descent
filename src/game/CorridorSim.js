@@ -1,5 +1,8 @@
 import { CONFIG } from "../data/config.js?v=30";
-import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=36";
+import {
+  QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
+  lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
+} from "./QuiverDeckManager.js?v=37";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js?v=43";
@@ -1156,13 +1159,17 @@ export class CorridorSim {
       return { kind: "coins", amount, label: `${amount} coin`, detail: "Loose purse from the hall." };
     }
     if (r < 0.72) {
-      const arrows = ["fire", "ice", "poison", "piercing", "double"];
+      const arrows = ["fire", "ice", "poison", "piercing", "double", "flint", "iron"];
       const arrow = arrows[Math.floor(Math.random() * arrows.length)];
       const def = getArrowDef(arrow);
+      const score = lootProgressScore(this.floorIndex, this.elevatorIndex);
+      const cap = arrowLevelCapForProgress(score, { shop: false });
+      const level = rollArrowLevel(Math.random, cap, { favorHigh: false });
       return {
         kind: "arrow",
         arrow,
-        label: def.name || arrow,
+        level,
+        label: level > 1 ? `${def.name || arrow} Lv${level}` : (def.name || arrow),
         detail: def.desc || "A spare shaft for the chest.",
         color: def.color,
       };
@@ -1192,7 +1199,7 @@ export class CorridorSim {
     if (loot.kind === "coins") {
       this.state.awardKillSouls(loot.amount || 0);
     } else if (loot.kind === "arrow" && loot.arrow) {
-      this.quiver.addToStorage({ type: loot.arrow, level: 1 });
+      this.quiver.addToStorage({ type: loot.arrow, level: loot.level || 1 });
     } else if (loot.kind === "potion" && loot.itemId) {
       if (!this.state.ownedItems) this.state.ownedItems = [];
       if (!this.state.ownedItems.includes(loot.itemId)) this.state.ownedItems.push(loot.itemId);

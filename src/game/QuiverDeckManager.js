@@ -135,17 +135,84 @@ export function arrowShort(type) {
   return getArrowDef(type).short;
 }
 
-export function toShopArrow(def) {
+/** Meta progress for hub shop quality (visits + elevators unlocked). */
+export function shopProgressScore(hubVisits = 0, elevUnlocked = 0) {
+  return Math.max(0, (hubVisits | 0) + (elevUnlocked | 0) * 3);
+}
+
+/** Run depth for hall loot quality. */
+export function lootProgressScore(floorIndex = 0, elevatorIndex = 0) {
+  return Math.max(0, (elevatorIndex | 0) * 10 + (floorIndex | 0));
+}
+
+/**
+ * Max arrow level offered at this progress.
+ * Shop gets a slight edge over dungeon finds at the same score.
+ */
+export function arrowLevelCapForProgress(score = 0, { shop = false } = {}) {
+  let cap = 1;
+  if (score >= 2) cap = 2;
+  if (score >= 8) cap = 3;
+  if (score >= 18) cap = 4;
+  if (score >= 36) cap = 5;
+  if (shop && score >= 3) cap = Math.min(CONFIG.ARROW_MAX_LEVEL, cap + 1);
+  return Math.min(CONFIG.ARROW_MAX_LEVEL, Math.max(1, cap));
+}
+
+/**
+ * Roll 1..cap. Loot leans low; shop leans a bit higher within the same cap.
+ */
+export function rollArrowLevel(rand = Math.random, cap = 1, { favorHigh = false } = {}) {
+  const max = Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, cap | 0));
+  if (max <= 1) return 1;
+  let total = 0;
+  const weights = [];
+  for (let lv = 1; lv <= max; lv++) {
+    const w = favorHigh
+      ? 1.4 + lv * 0.9
+      : (max - lv + 1) * (max - lv + 1);
+    weights.push(w);
+    total += w;
+  }
+  let r = (typeof rand === "function" ? rand() : Math.random()) * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i + 1;
+  }
+  return max;
+}
+
+export function arrowShopCost(baseCost, level = 1) {
+  const lv = Math.max(1, level | 0);
+  return Math.max(1, Math.round((baseCost || 1) * (1 + (lv - 1) * 0.7)));
+}
+
+export function toShopArrow(def, level = 1) {
+  const lv = Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, level | 0));
+  const phys = getArrowDamage(def.type, lv);
+  const fire = getArrowFireDamage(def.type, lv);
+  const ice = getArrowIceDamage(def.type, lv);
+  let stats = `${phys} phys`;
+  if (fire) stats += ` + ${fire} fire`;
+  if (ice) stats += ` + ${ice} frost`;
+  if (def.burn) stats += " · burn";
+  if (def.slow) stats += " · chill";
+  if (def.pierce) stats += " · pierce";
+  if (def.poison) stats += " · poison";
+  if (def.hardTip) stats += " · vs armour";
+  if (lv > 1) stats += ` · Lv${lv}`;
   return {
-    id: `${def.type}_arrows`,
-    name: def.name,
+    id: lv <= 1 ? `${def.type}_arrows` : `${def.type}_arrows_lv${lv}`,
+    name: lv <= 1 ? def.name : `${def.name} Lv${lv}`,
     slot: "ammo",
-    cost: def.cost,
+    cost: arrowShopCost(def.cost, lv),
     desc: def.desc,
-    stats: def.stats,
+    stats,
     icon: def.icon || "➤",
     section: "arrows",
     element: def.type,
+    type: def.type,
+    level: lv,
     color: def.color,
     tier: def.tier || 1,
   };
@@ -154,11 +221,11 @@ export function toShopArrow(def) {
 export function getShopArrowCatalog(maxTier = 99) {
   return Object.values(ARROW_DEFS)
     .filter((d) => d.shop && (d.tier || 1) <= maxTier)
-    .map(toShopArrow);
+    .map((d) => toShopArrow(d, 1));
 }
 
-/** Weighted early pool — specials and cheap shafts show up often. */
-export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0) {
+/** Weighted early pool — specials and cheap shafts show up often. Levels rise with progress. */
+export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0, elevUnlocked = 0) {
   const maxTier = hubVisits < 2 ? 1 : hubVisits < 7 ? 2 : 3;
   const catalog = Object.values(ARROW_DEFS).filter((d) => d.shop && (d.tier || 1) <= maxTier);
   const weighted = [];
@@ -172,12 +239,15 @@ export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0) {
     weighted[i] = weighted[j];
     weighted[j] = t;
   }
+  const score = shopProgressScore(hubVisits, elevUnlocked);
+  const cap = arrowLevelCapForProgress(score, { shop: true });
   const picked = [];
   const seen = new Set();
   for (const d of weighted) {
     if (seen.has(d.type)) continue;
     seen.add(d.type);
-    picked.push(toShopArrow(d));
+    const level = rollArrowLevel(rand, cap, { favorHigh: true });
+    picked.push(toShopArrow(d, level));
     if (picked.length >= n) break;
   }
   return picked;
