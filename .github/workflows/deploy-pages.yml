@@ -24,10 +24,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Assemble site (game assets only)
+        run: |
+          set -euo pipefail
+          mkdir -p _site/icons
+          cp index.html manifest.webmanifest sw.js _site/
+          cp -R icons/. _site/icons/
+          # Game source only — no docs, design mocks, scripts, or repo meta.
+          cp -R src _site/src
+          find _site -name .DS_Store -delete 2>/dev/null || true
+          echo "Site contents:"
+          find _site -type f | sort
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

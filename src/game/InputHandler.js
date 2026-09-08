@@ -7,7 +7,7 @@
  *   - Drag distance → power / forward speed
  *   - Flat XZ shots only (no vertical aim)
  */
-import { CONFIG } from "../data/config.js?v=29";
+import { CONFIG } from "../data/config.js";
 
 export class InputHandler {
   constructor(canvas) {

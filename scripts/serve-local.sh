@@ -15,7 +15,7 @@ if [[ -f "$PIDFILE" ]]; then
   if [[ -n "${old:-}" ]] && kill -0 "$old" 2>/dev/null; then
     # Already ours and alive.
     echo "Ranger Descent server already running (pid $old)"
-    echo "http://${HOST}:${PORT}/?v=79"
+    echo "http://${HOST}:${PORT}/?v=80"
     exit 0
   fi
   rm -f "$PIDFILE"
@@ -42,6 +42,6 @@ fi
 
 echo "Ranger Descent server up"
 echo "  pid  $pid"
-echo "  url  http://${HOST}:${PORT}/?v=79"
+echo "  url  http://${HOST}:${PORT}/?v=80"
 echo "  stop: kill \$(cat .ranger-serve.pid)"
 echo "  note: this port (8877) is reserved for this project only"

@@ -4,7 +4,7 @@
  *
  * Arrow economy: specials start ~₡10. Ammo buys are the delve backbone.
  */
-import { CONFIG } from "../data/config.js?v=29";
+import { CONFIG } from "../data/config.js";
 
 /**
  * Early-game focused catalog. `tier` gates hub shop rolls.

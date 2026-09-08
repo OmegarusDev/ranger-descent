@@ -1,11 +1,11 @@
-import { CONFIG } from "../data/config.js?v=30";
+import { CONFIG } from "../data/config.js";
 import {
   QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
   lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
-} from "./QuiverDeckManager.js?v=38";
+} from "./QuiverDeckManager.js";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=43";
+import { GameStateManager } from "./GameStateManager.js";
 
 let _nextId = 1;
 

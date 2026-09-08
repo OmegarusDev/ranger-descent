@@ -1,13 +1,15 @@
 /**
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
-import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
-import { DungeonView } from "./engine/DungeonView.js?v=43";
-import { CONFIG } from "./data/config.js?v=30";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js?v=38";
-import { CorridorSim } from "./game/CorridorSim.js?v=63";
-import { InputHandler } from "./game/InputHandler.js?v=17";
-import { STAT_INFO } from "./game/GameStateManager.js?v=43";
+import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
+import { DungeonView } from "./engine/DungeonView.js";
+import { CONFIG } from "./data/config.js";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
+import { CorridorSim } from "./game/CorridorSim.js";
+import { InputHandler } from "./game/InputHandler.js";
+import { STAT_INFO } from "./game/GameStateManager.js";
+// Cache-bust only at the HTML entry (main.js?v=N). Nested imports stay unversioned
+// so each module has one identity — mixed ?v= was splitting CONFIG across the graph.
 
 /** Player-facing coin mark (colon sign — C with bars). */
 const COIN = "₡";

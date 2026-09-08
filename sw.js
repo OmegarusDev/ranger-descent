@@ -2,7 +2,7 @@
  * Ranger Descent service worker — network-first, update on every open.
  * Online: always prefer the live site. Offline: last successful response if any.
  */
-const CACHE = "ranger-descent-shell-v1";
+const CACHE = "ranger-descent-shell-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

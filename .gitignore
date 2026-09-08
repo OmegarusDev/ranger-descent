@@ -1,3 +1,10 @@
 # Local session server (Ranger Descent dedicated)
 .ranger-serve.pid
 .ranger-serve.url
+
+# Pages assemble dir (CI only)
+_site/
+
+# OS / editor junk
+.DS_Store
+*.log
