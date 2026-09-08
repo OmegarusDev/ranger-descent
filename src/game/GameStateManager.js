@@ -48,6 +48,21 @@ function migrateStats(raw) {
   };
 }
 
+  /** Resolve quiver capacity from an equipped item id (shared with shop UI). */
+export function quiverCapacityFromId(id) {
+  if (!id) return 10;
+  if (id === "quiver_basic" || id === "quiver_8") return 10;
+  if (id === "quiver_small") return 12;
+  if (id === "quiver_medium") return 16;
+  if (id === "quiver_large") return 20;
+  const m = /^quiver_(\d+)$/.exec(id);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n)) return Math.max(10, Math.min(30, n === 8 ? 10 : n));
+  }
+  return 10;
+}
+
 export class GameStateManager {
   constructor() {
     this.phase = PHASES.HUB;
@@ -72,7 +87,6 @@ export class GameStateManager {
     // Equipment
     this.equipped = {};
     this.ownedItems = [];
-    this.arrowStorage = [];
     this.pouch = [null, null];
     this.pouchCapacity = 2;
     this.hubVisits = 0;
@@ -402,18 +416,7 @@ export class GameStateManager {
   }
 
   getQuiverCapacity() {
-    const id = this.equipped?.quiver;
-    if (!id) return 10;
-    if (id === "quiver_basic" || id === "quiver_8") return 10;
-    if (id === "quiver_small") return 12;
-    if (id === "quiver_medium") return 16;
-    if (id === "quiver_large") return 20;
-    const m = /^quiver_(\d+)$/.exec(id);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (Number.isFinite(n)) return Math.max(10, Math.min(30, n === 8 ? 10 : n));
-    }
-    return 10;
+    return quiverCapacityFromId(this.equipped?.quiver);
   }
 
   applyUpgrades() {
@@ -487,7 +490,6 @@ export class GameStateManager {
       upgrades: { ...this.upgrades },
       equipped: { ...this.equipped },
       ownedItems: [...(this.ownedItems || [])],
-      arrowStorage: [...(this.arrowStorage || [])],
       pouch: [...(this.pouch || [null, null])],
       pouchCapacity: this.pouchCapacity || 2,
       playerMaxHp: this.playerMaxHp,
@@ -506,7 +508,7 @@ export class GameStateManager {
     this.upgrades = migrateStats(data.upgrades);
     this.equipped = { ...(data.equipped || {}) };
     this.ownedItems = [...(data.ownedItems || [])];
-    this.arrowStorage = [...(data.arrowStorage || [])];
+    // Ignore legacy data.arrowStorage — quiver.storage is the real chest.
     this.pouch = [...(data.pouch || [null, null])];
     while (this.pouch.length < 2) this.pouch.push(null);
     this.pouchCapacity = data.pouchCapacity || 2;

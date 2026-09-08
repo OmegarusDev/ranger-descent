@@ -1,8 +1,10 @@
-# Ranger Defense — Game Design Document
+# Ranger Descent — Game Design Document (archived)
+
+> **Archived.** This document lags the live game. Prefer the running code under `src/` and the README for current behavior. Kept for historical design notes.
 
 ## Overview
 
-Ranger Defense is a roguelite dungeon crawler with on-rails corridor combat. The player stays centered on screen while the dungeon scrolls toward them. Enemies approach in waves, arrows fly via slingshot, and the corridor bends and forks as you descend deeper. Between runs, spend souls to upgrade stats, unlock companions, and eventually unlock new player classes.
+Ranger Descent is a roguelite dungeon crawler with on-rails corridor combat. The player stays centered on screen while the dungeon scrolls toward them. Enemies approach in waves, arrows fly via slingshot, and the corridor bends and forks as you descend deeper. Between runs, spend coin to upgrade stats and equipment.
 
 **Genre:** Roguelite dungeon crawler / corridor action  
 **Platform:** Web (HTML5 Canvas)  

@@ -1,4 +1,6 @@
-# Enemy Roster — Full Design
+# Enemy Roster — Design Notes (archived)
+
+> **Archived.** HP and drop values here are outdated. Live combat stats live in `src/game/CorridorSim.js` (`ENEMY_DEFS`). The hub bestiary is derived from that table.
 
 ## Core Families (Early Game)
 

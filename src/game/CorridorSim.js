@@ -9,7 +9,7 @@ import { GameStateManager } from "./GameStateManager.js";
 
 let _nextId = 1;
 
-const ENEMY_DEFS = {
+export const ENEMY_DEFS = {
   // coinMin/Max = purse drop on kill (₡). souls kept as display fallback.
   slime:          { hp: 5,   speed: 9,   size: 0.85, color: "#b84a55", coinMin: 1, coinMax: 3, souls: 2, armor: "none", contactDmg: 4 },
   slime_large:    { hp: 14,  speed: 7,   size: 1.3, color: "#c45a65", coinMin: 2, coinMax: 5, souls: 3, armor: "none", contactDmg: 6, splitTo: "slime", splitCount: 2 },
@@ -394,7 +394,6 @@ export class CorridorSim {
     this.groupGap = 0;
     this._pendingEncounter = null;
     this._waveSoulBonus = 0;
-    this.pendingLoot = null;
     this.waveLootLog = [];
     this.pendingWaveReport = null;
     this.lootPending = false;
@@ -433,7 +432,6 @@ export class CorridorSim {
     this.junctionPending = false;
     this._pendingEncounter = null;
     this._waveSoulBonus = 0;
-    this.pendingLoot = null;
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnFrom = 0;
@@ -696,10 +694,9 @@ export class CorridorSim {
 
   _showJunction() {
     if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
-    this.pendingLoot = null;
     this.junctionPending = true;
     this.movingForward = false;
-    this.emit("junction_show", { choices: this.junctionChoices, loot: null });
+    this.emit("junction_show", { choices: this.junctionChoices });
   }
 
   chooseJunction(direction) {
@@ -710,7 +707,6 @@ export class CorridorSim {
     this.junctionPending = false;
     this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
-    this.pendingLoot = null;
     this.emit("junction_chosen", { direction });
     if (direction === "left" || direction === "right") {
       this.turning = true;
@@ -1433,26 +1429,6 @@ export class CorridorSim {
     else this._beginApproachToJunction();
   }
 
-  /** End-of-wave hall spoils (legacy single roll — unused; ground finds cover this). */
-  _rollWaveLoot() {
-    return null;
-  }
-
-  claimPendingLoot() {
-    const loot = this.pendingLoot;
-    if (!loot) return null;
-    this.pendingLoot = null;
-    this._collectLootPiece(loot.kind === "arrow" ? { ...loot, type: loot.arrow } : loot);
-    this.emit("loot_claimed", { loot });
-    return loot;
-  }
-
-  skipPendingLoot() {
-    if (!this.pendingLoot) return;
-    this.pendingLoot = null;
-    this.emit("loot_skipped");
-  }
-
   /**
    * Discard a loaded quiver shaft into the run stash (confirm in UI).
    * Wood is destroyed — never stashed.
@@ -1709,6 +1685,10 @@ export class CorridorSim {
   // ─── Auto-Magic ──────────────────────────────────────────
 
   _tickAutoMagic() {
+    // Hexes/prayers stay dormant until unlock() — skip the scan when nothing is live.
+    if (!this.autoMagic?.hexes?.some((h) => h.unlocked) && !this.autoMagic?.prayers?.some((p) => p.unlocked)) {
+      return;
+    }
     const actions = this.autoMagic.tick(this.dt);
     if (!actions.length) return;
     const pos = { x: this.playerWorldX, y: this.playerWorldZ };

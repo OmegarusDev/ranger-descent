@@ -5,9 +5,9 @@ import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
 import { DungeonView } from "./engine/DungeonView.js";
 import { CONFIG } from "./data/config.js";
 import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
-import { CorridorSim } from "./game/CorridorSim.js";
+import { CorridorSim, ENEMY_DEFS } from "./game/CorridorSim.js";
 import { InputHandler } from "./game/InputHandler.js";
-import { STAT_INFO } from "./game/GameStateManager.js";
+import { STAT_INFO, quiverCapacityFromId } from "./game/GameStateManager.js";
 // Cache-bust only at the HTML entry (main.js?v=N). Nested imports stay unversioned
 // so each module has one identity — mixed ?v= was splitting CONFIG across the graph.
 
@@ -583,31 +583,49 @@ document.querySelectorAll("[data-close-sheet]").forEach((btn) => {
   btn.addEventListener("click", (e) => e.preventDefault());
 })();
 
-const ENEMY_DEFS_BESTIARY = [
-  { id: "slime",          name: "Slime",           hp: 5,   dmg: 4,  speed: 9,   souls: "1–3₡", armor: "None",   color: "#b84a55", behavior: "Oozes forward with a slow, wet pulse" },
-  { id: "slime_large",    name: "Large Slime",     hp: 14,  dmg: 6,  speed: 7,   souls: "2–5₡", armor: "None",   color: "#c45a65", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
-  { id: "slime_huge",     name: "Huge Slime",      hp: 28,  dmg: 8,  speed: 5,   souls: "4–8₡", armor: "None",   color: "#d46a75", behavior: "Massive slime that splits into 2 Large Slimes" },
-  { id: "goblin_runt",    name: "Goblin Runt",     hp: 7,   dmg: 3,  speed: 20,  souls: "1–7₡", armor: "None",   color: "#6aaa5a", behavior: "Walks forward, then dodges side to side in a rhythm" },
-  { id: "goblin_warrior", name: "Goblin Warrior",  hp: 14,  dmg: 5,  speed: 16,  souls: "3–8₡", armor: "None",   color: "#5a9a4a", behavior: "Heavier goblin — floor-1 hall boss with escorts" },
-  { id: "goblin_chieftain",name: "Goblin Chieftain",hp: 22, dmg: 7,  speed: 13,  souls: "5–12₡", armor: "None",   color: "#4a8a3a", behavior: "Powerful goblin leader, slow but devastating" },
-  { id: "imp",            name: "Imp",             hp: 8,   dmg: 3,  speed: 24,  souls: "1–4₡", armor: "None",   color: "#d4892a", behavior: "Notices you, then charges the lane" },
-  { id: "scamp",          name: "Scamp",           hp: 12,  dmg: 4,  speed: 22,  souls: "2–6₡", armor: "None",   color: "#e0a030", behavior: "Faster imp variant, charges quickly" },
-  { id: "demon",          name: "Demon",           hp: 20,  dmg: 7,  speed: 16,  souls: "4–10₡", armor: "None",   color: "#c04040", behavior: "Slow, heavy, devastating charger" },
-  { id: "skeleton",       name: "Skeleton",        hp: 18,  dmg: 7,  speed: 11,  souls: "2–8₡", armor: "None",   color: "#c8c0b0", behavior: "Steady advance down the hall" },
-  { id: "skeleton_archer",name: "Skeleton Archer",  hp: 12,  dmg: 4,  speed: 12,  souls: "2–7₡", armor: "None",   color: "#b0a898", behavior: "Stops at range and fires bone arrows at you" },
-  { id: "ghoul",          name: "Ghoul",           hp: 10,  dmg: 4,  speed: 15,  souls: 1, armor: "None",   color: "#7a6a5a", behavior: "Shambling undead" },
-  { id: "wight",          name: "Wight",           hp: 16,  dmg: 6,  speed: 13,  souls: 2, armor: "None",   color: "#6a5a4a", behavior: "Tougher ghoul, steady advance" },
-  { id: "wraith",         name: "Wraith",          hp: 12,  dmg: 5,  speed: 18,  souls: 2, armor: "Energy", color: "#8a7ab8", behavior: "Phases through attacks, zigzags unpredictably" },
-  { id: "vampire",        name: "Vampire",         hp: 18,  dmg: 6,  speed: 17,  souls: 3, armor: "None",   color: "#a02020", behavior: "Notices player, charges, drains HP" },
-  { id: "vampire_lord",   name: "Vampire Lord",    hp: 28,  dmg: 8,  speed: 19,  souls: 5, armor: "None",   color: "#801010", behavior: "Faster, stronger vampire" },
-  { id: "lich",           name: "Lich",            hp: 22,  dmg: 5,  speed: 10,  souls: 4, armor: "None",   color: "#6040a0", behavior: "Ranged magic, summons minions" },
-  { id: "bat",            name: "Bat",             hp: 4,   dmg: 2,  speed: 28,  souls: 1, armor: "None",   color: "#4a3a5a", behavior: "Hovers in the hall, might poison" },
-  { id: "spider",         name: "Spider",          hp: 6,   dmg: 3,  speed: 20,  souls: 1, armor: "None",   color: "#5a4a3a", behavior: "Creeps forward, might poison" },
-  { id: "giant_spider",   name: "Giant Spider",    hp: 16,  dmg: 5,  speed: 16,  souls: 2, armor: "None",   color: "#4a3a2a", behavior: "Larger, tougher spider" },
-  { id: "orc",            name: "Orc",             hp: 18,  dmg: 7,  speed: 14,  souls: 3, armor: "None",   color: "#5a7a4a", behavior: "Tough, steady advance" },
-  { id: "ogre",           name: "Ogre",            hp: 28,  dmg: 10, speed: 9,   souls: 5, armor: "Heavy",  color: "#6a8a5a", behavior: "Very tough, slow, heavy" },
-  { id: "troll",          name: "Troll",           hp: 22,  dmg: 8,  speed: 12,  souls: 4, armor: "None",   color: "#4a6a3a", behavior: "Regenerates HP while alive" },
-];
+/** Flavor copy for the hub bestiary — stats come from ENEMY_DEFS. */
+const BESTIARY_META = {
+  slime: { name: "Slime", behavior: "Oozes forward with a slow, wet pulse" },
+  slime_large: { name: "Large Slime", behavior: "Tougher slime that splits into 2 smaller slimes on death" },
+  slime_huge: { name: "Huge Slime", behavior: "Massive slime that splits into 2 Large Slimes" },
+  goblin_runt: { name: "Goblin Runt", behavior: "Walks forward, then dodges side to side in a rhythm" },
+  goblin_warrior: { name: "Goblin Warrior", behavior: "Heavier goblin — floor-1 hall boss with escorts" },
+  goblin_chieftain: { name: "Goblin Chieftain", behavior: "Powerful goblin leader, slow but devastating" },
+  imp: { name: "Imp", behavior: "Notices you, then charges the lane" },
+  scamp: { name: "Scamp", behavior: "Faster imp variant, charges quickly" },
+  demon: { name: "Demon", behavior: "Slow, heavy, devastating charger" },
+  skeleton: { name: "Skeleton", behavior: "Steady advance down the hall" },
+  skeleton_archer: { name: "Skeleton Archer", behavior: "Stops at range and fires bone arrows at you" },
+  ghoul: { name: "Ghoul", behavior: "Shambling undead" },
+  wight: { name: "Wight", behavior: "Tougher ghoul, steady advance" },
+  wraith: { name: "Wraith", behavior: "Phases through attacks, zigzags unpredictably" },
+  vampire: { name: "Vampire", behavior: "Notices player, charges, drains HP" },
+  vampire_lord: { name: "Vampire Lord", behavior: "Faster, stronger vampire" },
+  lich: { name: "Lich", behavior: "Ranged magic, summons minions" },
+  bat: { name: "Bat", behavior: "Hovers in the hall, might poison" },
+  spider: { name: "Spider", behavior: "Creeps forward, might poison" },
+  giant_spider: { name: "Giant Spider", behavior: "Larger, tougher spider" },
+  orc: { name: "Orc", behavior: "Tough, steady advance" },
+  ogre: { name: "Ogre", behavior: "Very tough, slow, heavy" },
+  troll: { name: "Troll", behavior: "Regenerates HP while alive" },
+};
+
+const ENEMY_DEFS_BESTIARY = Object.keys(BESTIARY_META).map((id) => {
+  const d = ENEMY_DEFS[id] || {};
+  const m = BESTIARY_META[id];
+  const armor = (d.armor || "none");
+  return {
+    id,
+    name: m.name,
+    hp: d.hp || 1,
+    dmg: d.contactDmg || 1,
+    speed: d.speed || 1,
+    souls: `${d.coinMin ?? 0}–${d.coinMax ?? 0}₡`,
+    armor: armor.charAt(0).toUpperCase() + armor.slice(1),
+    color: d.color || "#888",
+    behavior: m.behavior,
+  };
+});
 
 const ARMOUR_MATERIALS = [
   { id: "cloth",   name: "Cloth",           color: "#a09080", tier: 1,  head: 1, body: 2, feet: 1 },
@@ -712,30 +730,9 @@ const SHOP_QUIVERS = (() => {
   return list;
 })();
 
-/** Legacy shop ids → capacity. */
-const QUIVER_CAP_BY_ID = {
-  quiver_basic: 10,
-  quiver_8: 10,
-  quiver_small: 12,
-  quiver_medium: 16,
-  quiver_large: 20,
-};
-for (const q of SHOP_QUIVERS) QUIVER_CAP_BY_ID[q.id] = q.capacity;
-
-function quiverCapFromId(id) {
-  if (!id) return 10;
-  if (QUIVER_CAP_BY_ID[id] != null) return QUIVER_CAP_BY_ID[id];
-  const m = /^quiver_(\d+)$/.exec(id);
-  if (m) {
-    const n = parseInt(m[1], 10);
-    return Math.max(10, Math.min(30, n === 8 ? 10 : n));
-  }
-  return 10;
-}
-
 /** Always the next 3 upgrades after the equipped quiver's capacity. */
 function getShopQuivers(state) {
-  const cur = quiverCapFromId(state.equipped?.quiver);
+  const cur = quiverCapacityFromId(state.equipped?.quiver);
   return SHOP_QUIVERS.filter((q) => q.capacity > cur).slice(0, 3);
 }
 
@@ -1727,6 +1724,7 @@ function gameLoop(now) {
   requestAnimationFrame(gameLoop);
 }
 
+// Legacy key name kept so existing browser saves keep loading.
 const SAVE_KEY = "ranger-defense-save-v1";
 
 function saveGame() {
