@@ -387,17 +387,17 @@ export class GameStateManager {
 
   getQuiverCapacity() {
     const id = this.equipped?.quiver;
-    if (!id) return 8;
-    if (id === "quiver_basic") return 8;
+    if (!id) return 10;
+    if (id === "quiver_basic" || id === "quiver_8") return 10;
     if (id === "quiver_small") return 12;
     if (id === "quiver_medium") return 16;
     if (id === "quiver_large") return 20;
     const m = /^quiver_(\d+)$/.exec(id);
     if (m) {
       const n = parseInt(m[1], 10);
-      if (Number.isFinite(n)) return Math.max(8, Math.min(30, n));
+      if (Number.isFinite(n)) return Math.max(10, Math.min(30, n === 8 ? 10 : n));
     }
-    return 8;
+    return 10;
   }
 
   applyUpgrades() {

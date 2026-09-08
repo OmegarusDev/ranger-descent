@@ -4,9 +4,9 @@
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
 import { DungeonView } from "./engine/DungeonView.js?v=42";
 import { CONFIG } from "./data/config.js?v=30";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=34";
-import { STAT_INFO } from "./game/GameStateManager.js?v=40";
-import { CorridorSim } from "./game/CorridorSim.js?v=54";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, createArrow } from "./game/QuiverDeckManager.js?v=35";
+import { STAT_INFO } from "./game/GameStateManager.js?v=41";
+import { CorridorSim } from "./game/CorridorSim.js?v=57";
 import { InputHandler } from "./game/InputHandler.js?v=17";
 
 /** Player-facing coin mark (colon sign — C with bars). */
@@ -486,8 +486,7 @@ const SHOP_ARROWS_ALL = getShopArrowCatalog();
 
 const SHOP_QUIVERS = (() => {
   const names = {
-    8: "Hide Quiver",
-    10: "Cord Quiver",
+    10: "Hide Quiver",
     12: "Small Quiver",
     14: "Field Quiver",
     16: "Hunter Quiver",
@@ -500,16 +499,16 @@ const SHOP_QUIVERS = (() => {
     30: "Enduring Quiver",
   };
   const list = [];
-  for (let cap = 8; cap <= 30; cap += 2) {
-    const step = (cap - 8) / 2;
+  for (let cap = 10; cap <= 30; cap += 2) {
+    const step = (cap - 10) / 2;
     const cost = step === 0 ? 0 : 20 + step * 25 + Math.floor(step * step * 4);
     list.push({
-      id: cap === 8 ? "quiver_basic" : `quiver_${cap}`,
+      id: cap === 10 ? "quiver_basic" : `quiver_${cap}`,
       name: names[cap] || `${cap}-Shaft Quiver`,
       slot: "quiver",
       cost,
       capacity: cap,
-      desc: cap === 8 ? "A stitched hide tube. Eight shafts." : `Holds ${cap} arrows.`,
+      desc: cap === 10 ? "A stitched hide tube. Ten shafts." : `Holds ${cap} arrows.`,
       stats: `${cap} Capacity`,
       icon: "🏹",
       section: "quivers",
@@ -520,7 +519,8 @@ const SHOP_QUIVERS = (() => {
 
 /** Legacy shop ids → capacity. */
 const QUIVER_CAP_BY_ID = {
-  quiver_basic: 8,
+  quiver_basic: 10,
+  quiver_8: 10,
   quiver_small: 12,
   quiver_medium: 16,
   quiver_large: 20,
@@ -528,11 +528,14 @@ const QUIVER_CAP_BY_ID = {
 for (const q of SHOP_QUIVERS) QUIVER_CAP_BY_ID[q.id] = q.capacity;
 
 function quiverCapFromId(id) {
-  if (!id) return 8;
+  if (!id) return 10;
   if (QUIVER_CAP_BY_ID[id] != null) return QUIVER_CAP_BY_ID[id];
   const m = /^quiver_(\d+)$/.exec(id);
-  if (m) return Math.max(8, Math.min(30, parseInt(m[1], 10)));
-  return 8;
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return Math.max(10, Math.min(30, n === 8 ? 10 : n));
+  }
+  return 10;
 }
 
 /** Always the next 3 upgrades after the equipped quiver's capacity. */
@@ -1528,10 +1531,15 @@ function loadGame() {
     if (data.state) sim.state.deserialize(data.state);
     if (data.quiver) sim.quiver.deserialize(data.quiver);
     sim.quiver.capacity = sim.state.getQuiverCapacity();
-    if (sim.quiver.totalArrows > 0 && sim.quiver.totalArrows < 10) {
+    if (sim.quiver.totalArrows === 0) {
+      sim.quiver.initStarter();
+    } else if (sim.quiver.totalArrows < sim.quiver.capacity) {
       const held = [...sim.quiver.peekQuiver(), ...sim.quiver.peekStorage()];
-      if (held.length <= 6 && held.every((a) => a.type === "wood")) {
-        while (sim.quiver.totalArrows < 8) sim.quiver.addToStorage({ type: "wood", level: 1 });
+      // Top up legacy starter kits (all wood, under new 10-shaft hide quiver).
+      if (held.length > 0 && held.every((a) => a.type === "wood" || a.type === "normal")) {
+        while (sim.quiver.totalArrows < sim.quiver.capacity) {
+          sim.quiver.addToQuiver(createArrow("wood"));
+        }
       }
     }
     sim.quiver.packForHub();

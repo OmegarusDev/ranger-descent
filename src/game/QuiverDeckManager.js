@@ -205,7 +205,7 @@ export class QuiverDeckManager {
     this.deck = [];
     this.queue = [];
     this.storage = [];
-    this.capacity = 8;
+    this.capacity = 10;
     this._shuffleDelay = 0;
     this._shuffling = false;
     this._seeded = false;
@@ -352,7 +352,7 @@ export class QuiverDeckManager {
 
   deserialize(data) {
     if (!data) return;
-    this.capacity = data.capacity || 8;
+    this.capacity = data.capacity || 10;
     const made = (data.deck || data.quiver || []).map((a) => createArrow(a.type, a.level));
     this.queue = [];
     this.deck = made.slice(0, this.capacity);

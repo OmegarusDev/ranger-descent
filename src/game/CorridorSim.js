@@ -1,8 +1,8 @@
 import { CONFIG } from "../data/config.js?v=30";
-import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=34";
+import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=35";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=39";
+import { GameStateManager } from "./GameStateManager.js?v=41";
 
 let _nextId = 1;
 
@@ -74,7 +74,8 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
     shieldRegen: d.shieldHp ? 2 : 0,
     burnT: 0, burnDps: 0, poisonT: 0, poisonDps: 0, slowT: 0, slowFactor: 0.4,
     shredT: 0, oiledT: 0, bleedT: 0, bleedDps: 0,
-    _lateralTarget: 0, _lateralTimer: 0,
+    _lateralTarget: worldX, _lateralTimer: 0,
+    _laneX: worldX,
     _lurkT: 0,
     _chargeTimer: 2, _charging: false,
     _weaveDir: Math.random() > 0.5 ? 1 : -1,
@@ -645,18 +646,35 @@ export class CorridorSim {
     return Math.max(0.4, 1.7 - this.floorIndex * 0.12 - this.elevatorIndex * 0.25);
   }
 
+  _pickSpawnLanes(n) {
+    if (n <= 1) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      return [side * FIGHT_LANE * (0.4 + Math.random() * 0.5)];
+    }
+    const lanes = [];
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n;
+      lanes.push((t - 0.5) * 2 * FIGHT_LANE * 0.92);
+    }
+    for (let i = lanes.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = lanes[i];
+      lanes[i] = lanes[j];
+      lanes[j] = tmp;
+    }
+    return lanes.map((x) => x + (Math.random() - 0.5) * FIGHT_LANE * 0.12);
+  }
+
   _spawnGroup(types) {
     const z = this.playerWorldZ + PACK_NEAR;
     const n = types.length;
+    const lanes = this._pickSpawnLanes(n);
     for (let i = 0; i < n; i++) {
-      let ex;
-      if (n === 1) {
-        ex = (Math.random() - 0.5) * FIGHT_LANE;
-      } else {
-        const t = n === 2 ? (i === 0 ? -1 : 1) : (i / (n - 1) - 0.5) * 2;
-        ex = t * FIGHT_LANE * 0.85;
-      }
-      const enemy = createEnemy(types[i], ex, z + i * 18, this.floorIndex, this.elevatorIndex);
+      const ex = lanes[i];
+      // Stagger depth so packs aren't a single-file column.
+      const ez = z + i * 52 + Math.random() * 24;
+      const enemy = createEnemy(types[i], ex, ez, this.floorIndex, this.elevatorIndex);
+      enemy._laneX = ex;
       this.enemies.push(enemy);
       this.emit("enemy_spawn", { enemy });
     }
@@ -821,8 +839,9 @@ export class CorridorSim {
             e._lurkT = 0;
           }
           {
-            const drift = Math.min(Math.abs(e.x), spd * 0.3);
-            e.x -= Math.sign(e.x) * drift;
+            const target = e._laneX != null ? e._laneX : e.x;
+            const dxLane = target - e.x;
+            e.x += Math.sign(dxLane) * Math.min(Math.abs(dxLane), spd * 0.5);
           }
           break;
         case "swarm": {
@@ -942,18 +961,15 @@ export class CorridorSim {
           if (e.shieldHp < e.maxShieldHp)
             e.shieldHp = Math.min(e.maxShieldHp, e.shieldHp + e.shieldRegen * dt);
           {
-            const driftShield = Math.min(Math.abs(e.x), spd * 0.15);
-            e.x -= Math.sign(e.x) * driftShield;
+            const target = e._laneX != null ? e._laneX : e.x;
+            const dxLane = target - e.x;
+            e.x += Math.sign(dxLane) * Math.min(Math.abs(dxLane), spd * 0.35);
           }
           break;
         case "zigzag":
           e.worldZ -= spd * 0.8;
           e._zigzagPhase += dt * 5;
-          e.x += Math.sin(e._zigzagPhase) * spd * 1.5;
-          {
-            const driftZig = Math.min(Math.abs(e.x), spd * 0.2);
-            e.x -= Math.sign(e.x) * driftZig;
-          }
+          e.x = (e._laneX || 0) + Math.sin(e._zigzagPhase) * FIGHT_LANE * 0.45;
           break;
         case "weave":
           e.worldZ -= spd * 0.7;
@@ -982,7 +998,8 @@ export class CorridorSim {
           break;
       }
 
-      if (e._hitStun <= 0) this._funnelTowardCenter(e, relDist, dt);
+      if (e._hitStun <= 0) this._clampToFightLane(e, relDist, dt);
+
       const dist = e.worldZ - this.playerWorldZ;
       e.dist = dist;
 
@@ -1032,6 +1049,7 @@ export class CorridorSim {
         continue;
       }
     }
+    this._separateEnemies();
   }
 
   _killEnemy(e, index, def, relDist) {
@@ -1040,8 +1058,16 @@ export class CorridorSim {
     this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist });
     if (def?.splitTo && !e._splitDone) {
       for (let s = 0; s < (def.splitCount || 2); s++) {
-        const child = createEnemy(def.splitTo, e.x + (s ? 15 : -15), e.worldZ + 10, this.floorIndex, this.elevatorIndex);
+        const side = s ? 1 : -1;
+        const child = createEnemy(
+          def.splitTo,
+          e.x + side * (18 + Math.random() * 10),
+          e.worldZ + 10 + s * 8,
+          this.floorIndex,
+          this.elevatorIndex
+        );
         child._splitDone = true;
+        child._laneX = child.x;
         this.enemies.push(child);
       }
     }
@@ -1049,19 +1075,17 @@ export class CorridorSim {
   }
 
   /**
-   * Enemies may start on the sides, but they must creep into the
-   * center as they close. Off-axis bodies cannot walk past the player.
+   * Keep foes in the fight band without collapsing them into a center column.
+   * Off-axis bodies still cannot walk past the player.
    */
-  _funnelTowardCenter(e, relDist, dt) {
+  _clampToFightLane(e, relDist, dt) {
     const px = this.playerWorldX;
     const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 280));
-    const maxOff = FIGHT_LANE * (1.15 - close * 0.55) + 4;
-    let dx = e.x - px;
+    const maxOff = FIGHT_LANE * (1.15 - close * 0.35) + 4;
+    const dx = e.x - px;
     if (Math.abs(dx) > maxOff) {
       const pull = Math.abs(dx) - maxOff;
-      e.x -= Math.sign(dx) * Math.min(pull, (10 + close * 55) * dt);
-    } else if (close > 0.2) {
-      e.x += (px - e.x) * close * 2.2 * dt;
+      e.x -= Math.sign(dx) * Math.min(pull, (10 + close * 40) * dt);
     }
     e.x = Math.max(-FIGHT_LANE * 1.15, Math.min(FIGHT_LANE * 1.15, e.x));
 
@@ -1071,6 +1095,27 @@ export class CorridorSim {
     const floor = off > 24 ? 40 : 16;
     if (e.worldZ < this.playerWorldZ + floor) {
       e.worldZ = this.playerWorldZ + floor;
+    }
+  }
+
+  /** Nudge overlapping foes apart so packs don't stack into one column. */
+  _separateEnemies() {
+    const list = this.enemies;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+        if (Math.abs(a.worldZ - b.worldZ) > 80) continue;
+        const dx = a.x - b.x;
+        const minSep = Math.max(14, (enemyHitWidth(a) + enemyHitWidth(b)) * 0.28);
+        if (Math.abs(dx) >= minSep) continue;
+        const push = (minSep - Math.abs(dx)) * 0.5 + 0.8;
+        const dir = dx === 0 ? (a.id > b.id ? 1 : -1) : Math.sign(dx);
+        a.x += dir * push * 0.5;
+        b.x -= dir * push * 0.5;
+        if (a._laneX != null) a._laneX = a.x;
+        if (b._laneX != null) b._laneX = b.x;
+      }
     }
   }
 
