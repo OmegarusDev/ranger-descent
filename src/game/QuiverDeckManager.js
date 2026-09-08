@@ -13,13 +13,13 @@ import { CONFIG } from "../data/config.js?v=29";
 export const ARROW_DEFS = {
   wood: {
     type: "wood", name: "Wood Arrow", short: "WD", icon: "➤",
-    cost: 3, damage: 1, shop: true, tier: 1, color: "#c4a574",
-    desc: "Soft pine. Cheap filler for the quiver.", stats: "1 phys",
+    cost: 3, damage: 1, shop: false, tier: 1, color: "#c4a574",
+    desc: "Soft pine. You fletch these yourself when the quiver runs dry.", stats: "1 phys",
   },
   flint: {
     type: "flint", name: "Flint Arrow", short: "FL", icon: "◆",
     cost: 5, damage: 2, shop: true, tier: 1, color: "#8a8478",
-    desc: "Knapped tip. Still soft against plate.", stats: "2 phys",
+    desc: "Knapped tip. Looks brittle — it isn't. Soft against plate.", stats: "2 phys",
   },
   iron: {
     type: "iron", name: "Iron Arrow", short: "IR", icon: "➤",
@@ -211,14 +211,21 @@ export class QuiverDeckManager {
     this._seeded = false;
   }
 
-  initStarter() {
+  initStarter(fillerType = "wood") {
     this.deck = [];
     this.queue = [];
-    this.storage = [];
-    for (let i = 0; i < this.capacity; i++) {
-      this.deck.push(createArrow("wood"));
-    }
+    // Storage is never wiped — only the loaded quiver is seeded.
+    this.fillEmptySlots(fillerType);
     this._seeded = true;
+  }
+
+  /**
+   * Fill unloaded quiver slots only. Never overwrites loaded shafts or storage.
+   */
+  fillEmptySlots(fillerType = "wood", level = 1) {
+    while (this.queue.length + this.deck.length < this.capacity) {
+      this.deck.push(createArrow(fillerType, level));
+    }
   }
 
   /** Hub / run-start: one loaded pile, extras back to collection. */
@@ -230,9 +237,9 @@ export class QuiverDeckManager {
     }
   }
 
-  prepareForRun() {
+  prepareForRun(fillerType = "wood") {
     this.packForHub();
-    if (this.totalArrows === 0) this.initStarter();
+    this.fillEmptySlots(fillerType);
   }
 
   drawOne() {

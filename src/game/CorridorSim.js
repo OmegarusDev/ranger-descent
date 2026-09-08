@@ -1,8 +1,8 @@
 import { CONFIG } from "../data/config.js?v=30";
-import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=35";
+import { QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage } from "./QuiverDeckManager.js?v=36";
 import { SubstrateGrid } from "./SubstrateGrid.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
-import { GameStateManager } from "./GameStateManager.js?v=42";
+import { GameStateManager } from "./GameStateManager.js?v=43";
 
 let _nextId = 1;
 
@@ -339,7 +339,7 @@ export class CorridorSim {
     this.elevatorIndex = this.state.getStartElevator();
     this.hitStop = 0;
     this.quiver.capacity = this.state.getQuiverCapacity();
-    this.quiver.prepareForRun();
+    this.quiver.prepareForRun(this.state.getCraftFillerType());
     this.substrates.init();
     this.autoMagic.reset();
     this.state.startRun();
@@ -621,12 +621,23 @@ export class CorridorSim {
     this.segmentStartZ = this.playerWorldZ;
     this.segmentEndZ = this.playerWorldZ + SEGMENT_LENGTH;
     this.movingForward = true;
+    this._checkNotebookDiscovery();
     this._startWave();
+  }
+
+  /** Floor 9 of each elevator block: find a craft notebook (once per block). */
+  _checkNotebookDiscovery() {
+    // floorIndex 8 = Floor 9
+    if (this.floorIndex !== 8) return;
+    const found = this.state.discoverNotebook(this.elevatorIndex);
+    if (!found) return;
+    this.emit("notebook_found", found);
   }
 
   // ─── Spawning ────────────────────────────────────────────
 
   _startWave() {
+    this._checkNotebookDiscovery();
     this.waveIndex++;
     this.waveActive = true;
     this.waveQueue = [];

@@ -80,6 +80,11 @@ export class GameStateManager {
     this.maxElevatorUnlocked = 0;
     /** Selected hub start elevator index (0 = Gate). */
     this.selectedStartElevator = 0;
+    /**
+     * Arrow-craft notebooks found (elevator indices). Rank = count:
+     * 0 → wood filler, 1 → flint, 2 → iron, …
+     */
+    this.notebookElevators = [];
 
     // Active run bonuses
     this.runBonuses = {
@@ -444,6 +449,35 @@ export class GameStateManager {
     return Math.max(0, Math.min(max, sel));
   }
 
+  /** How many craft notebooks you've found (0 = wood only). */
+  getArrowCraftRank() {
+    return Math.max(0, (this.notebookElevators || []).length);
+  }
+
+  /** Filler shaft type for empty quiver slots after a wipe / hub rest. */
+  getCraftFillerType() {
+    const ladder = ["wood", "flint", "iron", "steel"];
+    const rank = Math.min(ladder.length - 1, this.getArrowCraftRank());
+    return ladder[rank] || "wood";
+  }
+
+  /**
+   * Discover a craft notebook on floor 9 of this elevator block (once per block).
+   * @returns {{ unlocked: boolean, filler: string, elevatorIndex: number } | null}
+   */
+  discoverNotebook(elevatorIndex) {
+    if (!this.notebookElevators) this.notebookElevators = [];
+    const el = Math.max(0, elevatorIndex | 0);
+    if (this.notebookElevators.includes(el)) return null;
+    this.notebookElevators.push(el);
+    return {
+      unlocked: true,
+      filler: this.getCraftFillerType(),
+      elevatorIndex: el,
+      rank: this.getArrowCraftRank(),
+    };
+  }
+
   /** Serialize for save/load. */
   serialize() {
     return {
@@ -460,6 +494,7 @@ export class GameStateManager {
       hubVisits: this.hubVisits,
       maxElevatorUnlocked: this.maxElevatorUnlocked || 0,
       selectedStartElevator: this.getStartElevator(),
+      notebookElevators: [...(this.notebookElevators || [])],
     };
   }
 
@@ -478,6 +513,9 @@ export class GameStateManager {
     this.hubVisits = data.hubVisits || 0;
     this.maxElevatorUnlocked = Math.max(0, data.maxElevatorUnlocked || 0);
     this.selectedStartElevator = data.selectedStartElevator || 0;
+    this.notebookElevators = Array.isArray(data.notebookElevators)
+      ? data.notebookElevators.map((n) => Math.max(0, n | 0))
+      : [];
     this.setStartElevator(this.selectedStartElevator);
     this.applyUpgrades();
   }

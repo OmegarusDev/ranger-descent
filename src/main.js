@@ -4,10 +4,10 @@
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=28";
 import { DungeonView } from "./engine/DungeonView.js?v=42";
 import { CONFIG } from "./data/config.js?v=30";
-import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort, createArrow } from "./game/QuiverDeckManager.js?v=35";
-import { CorridorSim } from "./game/CorridorSim.js?v=60";
+import { rollShopArrows, getShopArrowCatalog, getArrowDef, arrowShort } from "./game/QuiverDeckManager.js?v=36";
+import { CorridorSim } from "./game/CorridorSim.js?v=61";
 import { InputHandler } from "./game/InputHandler.js?v=17";
-import { STAT_INFO } from "./game/GameStateManager.js?v=42";
+import { STAT_INFO } from "./game/GameStateManager.js?v=43";
 
 /** Player-facing coin mark (colon sign — C with bars). */
 const COIN = "₡";
@@ -297,6 +297,15 @@ sim.on("elevator_ride", (e) => {
   }
 });
 
+sim.on("notebook_found", (e) => {
+  const tip = document.getElementById("wave-display");
+  const names = { wood: "Wood", flint: "Flint", iron: "Iron", steel: "Steel" };
+  const label = names[e.filler] || e.filler;
+  if (tip) tip.textContent = `Notebook — craft ${label} shafts`;
+  engine.punch(3);
+  saveGame();
+});
+
 sim.on("run_start", () => {
   setPathChoice(false);
   input.reset();
@@ -541,20 +550,21 @@ const SHOP_QUIVERS = (() => {
     30: "Enduring Quiver",
   };
   const list = [];
+  let cost = 40;
   for (let cap = 10; cap <= 30; cap += 2) {
     const step = (cap - 10) / 2;
-    const cost = step === 0 ? 0 : 20 + step * 25 + Math.floor(step * step * 4);
     list.push({
       id: cap === 10 ? "quiver_basic" : `quiver_${cap}`,
       name: names[cap] || `${cap}-Shaft Quiver`,
       slot: "quiver",
-      cost,
+      cost: step === 0 ? 0 : cost,
       capacity: cap,
       desc: cap === 10 ? "A stitched hide tube. Ten shafts." : `Holds ${cap} arrows.`,
       stats: `${cap} Capacity`,
       icon: "🏹",
       section: "quivers",
     });
+    if (step >= 1) cost = Math.round(cost * 1.15);
   }
   return list;
 })();
@@ -714,9 +724,11 @@ function getShopArrows(state) {
 let packSel = null;
 let packNote = null;
 
-function syncQuiverCap(state) {
+/** Hub / equip / post-death: sync capacity, pack loaded shafts, craft-fill empties only. */
+function refillQuiverEmptySlots(state = sim.state) {
   sim.quiver.capacity = state.getQuiverCapacity();
   sim.quiver.packForHub();
+  sim.quiver.fillEmptySlots(state.getCraftFillerType());
 }
 
 function equippedIds(state) {
@@ -995,7 +1007,7 @@ function populatePack(state) {
       }
       if (item.slot && GEAR_PICK_SLOTS.has(item.slot)) {
         state.equipped[item.slot] = item.id;
-        if (item.slot === "quiver") syncQuiverCap(state);
+        if (item.slot === "quiver") refillQuiverEmptySlots(state);
         saveGame();
         populateHub();
       }
@@ -1022,7 +1034,7 @@ function populatePack(state) {
               if (slot === "dagger") state.equipped.dagger = "dagger_iron";
               else if (slot === "quiver") {
                 state.equipped.quiver = "quiver_basic";
-                syncQuiverCap(state);
+                refillQuiverEmptySlots(state);
               } else state.equipped[slot] = null;
               saveGame();
               populateHub();
@@ -1041,7 +1053,7 @@ function populatePack(state) {
           sub: it.stats || it.desc || "",
           onPick: () => {
             state.equipped[slot] = it.id;
-            if (slot === "quiver") syncQuiverCap(state);
+            if (slot === "quiver") refillQuiverEmptySlots(state);
             saveGame();
             populateHub();
           },
@@ -1151,8 +1163,7 @@ function renderElevatorPicker() {
 function populateHub() {
   const state = sim.state;
   ensureStarterKit(state);
-  sim.quiver.capacity = state.getQuiverCapacity();
-  if (sim.quiver.totalArrows === 0) sim.quiver.initStarter();
+  refillQuiverEmptySlots(state);
   syncArmorRating(state);
   state.applyUpgrades();
   const soulsEl = document.getElementById("hub-souls");
@@ -1278,7 +1289,7 @@ function populateHub() {
           if (item.section === "quivers") {
             if (!state.equipped) state.equipped = {};
             state.equipped.quiver = id;
-            syncQuiverCap(state);
+            refillQuiverEmptySlots(state);
           }
         }
         saveGame();
@@ -1581,19 +1592,7 @@ function loadGame() {
     const data = JSON.parse(raw);
     if (data.state) sim.state.deserialize(data.state);
     if (data.quiver) sim.quiver.deserialize(data.quiver);
-    sim.quiver.capacity = sim.state.getQuiverCapacity();
-    if (sim.quiver.totalArrows === 0) {
-      sim.quiver.initStarter();
-    } else if (sim.quiver.totalArrows < sim.quiver.capacity) {
-      const held = [...sim.quiver.peekQuiver(), ...sim.quiver.peekStorage()];
-      // Top up legacy starter kits (all wood, under new 10-shaft hide quiver).
-      if (held.length > 0 && held.every((a) => a.type === "wood" || a.type === "normal")) {
-        while (sim.quiver.totalArrows < sim.quiver.capacity) {
-          sim.quiver.addToQuiver(createArrow("wood"));
-        }
-      }
-    }
-    sim.quiver.packForHub();
+    refillQuiverEmptySlots(sim.state);
     syncArmorRating(sim.state);
   } catch (_) { /* corrupt save */ }
 }
