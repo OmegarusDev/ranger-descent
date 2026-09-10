@@ -21,6 +21,15 @@ let _shopArmourCache = null;
 let _shopArrowCache = null;
 let _shopHubVisit = -1;
 
+const TRAINING_METRIC_INFO = {
+  hp: "Maximum health after Vigor and equipped gear.",
+  dmg: "Flat Strength added to arrow physical damage. Arrow type and level also affect the final hit.",
+  rof: "Arrows fired per second. A higher rate means a shorter time between shots; excess equipment weight can reduce it.",
+  crit: "Critical-hit damage multiplier and the chance of landing a critical hit.",
+  recovery: "Chance that a fired arrow returns after the hall instead of breaking.",
+  weight: "Maximum armour carry weight. Current carry weight is the weight of equipped armour only.",
+};
+
 export function initHub(d) {
   deps = d;
   sim = d.sim;
@@ -572,7 +581,7 @@ function populatePack(state) {
   const maxLoad = state.getMaxEquipLoad();
   const loadEl = document.getElementById("pack-load");
   if (loadEl) {
-    loadEl.textContent = `Load ${load} / ${maxLoad}`;
+    loadEl.textContent = `Weight ${load} / ${maxLoad}`;
     loadEl.classList.toggle("overencumbered", load > maxLoad);
   }
 
@@ -848,20 +857,28 @@ export function populateHub() {
     const cost = state.getUpgradeCost();
     const charLevel = state.getCharacterLevel();
     const rof = 1 / cd;
+    const recovery = Math.round(state.getArrowReturnChance() * 100);
     const equipMax = state.getMaxEquipLoad();
     const allMaxed = STAT_INFO.every((u) => state.isUpgradeMaxed(u.id));
+    const metrics = [
+      { id: "hp", value: state.playerMaxHp, label: "HP" },
+      { id: "dmg", value: `+${state.getStrengthBonus()}`, label: "DMG" },
+      { id: "rof", value: `${rof.toFixed(2)}/s`, label: "ROF" },
+      { id: "crit", value: `${critX}x / ${crit}%`, label: "Crit dmg / %" },
+      { id: "recovery", value: `${recovery}%`, label: "Arrow rec." },
+      { id: "weight", value: equipMax, label: "Weight max." },
+    ];
     trainingList.innerHTML = `
       <div class="train-summary">
         <span>Lvl ${charLevel}</span><span class="train-divider">/</span>
         <span>Coins: ${coinLabel(state.coins)}</span><span class="train-divider">/</span>
-        <span>Next lvlup: ${allMaxed ? "MAX" : coinLabel(cost)}</span>
+        <span class="train-summary-next">Next lvlup: ${allMaxed ? "MAX" : coinLabel(cost)}</span>
       </div>
       <div class="train-stats" aria-label="Current ranger stats">
-        <div class="train-stat"><strong>${state.playerMaxHp}</strong><span>HP</span></div>
-        <div class="train-stat"><strong>+${state.getStrengthBonus()}</strong><span>DMG</span></div>
-        <div class="train-stat"><strong>${rof.toFixed(2)}/s</strong><span>ROF</span></div>
-        <div class="train-stat"><strong>${crit}% x${critX}</strong><span>Crit</span></div>
-        <div class="train-stat"><strong>${equipMax}</strong><span>Equip max</span></div>
+        ${metrics.map((metric) => `<details class="train-stat train-metric">
+          <summary aria-label="${metric.label} information"><strong>${metric.value}</strong><span>${metric.label}</span></summary>
+          <div class="train-hint-popover">${TRAINING_METRIC_INFO[metric.id]}</div>
+        </details>`).join("")}
       </div>
       <div class="train-upgrades">
     ` + STAT_INFO.map((u) => {
@@ -879,8 +896,7 @@ export function populateHub() {
           </div>
         </div>
         <div class="train-right">
-          <span class="train-level">${lvl} / 20</span>
-          <span class="train-cost">${maxed ? "MAX" : coinLabel(cost)}</span>
+          <span class="train-level">${lvl}</span>
           <button class="train-buy ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
         </div>
       </div>`;

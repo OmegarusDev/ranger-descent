@@ -21,7 +21,7 @@ export const STAT_INFO = [
 ];
 
 const STAT_MAX = {
-  vigor: 20, endurance: 20, strength: 20, dexterity: 20, luck: 20,
+  vigor: 99, endurance: 99, strength: 99, dexterity: 99, luck: 99,
 };
 
 const POUCH_CAPACITY = 2;
@@ -47,7 +47,7 @@ function normalizedPouch(value) {
 
 function migrateStats(raw) {
   const u = raw || {};
-  const clamp = (n) => Math.max(1, Math.min(20, Math.floor(Number(n) || 1)));
+  const clamp = (n) => Math.max(1, Math.min(99, Math.floor(Number(n) || 1)));
   if (u.vigor || u.endurance || u.strength || u.dexterity || u.luck) {
     return {
       vigor: clamp(u.vigor || 1),

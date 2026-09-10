@@ -34,3 +34,10 @@ test("terminal phases cannot receive new damage or kill coins", () => {
   assert.equal(state.damagePlayer(20), hp);
   assert.equal(state.runCoins, 0);
 });
+
+test("training stats use a hidden 99-level cap", () => {
+  const state = new GameStateManager();
+  state.upgrades.vigor = 150;
+  assert.equal(state.getStat("vigor"), 99);
+  assert.equal(state.isUpgradeMaxed("vigor"), true);
+});
