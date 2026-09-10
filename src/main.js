@@ -57,6 +57,7 @@ const phaseDeath = $("#phase-death");
 const coinsEl = $("#coins-display");
 const hpFill = $("#hp-fill");
 const hpText = $("#hp-text");
+const floorEl = $("#floor-display");
 const waveEl = $("#wave-display");
 const distEl = $("#distance-display");
 const timerEl = $("#timer-display");
@@ -578,7 +579,12 @@ function updateUI() {
   if (coinsEl) coinsEl.textContent = sim.state.phase === "run" ? (sim.state.runCoins || 0) : sim.state.coins;
   if (hpFill) hpFill.style.width = `${(sim.state.playerHp / sim.state.playerMaxHp) * 100}%`;
   if (hpText) hpText.textContent = `${Math.ceil(sim.state.playerHp)} / ${sim.state.playerMaxHp}`;
-  if (waveEl) waveEl.textContent = sim.getProgressLabel ? sim.getProgressLabel() : `Fl. 1`;
+  if (floorEl) floorEl.textContent = sim.state.phase === "run" ? `Floor ${sim.getFloorNumber()}` : "Floor 1";
+  if (waveEl) {
+    waveEl.textContent = sim.state.phase === "run"
+      ? (sim._finalBoss ? "Final Boss" : `Wave ${sim.getWaveNumber()}`)
+      : "Wave 1";
+  }
   if (distEl) distEl.textContent = `${sim.enemies.length} ahead`;
 
   if (timerEl) {
@@ -598,6 +604,12 @@ function updateUI() {
   }
 
   const runQuiver = document.getElementById("run-quiver");
+  const runQuiverCount = document.getElementById("run-quiver-count");
+  if (runQuiverCount) {
+    runQuiverCount.textContent = sim.state.phase === "run"
+      ? `Quiver ${sim.quiver.quiverCount} / ${sim.quiver.capacity}`
+      : "Quiver 0 / 0";
+  }
   if (runQuiver) {
     if (sim.state.phase === "run") {
       const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);

@@ -193,7 +193,10 @@
     <!-- Run HUD -->
     <div id="phase-run" class="phase">
       <div class="hud-top">
-        <div class="hud-primary" id="wave-display">Fl. 1  1/10</div>
+        <div class="hud-progress">
+          <div class="hud-primary hud-floor" id="floor-display">Floor 1</div>
+          <div class="hud-primary hud-wave" id="wave-display">Wave 1</div>
+        </div>
         <div class="hud-meta">
           <span class="coins"><span class="coin-mark" aria-hidden="true">₡</span> <span id="coins-display">0</span></span>
           <span class="dist" id="distance-display">0 ahead</span>
@@ -219,7 +222,10 @@
       <div class="bottom-bar">
         <div class="bottom-bar-row">
           <button type="button" class="run-bag-btn" id="btn-run-bag" aria-label="Bag">Bag</button>
-          <div id="run-quiver" class="run-quiver" aria-label="Quiver"></div>
+          <div class="run-quiver-wrap">
+            <div id="run-quiver-count" class="run-quiver-count">Quiver 0 / 0</div>
+            <div id="run-quiver" class="run-quiver" aria-label="Quiver"></div>
+          </div>
         </div>
         <div class="hp-row">
           <span class="hp-label">HP</span>

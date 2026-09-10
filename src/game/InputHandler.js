@@ -54,7 +54,7 @@ export class InputHandler {
     this.canvas.addEventListener("pointerdown", (e) => this._onDown(e));
     this.canvas.addEventListener("pointermove", (e) => this._onMove(e));
     this.canvas.addEventListener("pointerup", (e) => this._onUp(e));
-    this.canvas.addEventListener("pointercancel", (e) => this._onUp(e));
+    this.canvas.addEventListener("pointercancel", (e) => this._onUp(e, true));
     this.canvas.addEventListener("click", (e) => {
       if (this._suppressClick) {
         this._suppressClick = false;
@@ -96,7 +96,7 @@ export class InputHandler {
     if (this.onDragMove) this.onDragMove(this.angle, this.power, this.vector);
   }
 
-  _onUp(e) {
+  _onUp(e, cancelled = false) {
     if (this._pointerId != null && e.pointerId !== this._pointerId) return;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch(_) {}
     const { x, y } = this._toCanvas(e);
@@ -107,6 +107,13 @@ export class InputHandler {
     this._pointerId = null;
     if (e.pointerType === "touch" || e.pointerType === "pen") {
       this._ignoreMouseUntil = performance.now() + 550;
+    }
+    if (cancelled) {
+      this._suppressClick = true;
+      this.power = 0;
+      this.vector = { x: 0, y: 0 };
+      this.active = false;
+      return;
     }
     if (this.choiceMode && this.onTap) {
       this._suppressClick = true;

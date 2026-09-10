@@ -908,6 +908,12 @@ button.elev-chip.selected {
   flex: 0 0 auto;
   z-index: 2;
 }
+.hud-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .hud-primary {
   font-family: "Cinzel", "Chakra Petch", serif;
   font-size: 0.98em;
@@ -917,6 +923,8 @@ button.elev-chip.selected {
   line-height: 1.2;
   text-align: center;
 }
+.hud-progress .hud-primary { text-align: left; }
+.hud-progress .hud-wave { text-align: right; }
 .hud-meta {
   display: flex;
   justify-content: space-between;
@@ -984,7 +992,7 @@ button.elev-chip.selected {
 }
 .bottom-bar-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
 }
 .run-bag-btn {
@@ -1007,6 +1015,20 @@ button.elev-chip.selected {
   box-shadow: 0 4px 12px rgba(0,0,0,0.35);
 }
 .run-bag-btn:hover { background: rgba(40, 26, 12, 0.95); }
+.run-quiver-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.run-quiver-count {
+  color: #b89a68;
+  font-size: 0.68em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
 
 /* Wave loot report */
 #wave-loot {
