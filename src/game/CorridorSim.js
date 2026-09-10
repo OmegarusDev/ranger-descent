@@ -16,6 +16,7 @@ import {
   rollGroundFind,
   hallHpBudget,
   composeWaveForHp,
+  enemyThreat,
   enemyDisplayName,
   POTION_LABELS,
 } from "./enemyData.js";
@@ -434,11 +435,12 @@ export class CorridorSim {
       const bosses = ["boss_grunt", "boss_warden", "boss_wraith", "boss_death_knight", "boss_spider_queen", "boss_lich_king"];
       built.groups.push([bosses[depth.elevatorIndex % bosses.length]]);
     }
-    const families = [...new Set(built.groups.flat().map(enemyFamily))];
+    const allTypes = built.groups.flat();
+    const families = [...new Set(allTypes.map(enemyFamily))];
     return {
       groups: built.groups,
-      threat: built.threat,
-      enemyTypes: built.enemyTypes,
+      threat: allTypes.reduce((sum, type) => sum + enemyThreat(type, depth.floorIndex, depth.elevatorIndex), 0),
+      enemyTypes: [...new Set(allTypes)],
       families,
       coinBonus,
     };
@@ -1043,8 +1045,8 @@ export class CorridorSim {
 
   _killEnemy(e, index, def, relDist) {
     this.state.enemiesKilled++;
-    const coins = rollEnemyCoins(e.type);
-    this.state.awardKillCoins(coins);
+    const baseCoins = rollEnemyCoins(e.type);
+    const coins = this.state.awardKillCoins(baseCoins);
     const drop = rollEnemyItemDrop(e.type);
     if (drop && drop.kind === "arrow") {
       const score = lootProgressScore(this.floorIndex, this.elevatorIndex);
@@ -1057,9 +1059,10 @@ export class CorridorSim {
     this.waveLootLog.push({
       name: enemyDisplayName(e.type),
       coins,
+      baseCoins,
       drop,
     });
-    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist, coins, drop });
+    this.emit("enemy_death", { enemy: e, x: e.x, dist: relDist, coins, baseCoins, drop });
     if (def?.splitTo && !e._splitDone) {
       for (let s = 0; s < (def.splitCount || 2); s++) {
         const side = s ? 1 : -1;

@@ -2,7 +2,7 @@
  * hub.js — Hub sheets: training, shop, pack, bestiary, options, elevator picker.
  */
 import { CONFIG } from "../data/config.js";
-import { rollShopArrows, getArrowDef, isWoodType } from "../game/QuiverDeckManager.js";
+import { rollShopArrows, getArrowDef, getArrowStats, isWoodType } from "../game/QuiverDeckManager.js";
 import { ENEMY_DEFS } from "../game/CorridorSim.js";
 import { STAT_INFO, quiverCapacityFromId } from "../game/GameStateManager.js";
 
@@ -636,7 +636,7 @@ function populatePack(state) {
   chestEl.querySelectorAll("[data-chest-a]").forEach((el) => {
     const i = parseInt(el.dataset.chestA, 10);
     const def = getArrowDef(stored[i].type);
-    const tipItem = { name: def.name, desc: def.desc, stats: def.stats };
+    const tipItem = { name: def.name, desc: def.desc, stats: getArrowStats(stored[i].type, stored[i].level) };
     el.addEventListener("pointerenter", (evt) => showPackTip(tipItem, el, evt.clientX, evt.clientY));
     el.addEventListener("pointerleave", () => {
       const tip = document.getElementById("pack-tip");

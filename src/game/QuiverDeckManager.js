@@ -14,91 +14,80 @@ export const ARROW_DEFS = {
   wood: {
     type: "wood", name: "Wood Arrow", short: "WD", icon: "➤",
     cost: 3, damage: 1, shop: false, tier: 1, color: "#c4a574",
-    desc: "Soft pine. You fletch these yourself when the quiver runs dry.", stats: "1 phys",
+    desc: "Soft pine. You fletch these yourself when the quiver runs dry.",
   },
   flint: {
     type: "flint", name: "Flint Arrow", short: "FL", icon: "◆",
     cost: 5, damage: 2, shop: true, tier: 1, color: "#8a8478",
-    desc: "Knapped tip. Looks brittle — it isn't. Soft against plate.", stats: "2 phys",
+    desc: "Knapped tip. Looks brittle — it isn't. Soft against plate.",
   },
   iron: {
     type: "iron", name: "Iron Arrow", short: "IR", icon: "➤",
     cost: 8, damage: 3, shop: true, tier: 1, color: "#9aa0a8",
-    desc: "Forged head. Holds up on armour.", stats: "3 phys · solid vs armour",
+    desc: "Forged head. Holds up on armour.",
     hardTip: true,
   },
   fire: {
     type: "fire", name: "Fire Arrow", short: "FR", icon: "🔥",
     cost: 10, damage: 2, fireDamage: 2, shop: true, tier: 1, color: "#e07a3a",
     desc: "Pitch-soaked. Physical hit plus a burst of flame, then burning.",
-    stats: "2 phys + 2 fire · burn",
     burn: 3.5, burnDps: 3.2,
   },
   ice: {
     type: "ice", name: "Ice Arrow", short: "IC", icon: "❄",
     cost: 10, damage: 2, iceDamage: 1, shop: true, tier: 1, color: "#7eb8c9",
     desc: "Rimed tip. Bites with frost and chills their stride. Kills flame.",
-    stats: "2 phys + 1 frost · chill",
     slow: 3.4, slowFactor: 0.32,
   },
   piercing: {
     type: "piercing", name: "Piercing Arrow", short: "PR", icon: "➶",
     cost: 10, damage: 2, shop: true, tier: 1, color: "#e8d5a0",
     desc: "Bodkin tip. Through flesh into the foe behind — or straight through plate.",
-    stats: "2 phys · pierce 1 / punch armour",
     pierce: 1,
   },
   double: {
     type: "double", name: "Twin Shot", short: "TW", icon: "⇉",
     cost: 10, damage: 2, shop: true, tier: 1, color: "#d8b878",
     desc: "Two shafts for one draw. Depth insurance.",
-    stats: "2 phys × 2 shafts",
   },
   stun: {
     type: "stun", name: "Stun Arrow", short: "SN", icon: "◉",
     cost: 10, damage: 1, shop: true, tier: 1, color: "#c9b070",
     desc: "Heavy blunt tip. Knocks the wind out of them.",
-    stats: "1 phys · stun",
     stun: 0.95,
   },
   poison: {
     type: "poison", name: "Poison Arrow", short: "PS", icon: "☠",
     cost: 10, damage: 1, shop: true, tier: 1, color: "#9a6bb8",
     desc: "Venom on the tip. Keeps working after the hit.",
-    stats: "1 phys · poison",
     poison: 4.5, poisonDps: 2.4,
   },
   oil: {
     type: "oil", name: "Oil Arrow", short: "OL", icon: "●",
     cost: 8, damage: 1, shop: true, tier: 1, color: "#8a7040",
     desc: "Slicks the wound. A Fire Arrow turns it into an inferno.",
-    stats: "1 phys · oil coat",
   },
   silver: {
     type: "silver", name: "Silver Arrow", short: "SV", icon: "✧",
     cost: 12, damage: 2, shop: true, tier: 2, color: "#e8eef4", vsUndead: 1.6,
     desc: "Blessed silver. The dead hate it.",
-    stats: "2 phys · +60% undead",
   },
   barbed: {
     type: "barbed", name: "Barbed Arrow", short: "BB", icon: "✸",
     cost: 11, damage: 2, shop: true, tier: 2, color: "#a85848",
     desc: "Hooks that tear free. Leaves them bleeding.",
-    stats: "2 phys · bleed",
     bleed: 4.2, bleedDps: 2.2,
   },
   shock: {
     type: "shock", name: "Shock Arrow", short: "SK", icon: "⚡",
     cost: 14, damage: 2, shop: true, tier: 2, color: "#7ec8e0",
     desc: "Copper-wrapped. Jolts and staggers. Softens energy wards.",
-    stats: "2 phys · jolt · vs energy",
     stun: 0.55, vsEnergy: 1.35,
   },
   steel: {
     type: "steel", name: "Steel Arrow", short: "SL", icon: "➤",
     cost: 16, damage: 4, shop: true, tier: 2, color: "#c8d0d8",
     desc: "Hardened tip for deeper floors.",
-    stats: "4 phys · strong vs armour",
     hardTip: true,
   },
 };
@@ -143,6 +132,30 @@ export function getArrowIceDamage(type, level = 1) {
 
 export function arrowShort(type) {
   return getArrowDef(type).short;
+}
+
+/** One display summary for shop cards, inspection, and future arrow previews. */
+export function getArrowStats(type, level = 1) {
+  const def = getArrowDef(type);
+  const lv = normalizeArrowLevel(level);
+  const stats = [`${getArrowDamage(def.type, lv)} phys`];
+  const fire = getArrowFireDamage(def.type, lv);
+  const ice = getArrowIceDamage(def.type, lv);
+  if (fire) stats.push(`${fire} fire`);
+  if (ice) stats.push(`${ice} frost`);
+  if (def.type === "double") stats.push("wood follow-up");
+  if (def.pierce) stats.push(`pierce ${def.pierce} / punch armour`);
+  if (def.hardTip) stats.push("vs armour");
+  if (def.stun) stats.push("stun");
+  if (def.poison) stats.push("poison");
+  if (def.burn) stats.push("burn");
+  if (def.slow) stats.push("chill");
+  if (def.bleed) stats.push("bleed");
+  if (def.vsUndead) stats.push(`+${Math.round((def.vsUndead - 1) * 100)}% undead`);
+  if (def.vsEnergy) stats.push("vs energy");
+  if (def.type === "oil") stats.push("oil coat");
+  if (lv > 1) stats.push(`Lv${lv}`);
+  return stats.join(" · ");
 }
 
 /** Meta progress for hub shop quality (visits + elevators unlocked). */
@@ -199,25 +212,13 @@ export function arrowShopCost(baseCost, level = 1) {
 
 export function toShopArrow(def, level = 1) {
   const lv = Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, level | 0));
-  const phys = getArrowDamage(def.type, lv);
-  const fire = getArrowFireDamage(def.type, lv);
-  const ice = getArrowIceDamage(def.type, lv);
-  let stats = `${phys} phys`;
-  if (fire) stats += ` + ${fire} fire`;
-  if (ice) stats += ` + ${ice} frost`;
-  if (def.burn) stats += " · burn";
-  if (def.slow) stats += " · chill";
-  if (def.pierce) stats += " · pierce";
-  if (def.poison) stats += " · poison";
-  if (def.hardTip) stats += " · vs armour";
-  if (lv > 1) stats += ` · Lv${lv}`;
   return {
     id: lv <= 1 ? `${def.type}_arrows` : `${def.type}_arrows_lv${lv}`,
     name: lv <= 1 ? def.name : `${def.name} Lv${lv}`,
     slot: "ammo",
     cost: arrowShopCost(def.cost, lv),
     desc: def.desc,
-    stats,
+    stats: getArrowStats(def.type, lv),
     icon: def.icon || "➤",
     section: "arrows",
     element: def.type,

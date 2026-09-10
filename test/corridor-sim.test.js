@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CorridorSim } from "../src/game/CorridorSim.js";
+import { CorridorSim, ENEMY_DEFS } from "../src/game/CorridorSim.js";
 
 test("reports absolute floors and repeating floor-local waves", () => {
   const sim = new CorridorSim();
@@ -67,4 +67,36 @@ test("elevator checkpoints bank the purse before continuing", () => {
   assert.equal(sim.elevatorCheckpointPending, false);
   assert.equal(sim.elevatorIndex, 1);
   assert.equal(sim.waveActive, true);
+});
+
+test("floor guardians are included in junction metadata", () => {
+  const sim = new CorridorSim();
+  const plan = sim._planEncounter(
+    ["slime"],
+    5,
+    { floorIndex: 9, elevatorIndex: 0, sectionIndex: 9 },
+    0,
+  );
+
+  assert.equal(plan.enemyTypes.includes("boss_grunt"), true);
+  assert.equal(plan.families.length > 0, true);
+  assert.equal(plan.threat > 5, true);
+});
+
+test("loot reports use awarded rather than base kill coins", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.state.upgrades.luck = 20;
+  const enemy = { type: "ogre", hp: 0, worldZ: 100, x: 0 };
+  sim.enemies = [enemy];
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    sim._killEnemy(enemy, 0, ENEMY_DEFS.ogre, 100);
+  } finally {
+    Math.random = originalRandom;
+  }
+
+  assert.equal(sim.waveLootLog[0].baseCoins, 5);
+  assert.equal(sim.waveLootLog[0].coins, 7);
 });

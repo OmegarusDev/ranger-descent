@@ -44,7 +44,8 @@ function enemyDisplayName(type) {
 }
 
 /**
- * Per-enemy drop tables. Chance is independent; most kills drop nothing but coins.
+ * Per-enemy ordered fallback drop tables. The first successful entry wins;
+ * most kills drop nothing but coins.
  * kind: arrow | potion | trinket
  */
 const ENEMY_LOOT = {
@@ -299,4 +300,3 @@ export {
   composeWaveForHp,
   enemyDisplayName,
 };
-
