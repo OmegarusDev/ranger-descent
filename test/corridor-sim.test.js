@@ -46,8 +46,42 @@ test("full wood quivers account for rejected wood loot without stashing it", () 
   });
 
   assert.equal(result.status, "lost");
+  assert.equal(result.discarded[0].reason, "no_room");
   assert.equal(sim.runStash.arrows.length, 0);
   assert.deepEqual(sim.quiver.peekQuiver().map((a) => a.type), ["wood"]);
+});
+
+test("settling a wave report replaces wood and records the discarded shaft", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.capacity = 1;
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  const report = {
+    kills: [{ drop: { kind: "arrow", type: "iron", level: 1, label: "Iron Arrow" } }],
+    ground: null,
+  };
+
+  sim._collectWaveReport(report);
+
+  assert.deepEqual(sim.quiver.peekQuiver().map((a) => a.type), ["iron"]);
+  assert.deepEqual(report.discarded.map((item) => [item.label, item.reason]), [["Wood Arrow", "replaced"]]);
+});
+
+test("acknowledging a settled report does not collect its loot twice", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.capacity = 1;
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  sim.pendingWaveReport = sim._collectWaveReport({
+    kills: [{ drop: { kind: "arrow", type: "iron", level: 1, label: "Iron Arrow" } }],
+    ground: null,
+  });
+  sim.lootPending = true;
+  sim._afterLootAction = "junction";
+
+  sim.acknowledgeWaveLoot();
+
+  assert.deepEqual(sim.quiver.peekQuiver().map((a) => a.type), ["iron"]);
 });
 
 test("elevator checkpoints bank the purse before continuing", () => {

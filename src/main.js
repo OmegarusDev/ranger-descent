@@ -162,6 +162,7 @@ function showWaveLoot(report) {
   if (!panel || !body) return;
   const kills = report?.kills || [];
   const broken = report?.broken || [];
+  const discarded = report?.discarded || [];
   const ground = report?.ground;
 
   let killHtml = kills.map((k) => {
@@ -174,16 +175,20 @@ function showWaveLoot(report) {
     ? `<div class="wave-loot-line"><span>${ground.detail || "On the ground"}</span><span class="gold">${ground.kind === "coins" ? coinLabel(ground.amount) : ground.label}</span></div>`
     : `<div class="wave-loot-empty">Nothing else on the floor.</div>`;
 
-  let brokeHtml = broken.map((b) => {
-    const why = b.reason === "no_room" ? "no room" : "broke";
+  let brokeHtml = [...broken, ...discarded].map((b) => {
+    const why = b.reason === "no_room"
+      ? "no room"
+      : b.reason === "replaced"
+        ? "replaced by a new arrow"
+        : "broke";
     return `<div class="wave-loot-line"><span class="broke">${b.label}</span><span class="muted">${why}</span></div>`;
   }).join("");
-  if (!brokeHtml) brokeHtml = `<div class="wave-loot-empty">All spent shafts came back.</div>`;
+  if (!brokeHtml) brokeHtml = `<div class="wave-loot-empty">Nothing was discarded.</div>`;
 
   body.innerHTML = `
     <div class="wave-loot-section"><h4>From the fallen</h4>${killHtml}</div>
     <div class="wave-loot-section"><h4>On the ground</h4>${groundHtml}</div>
-    <div class="wave-loot-section"><h4>Broken shafts</h4>${brokeHtml}</div>
+    <div class="wave-loot-section"><h4>Discarded shafts</h4>${brokeHtml}</div>
   `;
   panel.classList.add("active");
   setPathChoice(false);

@@ -1094,8 +1094,16 @@ export class CorridorSim {
         broken.push({ type: a.type, level: a.level || 1 });
         continue;
       }
-      if (this.quiver.addToQuiver(a)) {
+      const placed = this.quiver.addToQuiverReplacingWood(a);
+      if (placed.added) {
         returned.push({ type: a.type, level: a.level || 1, where: "quiver" });
+        if (placed.replaced) {
+          broken.push({
+            type: placed.replaced.type,
+            level: placed.replaced.level || 1,
+            reason: "replaced",
+          });
+        }
       } else if (!this.quiver.isWoodType(a.type)) {
         this.addToRunStashArrow(a);
         returned.push({ type: a.type, level: a.level || 1, where: "stash" });
@@ -1155,9 +1163,19 @@ export class CorridorSim {
     }
     if (piece.kind === "arrow") {
       const arrow = { type: piece.type || piece.arrow, level: piece.level || 1 };
-      if (this.quiver.addToQuiver(arrow)) return { status: "quiver", label: piece.label };
-      if (this.addToRunStashArrow(arrow)) return { status: "stash", label: piece.label };
-      return { status: "lost", label: piece.label };
+      const label = piece.label || getArrowDef(arrow.type).name;
+      const placed = this.quiver.addToQuiverReplacingWood(arrow);
+      if (placed.added) {
+        return {
+          status: "quiver",
+          label,
+          discarded: placed.replaced
+            ? [{ type: placed.replaced.type, level: placed.replaced.level || 1, reason: "replaced" }]
+            : [],
+        };
+      }
+      if (this.addToRunStashArrow(arrow)) return { status: "stash", label };
+      return { status: "lost", label, discarded: [{ type: arrow.type, level: arrow.level, reason: "no_room" }] };
     }
     if (piece.kind === "potion") {
       const pouch = this.state.pouch || [];
@@ -1196,7 +1214,28 @@ export class CorridorSim {
       ground,
       broken,
       returned: recovery?.returned || [],
+      discarded: [],
     };
+  }
+
+  _collectWaveReport(report) {
+    const discarded = [];
+    const collect = (piece) => {
+      const result = this._collectLootPiece(piece);
+      for (const item of result.discarded || []) {
+        const def = getArrowDef(item.type);
+        discarded.push({
+          ...item,
+          label: item.level > 1 ? `${def.name} Lv${item.level}` : def.name,
+        });
+      }
+    };
+    for (const kill of report.kills || []) {
+      if (kill.drop) collect(kill.drop);
+    }
+    if (report.ground) collect(report.ground);
+    report.discarded = discarded;
+    return report;
   }
 
   _beginWaveLootSequence(nextAction) {
@@ -1205,7 +1244,7 @@ export class CorridorSim {
       this.state.awardKillCoins(this._waveCoinBonus);
       this._waveCoinBonus = 0;
     }
-    this.pendingWaveReport = this._buildWaveReport(recovery);
+    this.pendingWaveReport = this._collectWaveReport(this._buildWaveReport(recovery));
     this._afterLootAction = nextAction;
     this._lootDelayT = 0.5;
     this.lootPending = false;
@@ -1220,12 +1259,6 @@ export class CorridorSim {
     this._lootDelayT = -1;
     const report = this.pendingWaveReport;
     this.pendingWaveReport = null;
-    if (report) {
-      for (const k of report.kills || []) {
-        if (k.drop) this._collectLootPiece(k.drop);
-      }
-      if (report.ground) this._collectLootPiece(report.ground);
-    }
     this.emit("wave_loot_done", { report });
     const next = this._afterLootAction;
     this._afterLootAction = null;

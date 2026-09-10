@@ -11,6 +11,7 @@ run UI. Mark each item pass/fail and record the build number.
 - Confirm Twin Shot still fires both projectiles.
 - Open the Field bag during active combat and confirm combat continues.
 - Confirm wood arrows have no manual discard or snap action.
+- Fill the quiver with wood, collect a non-wood arrow, and confirm the wood shaft is replaced and shown as discarded.
 
 ## Terminal States
 
@@ -32,6 +33,7 @@ run UI. Mark each item pass/fail and record the build number.
 
 - Clear a hall and acknowledge its loot.
 - Confirm the junction screen appears only after the approach.
+- Confirm the hall report accounts for recovered, stashed, and discarded shafts before Continue.
 - Test left, forward, and right choices with touch/click and keyboard input.
 - Confirm the selected choice is used without rerolling its encounter.
 - Confirm Escape to surface banks the run once.
