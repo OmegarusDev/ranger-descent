@@ -59,6 +59,7 @@ const hpFill = $("#hp-fill");
 const hpText = $("#hp-text");
 const floorEl = $("#floor-display");
 const waveEl = $("#wave-display");
+const ammoAlert = $("#ammo-alert");
 const distEl = $("#distance-display");
 const timerEl = $("#timer-display");
 const cooldownRing = $("#cooldown-ring");
@@ -198,6 +199,20 @@ function showWaveLoot(report) {
 function hideWaveLoot() {
   const panel = document.getElementById("wave-loot");
   if (panel) panel.classList.remove("active");
+}
+
+let ammoAlertTimer = null;
+let lastEmptyAlertAt = 0;
+
+function showAmmoAlert(text, kind = "last") {
+  if (!ammoAlert) return;
+  ammoAlert.textContent = text;
+  ammoAlert.className = `active ${kind}`;
+  if (ammoAlertTimer) clearTimeout(ammoAlertTimer);
+  ammoAlertTimer = setTimeout(() => {
+    ammoAlert.className = "";
+    ammoAlertTimer = null;
+  }, kind === "empty" ? 1600 : 1300);
 }
 
 let _runBagPending = null;
@@ -391,6 +406,17 @@ sim.on("arrow_fire", (e) => {
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
 
+sim.on("last_arrow", () => {
+  showAmmoAlert("Last arrow!", "last");
+});
+
+sim.on("quiver_empty", () => {
+  const now = performance.now();
+  if (now - lastEmptyAlertAt < 800) return;
+  lastEmptyAlertAt = now;
+  showAmmoAlert("Out of arrows", "empty");
+});
+
 const FX_TYPE = {
   ice: "frost", wood: "kinetic", flint: "kinetic", iron: "kinetic",
   steel: "kinetic", silver: "kinetic", stun: "kinetic", piercing: "kinetic",
@@ -470,6 +496,8 @@ sim.on("run_start", () => {
   hideWaveLoot();
   closeElevatorCheckpoint();
   closeRunBag();
+  if (ammoAlert) ammoAlert.className = "";
+  lastEmptyAlertAt = 0;
   input.reset();
   input.blockUntil = performance.now() + 280;
 });

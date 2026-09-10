@@ -84,6 +84,24 @@ test("acknowledging a settled report does not collect its loot twice", () => {
   assert.deepEqual(sim.quiver.peekQuiver().map((a) => a.type), ["iron"]);
 });
 
+test("firing the last arrow and trying again emit distinct ammo feedback", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.capacity = 1;
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  let lastArrow = 0;
+  let empty = 0;
+  sim.on("last_arrow", () => { lastArrow++; });
+  sim.on("quiver_empty", () => { empty++; });
+
+  sim.fireArrow({ vector: { x: 0, y: -1 }, speed: 400 });
+  sim.state.arrowCooldown = 0;
+  sim.fireArrow({ vector: { x: 0, y: -1 }, speed: 400 });
+
+  assert.equal(lastArrow, 1);
+  assert.equal(empty, 1);
+});
+
 test("elevator checkpoints bank the purse before continuing", () => {
   const sim = new CorridorSim();
   sim.state.startRun();

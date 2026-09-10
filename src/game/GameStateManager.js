@@ -416,7 +416,7 @@ export class GameStateManager {
   getArrowCooldown() {
     const end = this.getStat("endurance");
     const dex = this.getStat("dexterity");
-    let cd = 0.82 - end * 0.022 - dex * 0.008;
+    let cd = (0.82 - end * 0.022 - dex * 0.008) * CONFIG.ARROW_COOLDOWN_MULTIPLIER;
     const maxLoad = this.getMaxEquipLoad();
     const load = this.equipLoad || 0;
     if (maxLoad > 0 && load > maxLoad) {

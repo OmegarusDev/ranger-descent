@@ -812,7 +812,8 @@ export class CorridorSim {
       const e = this.enemies[i];
       const relDist = e.worldZ - this.playerWorldZ;
       e.dist = relDist;
-      const spd = e.speed * dt * (e.slowT > 0 ? (e.slowFactor || 0.4) : 1);
+      const spd = e.speed * CONFIG.ENEMY_SPEED_MULTIPLIER * dt
+        * (e.slowT > 0 ? (e.slowFactor || 0.4) : 1);
       if (e._hitStun > 0) e._hitStun = Math.max(0, e._hitStun - dt);
       if (e._squash > 0) e._squash = Math.max(0, e._squash - dt * 5.5);
       if (e._contactCd > 0) e._contactCd = Math.max(0, e._contactCd - dt);
@@ -1630,7 +1631,10 @@ export class CorridorSim {
     if (this.state.phase !== "run") return null;
     if (this.state.arrowCooldown > 0) return null;
     const arrow = this.quiver.fireArrow();
-    if (!arrow) return null;
+    if (!arrow) {
+      this.emit("quiver_empty");
+      return null;
+    }
     this.state.arrowsFired++;
     this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
     this.waveSpentArrows = this.waveSpentArrows || [];
@@ -1650,7 +1654,9 @@ export class CorridorSim {
       arrow.level
     );
     this.projectiles.push(proj);
-    this.emit("arrow_fire", { arrow, projectile: proj });
+    const remaining = this.quiver.quiverCount;
+    this.emit("arrow_fire", { arrow, projectile: proj, remaining });
+    if (remaining === 0) this.emit("last_arrow", { arrow });
     if (arrow.type === "double") {
       this.projectiles.push(createProjectile(
         this.playerWorldX, this.playerWorldZ + 18,
