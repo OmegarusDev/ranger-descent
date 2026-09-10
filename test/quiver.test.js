@@ -46,3 +46,16 @@ test("normalizes malformed persisted arrows", () => {
   assert.deepEqual(quiver.peekQuiver().map((a) => [a.type, a.level]), [["wood", 1], ["iron", 5]]);
   assert.deepEqual(quiver.peekStorage().map((a) => [a.type, a.level]), [["steel", 2]]);
 });
+
+test("a new non-wood arrow can replace a wood filler shaft", () => {
+  const quiver = new QuiverDeckManager();
+  quiver.capacity = 2;
+  quiver.addToQuiver({ type: "wood", level: 1 });
+  quiver.addToQuiver({ type: "iron", level: 1 });
+
+  const result = quiver.addToQuiverReplacingWood({ type: "steel", level: 1 });
+
+  assert.equal(result.added, true);
+  assert.equal(result.replaced.type, "wood");
+  assert.deepEqual(quiver.peekQuiver().map((a) => a.type), ["steel", "iron"]);
+});

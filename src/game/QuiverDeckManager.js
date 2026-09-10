@@ -383,6 +383,25 @@ export class QuiverDeckManager {
     return false;
   }
 
+  /** Add a found/returned arrow, replacing a wood filler shaft when full. */
+  addToQuiverReplacingWood(arrow) {
+    if (!arrow) return { added: false, replaced: null };
+    if (this.addToQuiver(arrow)) return { added: true, replaced: null };
+    if (isWoodType(arrow.type)) return { added: false, replaced: null };
+
+    const incoming = createArrow(arrow.type, arrow.level);
+    // Preserve the ready queue where possible; replace the last wood filler.
+    for (const list of [this.deck, this.queue]) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (!isWoodType(list[i].type)) continue;
+        const replaced = list[i];
+        list[i] = incoming;
+        return { added: true, replaced };
+      }
+    }
+    return { added: false, replaced: null };
+  }
+
   moveArrowToStorage(quiverIndex) {
     const loaded = this.peekQuiver();
     if (quiverIndex < 0 || quiverIndex >= loaded.length) return false;
