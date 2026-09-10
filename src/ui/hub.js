@@ -594,20 +594,17 @@ function populatePack(state) {
         current: true,
         onPick: () => {},
       });
-      options.push({
-        label: isWoodType(current.type) ? "Cannot store wood" : "Store in chest",
-        sub: isWoodType(current.type) ? "Wood shafts stay crafted, never chested" : "Clear this slot",
-        onPick: () => {
-          if (isWoodType(current.type)) {
-            packNote = "Wood arrows are never sent to storage.";
+      if (!isWoodType(current.type)) {
+        options.push({
+          label: "Store in chest",
+          sub: "Clear this slot",
+          onPick: () => {
+            q.setQuiverSlot(slotIndex, null);
+            saveGame();
             populateHub();
-            return;
-          }
-          q.setQuiverSlot(slotIndex, null);
-          saveGame();
-          populateHub();
-        },
-      });
+          },
+        });
+      }
     } else {
       options.push({ label: "Empty", sub: "No arrow here", current: true, onPick: () => {} });
     }
@@ -646,7 +643,7 @@ function populatePack(state) {
       if (tip) tip.hidden = true;
     });
     el.addEventListener("click", () => {
-      if (q.moveArrowToQuiver(i)) {
+      if (q.setQuiverSlot(loaded.length, i)) {
         packNote = "Loaded into the quiver.";
         saveGame();
         populateHub();
@@ -846,31 +843,40 @@ export function populateHub() {
   const trainingList = document.getElementById("training-list");
   if (trainingList) {
     const cd = state.getArrowCooldown();
-    const ret = Math.round(state.getArrowReturnChance() * 100);
     const crit = Math.round(state.getCritChance() * 100);
     const critX = state.getCritMultiplier().toFixed(1);
-    const over = state.isOverEncumbered();
     const cost = state.getUpgradeCost();
     const charLevel = state.getCharacterLevel();
+    const rof = 1 / cd;
+    const equipMax = state.getMaxEquipLoad();
+    const allMaxed = STAT_INFO.every((u) => state.isUpgradeMaxed(u.id));
     trainingList.innerHTML = `
       <div class="train-summary">
-        <span>Level ${charLevel}</span>
-        <span>Next ${coinLabel(cost)}</span>
-        <span>HP ${state.playerMaxHp}</span>
-        <span>CD ${cd.toFixed(2)}s</span>
-        <span>Dmg +${state.getStrengthBonus()}</span>
-        <span>Crit ${crit}% ×${critX}</span>
-        <span>Return ${ret}%</span>
-        <span class="${over ? "overencumbered" : ""}">Load ${state.equipLoad || 0}/${state.getMaxEquipLoad()}</span>
+        <span>Lvl ${charLevel}</span><span class="train-divider">/</span>
+        <span>Coins: ${coinLabel(state.coins)}</span><span class="train-divider">/</span>
+        <span>Next lvlup: ${allMaxed ? "MAX" : coinLabel(cost)}</span>
       </div>
+      <div class="train-stats" aria-label="Current ranger stats">
+        <div class="train-stat"><strong>${state.playerMaxHp}</strong><span>HP</span></div>
+        <div class="train-stat"><strong>+${state.getStrengthBonus()}</strong><span>DMG</span></div>
+        <div class="train-stat"><strong>${rof.toFixed(2)}/s</strong><span>ROF</span></div>
+        <div class="train-stat"><strong>${crit}% x${critX}</strong><span>Crit</span></div>
+        <div class="train-stat"><strong>${equipMax}</strong><span>Equip max</span></div>
+      </div>
+      <div class="train-upgrades">
     ` + STAT_INFO.map((u) => {
       const lvl = state.getStat(u.id);
       const maxed = state.isUpgradeMaxed(u.id);
       const afford = state.coins >= cost;
       return `<div class="train-row">
         <div class="train-info">
-          <div class="train-name">${u.name}</div>
-          <div class="train-desc">${u.desc}</div>
+          <div class="train-name-line">
+            <div class="train-name">${u.name}</div>
+            <details class="train-hint">
+              <summary aria-label="${u.name} information">i</summary>
+              <div class="train-hint-popover">${u.desc}</div>
+            </details>
+          </div>
         </div>
         <div class="train-right">
           <span class="train-level">${lvl} / 20</span>
@@ -878,7 +884,7 @@ export function populateHub() {
           <button class="train-buy ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
         </div>
       </div>`;
-    }).join("");
+    }).join("") + `</div>`;
     trainingList.querySelectorAll(".train-buy").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.upgrade;

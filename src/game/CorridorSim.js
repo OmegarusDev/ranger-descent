@@ -116,6 +116,8 @@ export class CorridorSim {
     this._forwardCommitT = 0;
     this._approachingJunction = false;
     this._approachingElevator = false;
+    this.elevatorCheckpointPending = false;
+    this._pendingElevatorTarget = null;
     this._finalBoss = false;
     this._pendingBurst = null;
     this.heading = 0;
@@ -175,6 +177,8 @@ export class CorridorSim {
     this._forwardCommitT = 0;
     this._approachingJunction = false;
     this._approachingElevator = false;
+    this.elevatorCheckpointPending = false;
+    this._pendingElevatorTarget = null;
     this._finalBoss = false;
     this._pendingBurst = null;
     this.heading = 0;
@@ -211,6 +215,7 @@ export class CorridorSim {
       this.running = false;
       return;
     }
+    if (this.elevatorCheckpointPending) return;
     this.tickIndex = (this.tickIndex || 0) + 1;
     this.dt = 1 / 60;
     this.runTime += this.dt;
@@ -313,10 +318,26 @@ export class CorridorSim {
       return;
     }
     this.state.tickBonuses(this.dt);
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
     this._tickPendingBurst();
     this._tickProjectiles();
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
     this._tickEnemyProjectiles();
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
     this._tickAutoMagic();
+    if (this.state.phase !== "run") {
+      this.running = false;
+      return;
+    }
     const shuffleEvt = this.quiver.tick(this.dt);
     if (shuffleEvt) this.emit("quiver_shuffle");
 
@@ -562,6 +583,16 @@ export class CorridorSim {
     return this._waveForDepth(this.floorIndex, this.sectionIndex, this.elevatorIndex).groups;
   }
 
+  getFloorNumber() {
+    const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
+    if (this._finalBoss) return (CONFIG.ELEVATORS_PER_RUN || 10) * floors;
+    return Math.max(1, this.elevatorIndex * floors + this.floorIndex + 1);
+  }
+
+  getWaveNumber() {
+    return Math.max(1, this.sectionIndex + 1);
+  }
+
   getProgressLabel() {
     if (this._finalBoss) return "Final Boss";
     const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
@@ -681,21 +712,40 @@ export class CorridorSim {
    * Arriving at blocks 1–9 unlocks start shafts E1–E9. Clearing block 9 → final boss (no E10).
    */
   _rideElevator() {
+    if (this.elevatorCheckpointPending) return;
     this._approachingElevator = false;
     this._approachingJunction = false;
     this.junctionPending = false;
     this.junctionChoices = null;
     this._pendingEncounter = null;
     const elevs = CONFIG.ELEVATORS_PER_RUN || 10;
-    // Finished the last hall of the final floor-block → final boss (no E10 start).
-    if (this.elevatorIndex >= elevs - 1) {
-      this.emit("elevator_ride", { to: "final" });
-      this._enterFinalBoss();
-      return;
-    }
     const from = this.elevatorIndex;
-    this.elevatorIndex++;
-    this.state.unlockElevator(this.elevatorIndex);
+    const final = from >= elevs - 1;
+    const to = final ? "final" : from + 1;
+    if (!final) this.state.unlockElevator(to);
+
+    const banked = this.state.bankCoins();
+    this.commitRunStash();
+    this.elevatorCheckpointPending = true;
+    this._pendingElevatorTarget = { from, to, final, banked };
+    this.movingForward = false;
+    this.emit("elevator_checkpoint", { from, to, final, banked });
+  }
+
+  /** Continue from a banked elevator checkpoint. */
+  continueAtElevator() {
+    if (!this.elevatorCheckpointPending || !this._pendingElevatorTarget) return false;
+    const target = this._pendingElevatorTarget;
+    this.elevatorCheckpointPending = false;
+    this._pendingElevatorTarget = null;
+
+    if (target.final) {
+      this.emit("elevator_ride", { from: target.from, to: "final", banked: target.banked });
+      this._enterFinalBoss();
+      return true;
+    }
+
+    this.elevatorIndex = target.to;
     this.floorIndex = 0;
     this.sectionIndex = 0;
     this.segmentIndex++;
@@ -705,8 +755,26 @@ export class CorridorSim {
     this.turnAngle = 0;
     this.turning = false;
     this._forwardCommit = false;
-    this.emit("elevator_ride", { from, to: this.elevatorIndex, unlocked: this.elevatorIndex });
+    this.emit("elevator_ride", {
+      from: target.from,
+      to: this.elevatorIndex,
+      unlocked: this.elevatorIndex,
+      banked: target.banked,
+    });
     this._startWave();
+    return true;
+  }
+
+  /** Leave from a banked elevator checkpoint and return to the hub. */
+  leaveAtElevator() {
+    if (!this.elevatorCheckpointPending) return false;
+    this.elevatorCheckpointPending = false;
+    this._pendingElevatorTarget = null;
+    this.quiver.packForHub();
+    this.running = false;
+    this.state.hubVisits++;
+    this.state.enterHub();
+    return true;
   }
 
   _enterFinalBoss() {
@@ -738,6 +806,7 @@ export class CorridorSim {
     const dt = this.dt;
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
+      if (this.state.phase !== "run") return;
       const e = this.enemies[i];
       const relDist = e.worldZ - this.playerWorldZ;
       e.dist = relDist;
@@ -957,8 +1026,9 @@ export class CorridorSim {
         const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
         this.state.damagePlayer(dmg);
         const poison = e.contactPoison || def?.poison || 0;
-        if (poison > 0) this.state.applyPlayerPoison(poison);
+        if (this.state.phase === "run" && poison > 0) this.state.applyPlayerPoison(poison);
         this.emit("player_hit", { damage: dmg, enemy: e });
+        if (this.state.phase !== "run") return;
         e._contactCd = 0.95;
         e._hitStun = 0.32;
         e._squash = 1;
@@ -1056,7 +1126,8 @@ export class CorridorSim {
     if (!this.state.ownedItems) this.state.ownedItems = [];
     for (const it of stash.items || []) {
       if (it.kind === "potion" && it.itemId) {
-        if (!this.state.ownedItems.includes(it.itemId)) this.state.ownedItems.push(it.itemId);
+        // Potions are consumable instances, so duplicate IDs are meaningful.
+        this.state.ownedItems.push(it.itemId);
         const pouch = this.state.pouch || [];
         const empty = pouch.findIndex((s) => !s);
         if (empty >= 0) this.state.pouch[empty] = it.itemId;
@@ -1264,6 +1335,10 @@ export class CorridorSim {
           p._hitIds.push(e.id);
           const armored = e.armor === "heavy" || e.armor === "insulated";
           const raw = this._calcDamage(p, e, { punchArmour: !!(p.punchArmour && armored) });
+          if (this.state.phase !== "run") {
+            this.projectiles.splice(i, 1);
+            return;
+          }
           let dmg = raw;
           if (e.shieldHp > 0) {
             const absorbed = Math.min(e.shieldHp, dmg);
@@ -1404,6 +1479,7 @@ export class CorridorSim {
         this.state.damagePlayer(p.damage);
         this.emit("player_hit", { damage: p.damage, enemy: null });
         this.enemyProjectiles.splice(i, 1);
+        if (this.state.phase !== "run") return;
       }
     }
   }
@@ -1584,5 +1660,12 @@ export class CorridorSim {
 
   pause() { this.running = false; }
   resume() { this.running = true; }
-  destroy() { this.running = false; this.enemies = []; this.projectiles = []; this.enemyProjectiles = []; }
+  destroy() {
+    this.running = false;
+    this.elevatorCheckpointPending = false;
+    this._pendingElevatorTarget = null;
+    this.enemies = [];
+    this.projectiles = [];
+    this.enemyProjectiles = [];
+  }
 }

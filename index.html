@@ -53,6 +53,7 @@
             </div>
             <div class="hub-brand">
               <span class="hub-title">Ranger Descent</span>
+              <span class="hub-build" aria-label="Version 0.1.0, build 86">v0.1.0 · build 86</span>
             </div>
 
           <button type="button" class="hub-sign hub-sign-train" id="btn-hub-train" aria-label="Training camp">
@@ -263,6 +264,17 @@
       </div>
     </div>
 
+    <div id="run-elevator-checkpoint" aria-hidden="true">
+      <div class="elev-modal-card" role="dialog" aria-labelledby="run-elevator-checkpoint-title">
+        <h3 id="run-elevator-checkpoint-title">Elevator checkpoint</h3>
+        <p id="run-elevator-checkpoint-text" class="run-elevator-checkpoint-text">Your purse is banked.</p>
+        <div class="elev-modal-actions">
+          <button type="button" class="btn-secondary" id="btn-run-elevator-return">Return to surface</button>
+          <button type="button" id="btn-run-elevator-continue">Continue descent</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Death / Victory -->
     <div id="phase-death" class="phase">
       <div id="death-stats"></div>
@@ -284,7 +296,7 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=85"></script>
+  <script type="module" src="src/main.js?v=86"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=3";
     registerPwa();

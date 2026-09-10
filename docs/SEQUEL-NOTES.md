@@ -12,4 +12,7 @@ Worth revisiting in a sequel (or a later mode) if aiming expands beyond the curr
 
 ## Magic (hexes & prayers)
 
-AutoMagic + `hexUnlock` / `prayerUnlock` stay in code but dormant until a dedicated Magic patch. Unrelated to floor alchemy.
+**DORMANT BY DESIGN.** `AutoMagicSystem`, `hexUnlock`, and `prayerUnlock`
+stay in code for a dedicated future Magic patch. They are not clutter, are not
+part of ordinary runs, and must not be integrated during the current cleanup.
+This is unrelated to floor alchemy.

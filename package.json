@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "./scripts/serve-local.sh",
-    "typecheck": "npx tsc --noEmit"
+    "typecheck": "npx tsc --noEmit",
+    "test": "node --test"
   }
 }

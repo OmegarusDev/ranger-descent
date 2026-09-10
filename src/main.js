@@ -26,6 +26,7 @@ function coinLabel(n) {
 
 // Legacy key name kept so existing browser saves keep loading.
 const SAVE_KEY = "ranger-defense-save-v1";
+const SAVE_VERSION = 2;
 
 // ─── Bootstrap ────────────────────────────────────────────────
 const canvas = document.getElementById("game");
@@ -37,6 +38,7 @@ const input = new InputHandler(canvas);
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
+      version: SAVE_VERSION,
       state: sim.state.serialize(),
       quiver: sim.quiver.serialize(),
     }));
@@ -148,7 +150,6 @@ function escapeToSurface() {
   sim.quiver.packForHub();
   sim.running = false;
   sim.state.hubVisits++;
-  saveGame();
   sim.state.enterHub();
   const hubCoins = document.getElementById("hub-coins");
   if (hubCoins) hubCoins.textContent = sim.state.coins;
@@ -206,9 +207,33 @@ function closeRunBag() {
   _runBagPending = null;
 }
 
+function closeElevatorCheckpoint() {
+  const panel = document.getElementById("run-elevator-checkpoint");
+  if (panel) {
+    panel.classList.remove("active");
+    panel.setAttribute("aria-hidden", "true");
+  }
+}
+
+function showElevatorCheckpoint(e) {
+  const panel = document.getElementById("run-elevator-checkpoint");
+  const text = document.getElementById("run-elevator-checkpoint-text");
+  const continueBtn = document.getElementById("btn-run-elevator-continue");
+  if (!panel) return;
+  if (text) {
+    const banked = e?.banked ? ` ${coinLabel(e.banked)} banked.` : " Purse banked.";
+    text.textContent = e?.final
+      ? `The last elevator opens onto the final descent.${banked}`
+      : `Elevator E${e?.to} is now unlocked.${banked}`;
+  }
+  if (continueBtn) continueBtn.textContent = e?.final ? "Face the final boss" : "Continue descent";
+  panel.classList.add("active");
+  panel.setAttribute("aria-hidden", "false");
+}
+
 function openRunBag() {
   if (sim.state.phase !== "run") return;
-  if (sim.lootPending || sim._lootDelayT > 0) return;
+  if (sim.lootPending || sim._lootDelayT > 0 || sim.elevatorCheckpointPending) return;
   populateRunBag();
   const panel = document.getElementById("run-bag");
   if (panel) {
@@ -224,12 +249,10 @@ function populateRunBag() {
   if (!qEl || !pEl || !sEl) return;
   const loaded = sim.quiver.peekQuiver();
   qEl.innerHTML = loaded.map((a, i) => {
-    const def = getArrowDef(a.type);
-    return `<button type="button" class="run-bag-cell" data-discard-arrow="${i}">
-      <span>${arrowShort(a.type)}</span>
-      <small>Lv${a.level || 1}</small>
-      <small>${isWoodType(a.type) ? "snap" : "stash"}</small>
-    </button>`;
+    const wood = isWoodType(a.type);
+    const cell = `<span>${arrowShort(a.type)}</span><small>Lv${a.level || 1}</small>`;
+    if (wood) return `<div class="run-bag-cell run-bag-cell-static">${cell}</div>`;
+    return `<button type="button" class="run-bag-cell" data-discard-arrow="${i}">${cell}<small>stash</small></button>`;
   }).join("") || `<div class="wave-loot-empty">Quiver empty</div>`;
 
   const pouch = sim.state.pouch || [];
@@ -323,6 +346,7 @@ sim.state.onPhaseChange = (phase) => {
   }
 
   if (phase !== "run") setPathChoice(false);
+  if (phase !== "run") closeElevatorCheckpoint();
 
   if (phase === "death" || phase === "victory") {
     const stats = sim.state.getRunStats();
@@ -405,7 +429,6 @@ sim.on("elevator_ride", (e) => {
   setPathChoice(false);
   input.choiceMode = false;
   engine.punch(6);
-  saveGame();
   const tip = document.getElementById("wave-display");
   if (tip && e) {
     tip.textContent = e.to === "final" ? "Final Boss" : `Elevator → E${e.to} unlocked`;
@@ -418,6 +441,13 @@ sim.on("notebook_found", (e) => {
   const label = names[e.filler] || e.filler;
   if (tip) tip.textContent = `Notebook — craft ${label} shafts`;
   engine.punch(3);
+});
+
+sim.on("elevator_checkpoint", (e) => {
+  setPathChoice(false);
+  input.reset();
+  showElevatorCheckpoint(e);
+  // The simulator has already banked the purse and reconciled the stash.
   saveGame();
 });
 
@@ -427,12 +457,12 @@ sim.on("wave_loot", (e) => {
 
 sim.on("wave_loot_done", () => {
   hideWaveLoot();
-  saveGame();
 });
 
 sim.on("run_start", () => {
   setPathChoice(false);
   hideWaveLoot();
+  closeElevatorCheckpoint();
   closeRunBag();
   input.reset();
   input.blockUntil = performance.now() + 280;
@@ -460,6 +490,16 @@ document.getElementById("btn-wave-loot-ok")?.addEventListener("click", () => {
   sim.acknowledgeWaveLoot();
 });
 
+document.getElementById("btn-run-elevator-continue")?.addEventListener("click", () => {
+  closeElevatorCheckpoint();
+  sim.continueAtElevator();
+});
+
+document.getElementById("btn-run-elevator-return")?.addEventListener("click", () => {
+  closeElevatorCheckpoint();
+  sim.leaveAtElevator();
+});
+
 document.getElementById("btn-run-bag")?.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
@@ -474,11 +514,10 @@ document.getElementById("run-bag")?.addEventListener("click", (e) => {
     const a = sim.quiver.peekQuiver()[i];
     if (!a) return;
     const wood = isWoodType(a.type);
+    if (wood) return;
     askRunBagDiscard(
       { kind: "arrow", index: i },
-      wood
-        ? `Snap this wood shaft? It cannot be stashed.`
-        : `Send ${getArrowDef(a.type).name} to the run stash? Recover it only if you escape.`
+      `Send ${getArrowDef(a.type).name} to the run stash? Recover it only if you escape.`
     );
     return;
   }
@@ -504,7 +543,6 @@ document.getElementById("btn-run-bag-confirm")?.addEventListener("click", () => 
   const conf = document.getElementById("run-bag-confirm");
   if (conf) conf.classList.remove("active");
   populateRunBag();
-  saveGame();
 });
 
 // ─── UI Buttons ───────────────────────────────────────────────

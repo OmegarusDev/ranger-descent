@@ -107,27 +107,38 @@ export const ARROW_DEFS = {
 const QUEUE_SIZE = CONFIG.QUEUE_SIZE || 4;
 const ALIASES = { normal: "wood", kinetic: "wood", frost: "ice", twin: "double" };
 
-export function getArrowDef(type) {
+/** Normalize persisted or legacy arrow types at the domain boundary. */
+export function normalizeArrowType(type) {
   const key = ALIASES[type] || type;
-  return ARROW_DEFS[key] || ARROW_DEFS.wood;
+  return ARROW_DEFS[key] ? key : "wood";
+}
+
+export function normalizeArrowLevel(level = 1) {
+  const n = Number(level);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, Math.floor(n)));
+}
+
+export function getArrowDef(type) {
+  return ARROW_DEFS[normalizeArrowType(type)];
 }
 
 /** Physical damage only (elemental is applied separately on hit). */
 export function getArrowDamage(type, level = 1) {
   const def = getArrowDef(type);
-  return (def.damage || 1) + Math.max(0, (level || 1) - 1);
+  return (def.damage || 1) + Math.max(0, normalizeArrowLevel(level) - 1);
 }
 
 export function getArrowFireDamage(type, level = 1) {
   const def = getArrowDef(type);
   if (!def.fireDamage) return 0;
-  return def.fireDamage + Math.max(0, (level || 1) - 1);
+  return def.fireDamage + Math.max(0, normalizeArrowLevel(level) - 1);
 }
 
 export function getArrowIceDamage(type, level = 1) {
   const def = getArrowDef(type);
   if (!def.iceDamage) return 0;
-  return def.iceDamage + Math.floor(Math.max(0, (level || 1) - 1) * 0.5);
+  return def.iceDamage + Math.floor(Math.max(0, normalizeArrowLevel(level) - 1) * 0.5);
 }
 
 export function arrowShort(type) {
@@ -253,13 +264,11 @@ export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0, elevUnl
 }
 
 export function isWoodType(type) {
-  const t = ALIASES[type] || type || "wood";
-  return t === "wood";
+  return normalizeArrowType(type) === "wood";
 }
 
 export function createArrow(type, level = 1) {
-  const t = ALIASES[type] || type || "wood";
-  return { type: t, level: Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, level)), id: _nextId++ };
+  return { type: normalizeArrowType(type), level: normalizeArrowLevel(level), id: _nextId++ };
 }
 
 let _nextId = 1;
@@ -448,14 +457,24 @@ export class QuiverDeckManager {
 
   deserialize(data) {
     if (!data) return;
-    this.capacity = data.capacity || 10;
-    const made = (data.deck || data.quiver || []).map((a) => createArrow(a.type, a.level));
+    const rawCapacity = Number(data.capacity);
+    this.capacity = Number.isFinite(rawCapacity)
+      ? Math.max(1, Math.min(30, Math.floor(rawCapacity)))
+      : 10;
+    const rawDeck = Array.isArray(data.deck) ? data.deck : (Array.isArray(data.quiver) ? data.quiver : []);
+    const rawStorage = Array.isArray(data.storage) ? data.storage : [];
+    const made = rawDeck
+      .filter((a) => a && typeof a === "object")
+      .map((a) => createArrow(a.type, a.level));
     this.queue = [];
     this.deck = made.slice(0, this.capacity);
     const overflow = made.slice(this.capacity).filter((a) => !isWoodType(a.type));
     this.storage = [
       ...overflow,
-      ...(data.storage || []).map((a) => createArrow(a.type, a.level)).filter((a) => !isWoodType(a.type)),
+      ...rawStorage
+        .filter((a) => a && typeof a === "object")
+        .map((a) => createArrow(a.type, a.level))
+        .filter((a) => !isWoodType(a.type)),
     ];
     this._seeded = true;
   }

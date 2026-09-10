@@ -3,6 +3,7 @@
  * Run Phase, and Death/Victory Phase. Manages coin currency and
  * upgrade trees. No rendering dependencies.
  */
+import { CONFIG } from "../data/config.js";
 
 export const PHASES = {
   HUB: "hub",
@@ -23,6 +24,27 @@ const STAT_MAX = {
   vigor: 20, endurance: 20, strength: 20, dexterity: 20, luck: 20,
 };
 
+const POUCH_CAPACITY = 2;
+
+function normalizedIdList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id) => typeof id === "string" && id.length > 0))];
+}
+
+function normalizedInt(value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function normalizedPouch(value) {
+  const pouch = Array.isArray(value)
+    ? value.slice(0, POUCH_CAPACITY).map((id) => typeof id === "string" && id ? id : null)
+    : [];
+  while (pouch.length < POUCH_CAPACITY) pouch.push(null);
+  return pouch;
+}
+
 function migrateStats(raw) {
   const u = raw || {};
   const clamp = (n) => Math.max(1, Math.min(20, Math.floor(Number(n) || 1)));
@@ -33,8 +55,8 @@ function migrateStats(raw) {
       strength: clamp(u.strength || 1),
       dexterity: clamp(u.dexterity || 1),
       luck: clamp(u.luck || 1),
-      hexUnlock: [...(u.hexUnlock || [])],
-      prayerUnlock: [...(u.prayerUnlock || [])],
+      hexUnlock: normalizedIdList(u.hexUnlock),
+      prayerUnlock: normalizedIdList(u.prayerUnlock),
     };
   }
   return {
@@ -43,8 +65,8 @@ function migrateStats(raw) {
     strength: clamp(1 + (u.arrowDamage || 0)),
     dexterity: 1,
     luck: clamp(1 + Math.max(u.critChance || 0, u.lootChance || 0)),
-    hexUnlock: [...(u.hexUnlock || [])],
-    prayerUnlock: [...(u.prayerUnlock || [])],
+    hexUnlock: normalizedIdList(u.hexUnlock),
+    prayerUnlock: normalizedIdList(u.prayerUnlock),
   };
 }
 
@@ -80,6 +102,7 @@ export class GameStateManager {
       strength: 1,
       dexterity: 1,
       luck: 1,
+      // DORMANT: reserved for the future Magic patch; not wired into runs.
       hexUnlock: [],
       prayerUnlock: [],
     };
@@ -88,7 +111,7 @@ export class GameStateManager {
     this.equipped = {};
     this.ownedItems = [];
     this.pouch = [null, null];
-    this.pouchCapacity = 2;
+    this.pouchCapacity = POUCH_CAPACITY;
     this.hubVisits = 0;
     /** Highest start elevator unlocked (0 = Gate only; 1–9 = E1–E9 after riding to floor 11+). */
     this.maxElevatorUnlocked = 0;
@@ -183,6 +206,7 @@ export class GameStateManager {
 
   /** Award coin for a kill using that enemy's tier value. */
   awardKillCoins(amount) {
+    if (this.phase !== PHASES.RUN) return 0;
     const n = Math.max(0, Math.floor((amount || 0) * (this.runBonuses.coinMultiplier || 1) * this.getLootMultiplier()));
     this.runCoins += n;
     if (this.onCoinsChange) this.onCoinsChange(this.runCoins);
@@ -239,6 +263,7 @@ export class GameStateManager {
 
   /** Apply damage to the player. Returns remaining HP. */
   damagePlayer(amount) {
+    if (this.phase !== PHASES.RUN) return this.playerHp;
     if (this.runBonuses.shieldActive && this.runBonuses.shieldHp > 0) {
       const absorbed = Math.min(this.runBonuses.shieldHp, amount);
       this.runBonuses.shieldHp -= absorbed;
@@ -286,6 +311,7 @@ export class GameStateManager {
   }
 
   tickBonuses(dt) {
+    if (this.phase !== PHASES.RUN) return;
     if (this.runBonuses.damageBoostT > 0) {
       this.runBonuses.damageBoostT -= dt;
       if (this.runBonuses.damageBoostT <= 0) this.runBonuses.damageMultiplier = 1;
@@ -429,14 +455,14 @@ export class GameStateManager {
 
   /** Unlock starting from this elevator index (1–9 = E1–E9). Gate is always available. */
   unlockElevator(index) {
-    const maxStart = 9;
+    const maxStart = Math.max(0, (CONFIG.START_ELEVATORS || 9) | 0);
     const i = Math.max(0, Math.min(maxStart, Math.floor(index || 0)));
     if (i > this.maxElevatorUnlocked) this.maxElevatorUnlocked = i;
     return this.maxElevatorUnlocked;
   }
 
   getMaxElevatorUnlocked() {
-    return Math.max(0, this.maxElevatorUnlocked || 0);
+    return normalizedInt(this.maxElevatorUnlocked, 0, 0, CONFIG.START_ELEVATORS || 9);
   }
 
   setStartElevator(index) {
@@ -484,6 +510,7 @@ export class GameStateManager {
   /** Serialize for save/load. */
   serialize() {
     return {
+      schemaVersion: 2,
       phase: this.phase,
       coins: this.coins,
       totalCoinsEarned: this.totalCoinsEarned,
@@ -491,7 +518,7 @@ export class GameStateManager {
       equipped: { ...this.equipped },
       ownedItems: [...(this.ownedItems || [])],
       pouch: [...(this.pouch || [null, null])],
-      pouchCapacity: this.pouchCapacity || 2,
+      pouchCapacity: POUCH_CAPACITY,
       playerMaxHp: this.playerMaxHp,
       hubVisits: this.hubVisits,
       maxElevatorUnlocked: this.maxElevatorUnlocked || 0,
@@ -502,21 +529,32 @@ export class GameStateManager {
 
   deserialize(data) {
     if (!data) return;
+    const raw = typeof data === "object" ? data : {};
     this.phase = PHASES.HUB;
-    this.coins = data.coins != null ? data.coins : (data.souls || 0);
-    this.totalCoinsEarned = data.totalCoinsEarned != null ? data.totalCoinsEarned : (data.totalSoulsEarned || 0);
-    this.upgrades = migrateStats(data.upgrades);
-    this.equipped = { ...(data.equipped || {}) };
-    this.ownedItems = [...(data.ownedItems || [])];
+    this.coins = normalizedInt(raw.coins != null ? raw.coins : raw.souls, 0);
+    this.totalCoinsEarned = normalizedInt(
+      raw.totalCoinsEarned != null ? raw.totalCoinsEarned : raw.totalSoulsEarned,
+      0,
+    );
+    this.upgrades = migrateStats(raw.upgrades);
+    this.equipped = raw.equipped && typeof raw.equipped === "object" && !Array.isArray(raw.equipped)
+      ? { ...raw.equipped }
+      : {};
+    this.ownedItems = Array.isArray(raw.ownedItems)
+      ? raw.ownedItems.filter((id) => typeof id === "string" && id.length > 0)
+      : [];
     // Ignore legacy data.arrowStorage — quiver.storage is the real chest.
-    this.pouch = [...(data.pouch || [null, null])];
-    while (this.pouch.length < 2) this.pouch.push(null);
-    this.pouchCapacity = data.pouchCapacity || 2;
-    this.hubVisits = data.hubVisits || 0;
-    this.maxElevatorUnlocked = Math.max(0, data.maxElevatorUnlocked || 0);
-    this.selectedStartElevator = data.selectedStartElevator || 0;
-    this.notebookElevators = Array.isArray(data.notebookElevators)
-      ? data.notebookElevators.map((n) => Math.max(0, n | 0))
+    this.pouch = normalizedPouch(raw.pouch);
+    this.pouchCapacity = POUCH_CAPACITY;
+    this.hubVisits = normalizedInt(raw.hubVisits, 0);
+    this.maxElevatorUnlocked = normalizedInt(raw.maxElevatorUnlocked, 0, 0, CONFIG.START_ELEVATORS || 9);
+    this.selectedStartElevator = normalizedInt(raw.selectedStartElevator, 0, 0, CONFIG.START_ELEVATORS || 9);
+    const maxNotebook = Math.max(0, (CONFIG.ELEVATORS_PER_RUN || 10) - 1);
+    this.notebookElevators = Array.isArray(raw.notebookElevators)
+      ? [...new Set(raw.notebookElevators
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n) && n >= 0 && n <= maxNotebook)
+        .map((n) => Math.floor(n)))]
       : [];
     this.setStartElevator(this.selectedStartElevator);
     this.applyUpgrades();

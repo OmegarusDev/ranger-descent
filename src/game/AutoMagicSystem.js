@@ -3,6 +3,9 @@
  * for Hexes (offensive) and Prayers (support/utility) that fire on intervals.
  *
  * No rendering dependencies. Exposes timer state for HUD display.
+ *
+ * DORMANT: intentionally retained for a future Magic patch. Normal runs do
+ * not unlock or integrate this system during the current game cycle.
  */
 
 /** Hex definitions — auto-targeted offensive spells. */

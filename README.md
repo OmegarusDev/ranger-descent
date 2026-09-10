@@ -51,7 +51,7 @@ npm run dev
 # or: ./scripts/serve-local.sh
 ```
 
-Open `http://127.0.0.1:8877/?v=81` in your browser.
+Open `http://127.0.0.1:8877/?v=86` in your browser.
 
 ## Development
 
@@ -61,6 +61,8 @@ Open `http://127.0.0.1:8877/?v=81` in your browser.
 - `docs/GDD.md` — archived design notes (may lag the live game)
 - `docs/ENEMY-ROSTER.md` — archived roster notes (live stats are in `enemyData.js`)
 - `docs/SEQUEL-NOTES.md` — shelved ideas (floor alchemy / 3D aim, etc.)
+- `docs/ARCHITECTURE.md` — live boundaries and behaviour-preservation rules
+- `docs/SMOKE-CHECKLIST.md` — manual regression checklist for run changes
 
 ## Links
 
