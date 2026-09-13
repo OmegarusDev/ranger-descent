@@ -69,13 +69,6 @@ const deathStats = $("#death-stats");
 const debugPanel = $("#debug-panel");
 const pathChoice = $("#path-choice");
 
-function prettyPathNames(choice) {
-  if (!choice || !choice.enemyTypes || !choice.enemyTypes.length) return "";
-  return choice.enemyTypes.slice(0, 2).map((t) =>
-    t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-  ).join(" · ");
-}
-
 function familyIconSvg(family) {
   const icons = {
     slime: `<svg viewBox="0 0 28 28" aria-hidden="true"><ellipse cx="14" cy="17" rx="10" ry="7" fill="#b84a55"/><ellipse cx="14" cy="14" rx="8" ry="8" fill="#c45a65"/><circle cx="11" cy="13" r="1.4" fill="#1a0808"/><circle cx="17" cy="13" r="1.4" fill="#1a0808"/></svg>`,
@@ -128,12 +121,11 @@ function setPathChoice(on) {
         if (t.includes("goblin")) return "goblin";
         if (t.includes("skeleton") || t === "hauler") return "skeleton";
         return "beast";
-      });
+    });
     const unique = [...new Set(families)].slice(0, 3);
     const icons = unique.map((f) => `<span class="path-icon">${familyIconSvg(f)}</span>`).join("");
-    const names = prettyPathNames(choice);
     const bonus = choice && choice.coinBonus ? `<span class="path-coins">+${coinLabel(choice.coinBonus)}</span>` : `<span class="path-coins path-coins-quiet">safer</span>`;
-    btn.innerHTML = `<span class="path-dir">${labels[dir]}</span><span class="path-icons">${icons}</span>${names ? `<small>${names}</small>` : ""}${bonus}`;
+    btn.innerHTML = `<span class="path-dir">${labels[dir]}</span><span class="path-icons">${icons}</span>${bonus}`;
   }
   const escapeCoins = document.getElementById("escape-coins");
   if (escapeCoins) {
@@ -534,10 +526,12 @@ document.getElementById("btn-run-elevator-return")?.addEventListener("click", ()
   sim.leaveAtElevator();
 });
 
-document.getElementById("btn-run-bag")?.addEventListener("click", (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  openRunBag();
+document.querySelectorAll("[data-open-run-bag]").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openRunBag();
+  });
 });
 document.getElementById("btn-run-bag-close")?.addEventListener("click", () => closeRunBag());
 document.getElementById("run-bag")?.addEventListener("click", (e) => {

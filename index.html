@@ -223,7 +223,7 @@
 
       <div class="bottom-bar">
         <div class="bottom-bar-row">
-          <button type="button" class="run-bag-btn" id="btn-run-bag" aria-label="Bag">Bag</button>
+          <button type="button" class="run-bag-btn" id="btn-run-bag" data-open-run-bag aria-label="Bag">Bag</button>
           <div class="run-quiver-wrap">
             <div id="run-quiver-count" class="run-quiver-count">Quiver 0 / 0</div>
             <div id="run-quiver" class="run-quiver" aria-label="Quiver"></div>
@@ -292,15 +292,26 @@
     </div>
 
     <div id="path-choice">
-      <div class="path-dirs">
-        <button type="button" data-dir="left">‹ Left</button>
-        <button type="button" data-dir="forward">Ahead</button>
-        <button type="button" data-dir="right">Right ›</button>
+      <div class="path-choice-card">
+        <div class="path-choice-head">
+          <div>
+            <span class="path-kicker">Junction</span>
+            <h2>Choose your path</h2>
+          </div>
+          <button type="button" class="path-bag" id="btn-run-bag-nav" data-open-run-bag aria-label="Open field bag">Bag</button>
+        </div>
+        <div class="path-dirs">
+          <button type="button" data-dir="left">‹ Left</button>
+          <button type="button" data-dir="forward">Ahead</button>
+          <button type="button" data-dir="right">Right ›</button>
+        </div>
+        <div class="path-choice-foot">
+          <button type="button" class="path-escape" id="btn-escape">
+            Escape to surface
+            <small id="escape-coins">Bank this delve's coin</small>
+          </button>
+        </div>
       </div>
-      <button type="button" class="path-escape" id="btn-escape">
-        Escape to surface
-        <small id="escape-coins">Bank this delve's coin</small>
-      </button>
     </div>
   </div>
 
