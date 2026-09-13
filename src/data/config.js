@@ -14,7 +14,7 @@ export const CONFIG = {
 
   // On-rails movement
   PLAYER_SPEED: 0.2,
-  ENEMY_SPEED_MULTIPLIER: 1.1,
+  ENEMY_SPEED_MULTIPLIER: 1.15,
 
   // Dungeon: 10 halls/floor × 10 floors/block × 10 blocks → final boss.
   // Start shafts: Gate (floors 1–10) plus unlockable E1–E9 (floor 11+). No E10.
@@ -28,7 +28,7 @@ export const CONFIG = {
   SLINGSHOT_MAX_POWER: 24,
   SLINGSHOT_MIN_POWER: 2,
   ARROW_SPEED: 400,
-  ARROW_COOLDOWN_MULTIPLIER: 1.15,
+  ARROW_COOLDOWN_MULTIPLIER: 1.5,
 
   // Quiver
   QUEUE_SIZE: 4,

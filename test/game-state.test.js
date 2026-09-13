@@ -41,3 +41,8 @@ test("training stats use a hidden 99-level cap", () => {
   assert.equal(state.getStat("vigor"), 99);
   assert.equal(state.isUpgradeMaxed("vigor"), true);
 });
+
+test("arrow cooldown tuning uses the requested 50 percent increase", () => {
+  const state = new GameStateManager();
+  assert.ok(Math.abs(state.getArrowCooldown() - 0.79 * 1.5) < 1e-9);
+});

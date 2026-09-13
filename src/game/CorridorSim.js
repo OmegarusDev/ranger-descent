@@ -39,13 +39,16 @@ function createEnemy(type, worldX, worldZ, floorIndex = 0, elevatorIndex = 0) {
     shieldRegen: d.shieldHp ? 2 : 0,
     burnT: 0, burnDps: 0, poisonT: 0, poisonDps: 0, slowT: 0, slowFactor: 0.4,
     shredT: 0, oiledT: 0, bleedT: 0, bleedDps: 0,
-    _lateralTarget: worldX, _lateralTimer: 0,
+    _patternOffset: Math.random(),
+    _lateralTarget: worldX, _lateralTimer: Math.random(),
     _laneX: worldX,
-    _lurkT: 0,
-    _chargeTimer: 2, _charging: false,
+    _lurkT: Math.random() * 1.75,
+    _swarmTimer: Math.random() * 3.3,
+    _swarmDodgeIdx: Math.floor(Math.random() * 4),
+    _chargeTimer: 1.5 + Math.random() * 1.5, _charging: false,
     _weaveDir: Math.random() > 0.5 ? 1 : -1,
     _zigzagPhase: Math.random() * Math.PI * 2,
-    _summonTimer: 0, _summonRate: d.summonRate || 0,
+    _summonTimer: d.summonRate ? Math.random() * d.summonRate : 0, _summonRate: d.summonRate || 0,
     _splitDone: false,
     _hitFlash: 0,
     _hitStun: 0,
@@ -878,9 +881,9 @@ export class CorridorSim {
         case "notice":
           if (!e._noticePhase) {
             e._noticePhase = "walk";
-            e._noticeTimer = 0;
+            e._noticeTimer = e._patternOffset * 0.5;
             e._noticeStartZ = e.worldZ;
-            e._shootCooldown = 0;
+            e._shootCooldown = e._patternOffset * 0.4;
           }
           e._noticeTimer += dt;
           if (e._noticePhase === "walk") {
@@ -909,8 +912,8 @@ export class CorridorSim {
         case "archer":
           if (!e._archerPhase) {
             e._archerPhase = "walk";
-            e._archerTimer = 0;
-            e._shootCooldown = 0;
+            e._archerTimer = e._patternOffset * 0.5;
+            e._shootCooldown = e._patternOffset * 0.4;
           }
           e._archerTimer += dt;
           if (e._archerPhase === "walk") {
