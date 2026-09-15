@@ -56,5 +56,5 @@ run UI. Mark each item pass/fail and record the build number.
 - From the hub storage chest, sell a loose potion or armour piece and confirm the bow cannot be sold.
 - Confirm Loadout starts with 2 bag slots and 1 Quick Pouch slot.
 - Confirm Shop Pack lists Bag Slot 3 for ₡100 and Pouch Slot 2 for ₡200.
-- After buying the second pouch slot, confirm Pouch Slot 3 is locked until the bag also has 3 slots.
-- Confirm the run HUD Quick Pouch matches pouch capacity, and Field bag lists bag slots (not a second pouch).
+- After buying the second pouch slot, confirm Pouch Slot 3 is hidden until the bag also has 3 slots.
+- Confirm Loadout and the run HUD only show purchased pouch slots, including empty ones.

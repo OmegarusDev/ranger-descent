@@ -214,22 +214,16 @@ function getShopKit(state) {
     });
   }
   const pouchNext = nextPouchUpgrade(state);
-  if (pouchNext.ok || pouchNext.reason === "bag") {
-    const locked = pouchNext.reason === "bag";
+  if (pouchNext.ok) {
     items.push({
       id: `pouch_slot_${pouchNext.next}`,
       name: `Pouch Slot ${pouchNext.next}`,
       cost: pouchNext.cost,
-      desc: locked
-        ? `Need a ${pouchNext.need}-slot bag before this combat hotkey can be bought.`
-        : "Tap this slot in combat without opening the bag.",
-      stats: locked
-        ? `Requires a ${pouchNext.need}-slot bag`
-        : `${state.pouchCapacity} → ${pouchNext.next} pouch slots`,
+      desc: "Tap this slot in combat without opening the bag.",
+      stats: `${state.pouchCapacity} → ${pouchNext.next} pouch slots`,
       icon: "✚",
       section: "kit",
       kind: "pouch_upgrade",
-      locked,
     });
   }
   return items;
