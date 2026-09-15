@@ -34,5 +34,18 @@ export const CONFIG = {
   QUEUE_SIZE: 4,
   ARROW_MAX_LEVEL: 5,
 
+  // Bag holds carried consumables. Quick Pouch bindings point at bag indexes.
+  BAG_CAPACITY_START: 2,
+  BAG_CAPACITY_MAX: 8,
+  BAG_SLOT_BASE_COST: 100,
+  POUCH_CAPACITY_START: 1,
+  POUCH_CAPACITY_MAX: 5,
+  POUCH_SLOT_BASE_COST: 200,
 
+  // Hub selling — 50% of purchase/base value. Arrow selling is a balance toggle.
+  SELL_VALUE_RATIO: 0.5,
+  SELL_STORAGE_ARROWS: true,
+
+  POTION_SALVE_HEAL: 5,
+  POTION_BANDAGE_HEAL: 10,
 };

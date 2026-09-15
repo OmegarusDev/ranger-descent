@@ -365,6 +365,11 @@ export class QuiverDeckManager {
     return [...this.storage];
   }
 
+  removeFromStorage(storageIndex) {
+    if (storageIndex < 0 || storageIndex >= this.storage.length) return null;
+    return this.storage.splice(storageIndex, 1)[0] || null;
+  }
+
   isWoodType(type) {
     return isWoodType(type);
   }

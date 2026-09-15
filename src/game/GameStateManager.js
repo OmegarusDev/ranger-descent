@@ -4,6 +4,19 @@
  * upgrade trees. No rendering dependencies.
  */
 import { CONFIG } from "../data/config.js";
+import {
+  loadInventory,
+  normalizeBag,
+  normalizePouchBindings,
+  bagCapacityStart,
+  pouchCapacityStart,
+  consumeBagSlot as consumeBagSlotState,
+  placeInBag,
+  clearPouchBindingsForBagSlot,
+  autoBindBagSlot,
+  nextBagUpgrade,
+  nextPouchUpgrade,
+} from "./inventory.js";
 
 export const PHASES = {
   HUB: "hub",
@@ -24,8 +37,6 @@ const STAT_MAX = {
   vigor: 99, endurance: 99, strength: 99, dexterity: 99, luck: 99,
 };
 
-const POUCH_CAPACITY = 2;
-
 function normalizedIdList(value) {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.filter((id) => typeof id === "string" && id.length > 0))];
@@ -35,14 +46,6 @@ function normalizedInt(value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEG
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(n)));
-}
-
-function normalizedPouch(value) {
-  const pouch = Array.isArray(value)
-    ? value.slice(0, POUCH_CAPACITY).map((id) => typeof id === "string" && id ? id : null)
-    : [];
-  while (pouch.length < POUCH_CAPACITY) pouch.push(null);
-  return pouch;
 }
 
 function migrateStats(raw) {
@@ -110,8 +113,10 @@ export class GameStateManager {
     // Equipment
     this.equipped = {};
     this.ownedItems = [];
-    this.pouch = [null, null];
-    this.pouchCapacity = POUCH_CAPACITY;
+    this.bag = normalizeBag(null);
+    this.bagCapacity = bagCapacityStart();
+    this.pouchBindings = normalizePouchBindings(null);
+    this.pouchCapacity = pouchCapacityStart();
     this.hubVisits = 0;
     /** Highest start elevator unlocked (0 = Gate only; 1–9 = E1–E9 after riding to floor 11+). */
     this.maxElevatorUnlocked = 0;
@@ -510,15 +515,17 @@ export class GameStateManager {
   /** Serialize for save/load. */
   serialize() {
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       phase: this.phase,
       coins: this.coins,
       totalCoinsEarned: this.totalCoinsEarned,
       upgrades: { ...this.upgrades },
       equipped: { ...this.equipped },
       ownedItems: [...(this.ownedItems || [])],
-      pouch: [...(this.pouch || [null, null])],
-      pouchCapacity: POUCH_CAPACITY,
+      bag: [...(this.bag || normalizeBag(null, this.bagCapacity))],
+      bagCapacity: this.bagCapacity || bagCapacityStart(),
+      pouchBindings: [...(this.pouchBindings || normalizePouchBindings(null))],
+      pouchCapacity: this.pouchCapacity || pouchCapacityStart(),
       playerMaxHp: this.playerMaxHp,
       hubVisits: this.hubVisits,
       maxElevatorUnlocked: this.maxElevatorUnlocked || 0,
@@ -540,12 +547,13 @@ export class GameStateManager {
     this.equipped = raw.equipped && typeof raw.equipped === "object" && !Array.isArray(raw.equipped)
       ? { ...raw.equipped }
       : {};
-    this.ownedItems = Array.isArray(raw.ownedItems)
-      ? raw.ownedItems.filter((id) => typeof id === "string" && id.length > 0)
-      : [];
+    const inv = loadInventory(raw);
+    this.ownedItems = inv.ownedItems;
+    this.bag = inv.bag;
+    this.bagCapacity = inv.bagCapacity;
+    this.pouchBindings = inv.pouchBindings;
+    this.pouchCapacity = inv.pouchCapacity;
     // Ignore legacy data.arrowStorage — quiver.storage is the real chest.
-    this.pouch = normalizedPouch(raw.pouch);
-    this.pouchCapacity = POUCH_CAPACITY;
     this.hubVisits = normalizedInt(raw.hubVisits, 0);
     this.maxElevatorUnlocked = normalizedInt(raw.maxElevatorUnlocked, 0, 0, CONFIG.START_ELEVATORS || 9);
     this.selectedStartElevator = normalizedInt(raw.selectedStartElevator, 0, 0, CONFIG.START_ELEVATORS || 9);
@@ -558,5 +566,55 @@ export class GameStateManager {
       : [];
     this.setStartElevator(this.selectedStartElevator);
     this.applyUpgrades();
+  }
+
+  consumeBagSlot(bagIndex) {
+    return consumeBagSlotState(this, bagIndex);
+  }
+
+  placeInBag(itemId) {
+    return placeInBag(this, itemId);
+  }
+
+  clearPouchForBagSlot(bagIndex) {
+    clearPouchBindingsForBagSlot(this, bagIndex);
+  }
+
+  bindPouch(pouchIndex, bagIndex) {
+    const cap = this.pouchCapacity || pouchCapacityStart();
+    if (!this.pouchBindings) this.pouchBindings = normalizePouchBindings(null, cap, this.bagCapacity);
+    if (pouchIndex < 0 || pouchIndex >= this.pouchBindings.length) return false;
+    if (bagIndex != null && (bagIndex < 0 || bagIndex >= (this.bag || []).length || !this.bag[bagIndex])) {
+      return false;
+    }
+    const next = bagIndex == null ? null : bagIndex;
+    this.pouchBindings = this.pouchBindings.map((slot, i) => {
+      if (i === pouchIndex) return next;
+      if (next != null && slot === next) return null;
+      return slot;
+    });
+    return true;
+  }
+
+  autoBindBagSlot(bagIndex) {
+    return autoBindBagSlot(this, bagIndex);
+  }
+
+  buyBagSlot() {
+    const next = nextBagUpgrade(this);
+    if (!next.ok) return false;
+    if (!this.spendCoins(next.cost)) return false;
+    this.bagCapacity = next.next;
+    this.bag = normalizeBag(this.bag, this.bagCapacity);
+    return true;
+  }
+
+  buyPouchSlot() {
+    const next = nextPouchUpgrade(this);
+    if (!next.ok) return false;
+    if (!this.spendCoins(next.cost)) return false;
+    this.pouchCapacity = next.next;
+    this.pouchBindings = normalizePouchBindings(this.pouchBindings, this.pouchCapacity, this.bagCapacity, this.bag);
+    return true;
   }
 }

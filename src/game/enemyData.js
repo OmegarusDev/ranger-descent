@@ -61,7 +61,7 @@ const ENEMY_LOOT = {
   goblin_chieftain: [
     { kind: "arrow", type: "steel", chance: 0.08 },
     { kind: "arrow", type: "piercing", chance: 0.07 },
-    { kind: "potion", id: "potion_tonic", chance: 0.08 },
+    { kind: "potion", id: "potion_antidote", chance: 0.08 },
   ],
   imp: [{ kind: "arrow", type: "fire", chance: 0.1 }, { kind: "arrow", type: "oil", chance: 0.05 }],
   scamp: [{ kind: "arrow", type: "fire", chance: 0.08 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
@@ -69,7 +69,7 @@ const ENEMY_LOOT = {
   skeleton: [{ kind: "arrow", type: "piercing", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.04 }],
   skeleton_archer: [{ kind: "arrow", type: "piercing", chance: 0.14 }, { kind: "arrow", type: "double", chance: 0.06 }],
   hauler: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.07 }],
-  ghoul: [{ kind: "arrow", type: "barbed", chance: 0.07 }, { kind: "potion", id: "potion_tonic", chance: 0.05 }],
+  ghoul: [{ kind: "arrow", type: "barbed", chance: 0.07 }, { kind: "potion", id: "potion_antidote", chance: 0.05 }],
   wight: [{ kind: "arrow", type: "ice", chance: 0.08 }, { kind: "arrow", type: "silver", chance: 0.05 }],
   wraith: [{ kind: "arrow", type: "shock", chance: 0.09 }, { kind: "arrow", type: "silver", chance: 0.06 }],
   vampire: [{ kind: "arrow", type: "silver", chance: 0.1 }, { kind: "potion", id: "potion_salve", chance: 0.05 }],
@@ -77,22 +77,22 @@ const ENEMY_LOOT = {
   lich: [{ kind: "arrow", type: "ice", chance: 0.1 }, { kind: "arrow", type: "poison", chance: 0.08 }],
   bat: [{ kind: "arrow", type: "poison", chance: 0.04 }],
   spider: [{ kind: "arrow", type: "poison", chance: 0.08 }],
-  giant_spider: [{ kind: "arrow", type: "poison", chance: 0.12 }, { kind: "potion", id: "potion_tonic", chance: 0.07 }],
+  giant_spider: [{ kind: "arrow", type: "poison", chance: 0.12 }, { kind: "potion", id: "potion_antidote", chance: 0.07 }],
   orc: [{ kind: "arrow", type: "iron", chance: 0.1 }, { kind: "arrow", type: "barbed", chance: 0.05 }],
   ogre: [{ kind: "arrow", type: "steel", chance: 0.1 }, { kind: "potion", id: "potion_bandage", chance: 0.08 }],
   troll: [{ kind: "arrow", type: "iron", chance: 0.09 }, { kind: "potion", id: "potion_salve", chance: 0.09 }],
   boss_grunt: [{ kind: "arrow", type: "steel", chance: 0.45 }, { kind: "potion", id: "potion_bandage", chance: 0.35 }],
-  boss_warden: [{ kind: "arrow", type: "shock", chance: 0.4 }, { kind: "potion", id: "potion_tonic", chance: 0.3 }],
+  boss_warden: [{ kind: "arrow", type: "shock", chance: 0.4 }, { kind: "potion", id: "potion_antidote", chance: 0.3 }],
   boss_wraith: [{ kind: "arrow", type: "silver", chance: 0.45 }, { kind: "arrow", type: "ice", chance: 0.3 }],
   boss_death_knight: [{ kind: "arrow", type: "steel", chance: 0.4 }, { kind: "arrow", type: "piercing", chance: 0.35 }],
   boss_lich_king: [{ kind: "arrow", type: "ice", chance: 0.5 }, { kind: "trinket", id: "trinket_lucky_tooth", chance: 0.4 }],
-  boss_spider_queen: [{ kind: "arrow", type: "poison", chance: 0.5 }, { kind: "potion", id: "potion_tonic", chance: 0.35 }],
+  boss_spider_queen: [{ kind: "arrow", type: "poison", chance: 0.5 }, { kind: "potion", id: "potion_antidote", chance: 0.35 }],
 };
 
 export const POTION_LABELS = {
   potion_salve: "Herbal Remedy",
   potion_bandage: "Field Bandage",
-  potion_tonic: "Clearing Tonic",
+  potion_antidote: "Antidote",
 };
 
 const TRINKET_LABELS = {
@@ -140,7 +140,7 @@ function rollGroundFind(floorIndex, elevatorIndex) {
       detail: "A shaft kicked under a flagstone.",
     };
   }
-  const pots = ["potion_salve", "potion_bandage", "potion_tonic"];
+  const pots = ["potion_salve", "potion_bandage", "potion_antidote"];
   const id = pots[Math.floor(Math.random() * pots.length)];
   return { kind: "potion", itemId: id, label: POTION_LABELS[id] || id, detail: "A vial half-buried in grit." };
 }

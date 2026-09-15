@@ -6,6 +6,18 @@ import {
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js";
 import {
+  applyConsumableEffect,
+  canSellBagItem,
+  canSellOwnedItem,
+  canSellStorageArrow,
+  consumableLabel,
+  getArrowSellValue,
+  getConsumable,
+  isConsumable,
+  moveBagToOwned,
+  placeInBag,
+} from "./inventory.js";
+import {
   ENEMY_DEFS,
   BEHAVIOR_MAP,
   scaleEnemyHp,
@@ -1140,12 +1152,9 @@ export class CorridorSim {
     }
     if (!this.state.ownedItems) this.state.ownedItems = [];
     for (const it of stash.items || []) {
-      if (it.kind === "potion" && it.itemId) {
-        // Potions are consumable instances, so duplicate IDs are meaningful.
-        this.state.ownedItems.push(it.itemId);
-        const pouch = this.state.pouch || [];
-        const empty = pouch.findIndex((s) => !s);
-        if (empty >= 0) this.state.pouch[empty] = it.itemId;
+      if (isConsumable(it.itemId) || it.kind === "potion" || it.kind === "scroll") {
+        const placed = placeInBag(this.state, it.itemId);
+        if (!placed.ok) this.state.ownedItems.push(it.itemId);
       } else if (it.itemId) {
         if (!this.state.ownedItems.includes(it.itemId)) this.state.ownedItems.push(it.itemId);
       }
@@ -1158,7 +1167,7 @@ export class CorridorSim {
     this.runStash = { arrows: [], items: [] };
   }
 
-  /** Try quiver / pouch; overflow goes to run stash (not wood). */
+  /** Try quiver / bag; overflow goes to run stash (not wood). */
   _collectLootPiece(piece) {
     if (!piece) return { status: "none" };
     if (piece.kind === "coins") {
@@ -1181,16 +1190,10 @@ export class CorridorSim {
       if (this.addToRunStashArrow(arrow)) return { status: "stash", label };
       return { status: "lost", label, discarded: [{ type: arrow.type, level: arrow.level, reason: "no_room" }] };
     }
-    if (piece.kind === "potion") {
-      const pouch = this.state.pouch || [];
-      const empty = pouch.findIndex((s) => !s);
-      if (empty >= 0) {
-        if (!this.state.ownedItems) this.state.ownedItems = [];
-        if (!this.state.ownedItems.includes(piece.itemId)) this.state.ownedItems.push(piece.itemId);
-        this.state.pouch[empty] = piece.itemId;
-        return { status: "pouch", label: piece.label };
-      }
-      this.addToRunStashItem({ kind: "potion", itemId: piece.itemId, label: piece.label });
+    if (piece.kind === "potion" || piece.kind === "scroll") {
+      const placed = placeInBag(this.state, piece.itemId);
+      if (placed.ok) return { status: "bag", label: piece.label };
+      this.addToRunStashItem({ kind: piece.kind, itemId: piece.itemId, label: piece.label });
       return { status: "stash", label: piece.label };
     }
     if (piece.kind === "trinket" || piece.kind === "gear") {
@@ -1291,14 +1294,90 @@ export class CorridorSim {
     return { ok: true, destroyed: false, arrow };
   }
 
-  discardPouchToStash(slotIndex) {
-    const pouch = this.state.pouch || [];
-    const id = pouch[slotIndex];
+  discardBagToStash(slotIndex) {
+    const id = this.state.bag?.[slotIndex];
     if (!id) return { ok: false };
-    this.state.pouch[slotIndex] = null;
-    const label = POTION_LABELS[id] || id;
-    this.addToRunStashItem({ kind: "potion", itemId: id, label });
+    this.state.bag[slotIndex] = null;
+    this.state.clearPouchForBagSlot(slotIndex);
+    const def = getConsumable(id);
+    const label = def?.name || POTION_LABELS[id] || id;
+    this.addToRunStashItem({ kind: def?.kind || "potion", itemId: id, label });
     return { ok: true, itemId: id };
+  }
+
+  /** @deprecated Use discardBagToStash. */
+  discardPouchToStash(slotIndex) {
+    return this.discardBagToStash(slotIndex);
+  }
+
+  /**
+   * Consume one bag (or pouch-bound bag) item. Pouch and bag share this path.
+   * Does not pause combat or alter arrow cooldown.
+   */
+  useConsumable({ source = "bag", index = 0 } = {}) {
+    if (this.state.phase === "death" || this.state.phase === "victory") {
+      return { ok: false, reason: "terminal" };
+    }
+    let bagIndex = index;
+    if (source === "pouch") {
+      bagIndex = this.state.pouchBindings?.[index];
+      if (bagIndex == null) return { ok: false, reason: "empty" };
+    }
+    const id = this.state.bag?.[bagIndex];
+    if (!id) return { ok: false, reason: "empty" };
+    const def = getConsumable(id);
+    if (!def) return { ok: false, reason: "unknown" };
+    const applied = applyConsumableEffect(this.state, def);
+    this.state.consumeBagSlot(bagIndex);
+    const result = {
+      ok: true,
+      id,
+      source,
+      bagIndex,
+      label: def.name || consumableLabel(id),
+      applied,
+    };
+    this.emit("consumable_used", result);
+    return result;
+  }
+
+  usePouch(pouchIndex = 0) {
+    return this.useConsumable({ source: "pouch", index: pouchIndex });
+  }
+
+  sellOwnedItem(ownedIndex) {
+    if (this.state.phase !== "hub") return { ok: false, reason: "hub_only" };
+    const check = canSellOwnedItem(this.state, ownedIndex);
+    if (!check.ok) return check;
+    this.state.ownedItems.splice(ownedIndex, 1);
+    this.state.coins += check.value;
+    if (this.state.onCoinsChange) this.state.onCoinsChange(this.state.coins);
+    return { ok: true, itemId: check.id, value: check.value };
+  }
+
+  sellBagItem(bagIndex) {
+    if (this.state.phase !== "hub") return { ok: false, reason: "hub_only" };
+    const check = canSellBagItem(this.state, bagIndex);
+    if (!check.ok) return check;
+    const moved = moveBagToOwned(this.state, bagIndex);
+    if (!moved.ok) return moved;
+    const ownedIndex = this.state.ownedItems.length - 1;
+    return this.sellOwnedItem(ownedIndex);
+  }
+
+  sellStorageArrow(storageIndex) {
+    if (this.state.phase !== "hub") return { ok: false, reason: "hub_only" };
+    const stored = this.quiver.peekStorage();
+    const arrow = stored[storageIndex];
+    if (!arrow) return { ok: false, reason: "missing" };
+    const check = canSellStorageArrow(arrow.type);
+    if (!check.ok) return check;
+    const value = getArrowSellValue(arrow.type, arrow.level || 1);
+    const removed = this.quiver.removeFromStorage(storageIndex);
+    if (!removed) return { ok: false, reason: "missing" };
+    this.state.coins += value;
+    if (this.state.onCoinsChange) this.state.onCoinsChange(this.state.coins);
+    return { ok: true, arrow, value };
   }
 
   /**

@@ -5,6 +5,7 @@ import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
 import { DungeonView } from "./engine/DungeonView.js";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
+import { getConsumable } from "./data/consumables.js";
 import { CorridorSim } from "./game/CorridorSim.js";
 import { InputHandler } from "./game/InputHandler.js";
 import {
@@ -26,7 +27,7 @@ function coinLabel(n) {
 
 // Legacy key name kept so existing browser saves keep loading.
 const SAVE_KEY = "ranger-defense-save-v1";
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 // ─── Bootstrap ────────────────────────────────────────────────
 const canvas = document.getElementById("game");
@@ -257,7 +258,7 @@ function openRunBag() {
 
 function populateRunBag() {
   const qEl = document.getElementById("run-bag-quiver");
-  const pEl = document.getElementById("run-bag-pouch");
+  const pEl = document.getElementById("run-bag-slots");
   const sEl = document.getElementById("run-bag-stash");
   if (!qEl || !pEl || !sEl) return;
   const loaded = sim.quiver.peekQuiver();
@@ -268,14 +269,16 @@ function populateRunBag() {
     return `<button type="button" class="run-bag-cell" data-discard-arrow="${i}">${cell}<small>stash</small></button>`;
   }).join("") || `<div class="wave-loot-empty">Quiver empty</div>`;
 
-  const pouch = sim.state.pouch || [];
-  pEl.innerHTML = [0, 1].map((i) => {
-    const id = pouch[i];
+  const bag = sim.state.bag || [];
+  const bagCap = Math.max(bag.length, sim.state.bagCapacity || 2);
+  const bagSlots = bag.length ? bag.slice() : Array.from({ length: bagCap }, () => null);
+  while (bagSlots.length < bagCap) bagSlots.push(null);
+  pEl.innerHTML = bagSlots.map((id, i) => {
     if (!id) return `<div class="run-bag-cell"><small>empty</small></div>`;
-    const names = { potion_salve: "Remedy", potion_bandage: "Bandage", potion_tonic: "Tonic" };
-    return `<button type="button" class="run-bag-cell" data-discard-pouch="${i}">
-      <span>${names[id] || id}</span>
-      <small>stash</small>
+    const def = getConsumable(id);
+    return `<button type="button" class="run-bag-cell" data-bag-item="${i}">
+      <span>${def?.short || def?.name || id}</span>
+      <small>use / stash</small>
     </button>`;
   }).join("");
 
@@ -290,11 +293,13 @@ function populateRunBag() {
   sEl.innerHTML = bits.join("") || `<div class="wave-loot-empty">Nothing stashed this delve</div>`;
 }
 
-function askRunBagDiscard(pending, text) {
+function askRunBagAction(pending, text, { canUse = false } = {}) {
   _runBagPending = pending;
   const conf = document.getElementById("run-bag-confirm");
   const confText = document.getElementById("run-bag-confirm-text");
+  const useBtn = document.getElementById("btn-run-bag-use");
   if (confText) confText.textContent = text;
+  if (useBtn) useBtn.hidden = !canUse;
   if (conf) conf.classList.add("active");
 }
 
@@ -333,16 +338,35 @@ input.onTap = (x, y) => {
   }
 };
 
+function pouchKeyIndex(e) {
+  if (e.key >= "1" && e.key <= "5") return Number(e.key) - 1;
+  if (e.code >= "Digit1" && e.code <= "Digit5") return Number(e.code.slice(5)) - 1;
+  if (e.code >= "Numpad1" && e.code <= "Numpad5") return Number(e.code.slice(6)) - 1;
+  return null;
+}
+
 window.addEventListener("keydown", (e) => {
-  if (sim.state.phase !== "run" || !sim.junctionPending) return;
-  const dir = e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? "left"
-    : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? "right"
-    : e.key === "ArrowUp" || e.key === "w" || e.key === "W" ? "forward"
-    : null;
-  if (dir) {
-    e.preventDefault();
-    sim.chooseJunction(dir);
+  if (e.repeat) return;
+  const tag = e.target?.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (sim.state.phase !== "run") return;
+  if (sim.junctionPending) {
+    const dir = e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? "left"
+      : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? "right"
+      : e.key === "ArrowUp" || e.key === "w" || e.key === "W" ? "forward"
+      : null;
+    if (dir) {
+      e.preventDefault();
+      sim.chooseJunction(dir);
+    }
+    return;
   }
+  const pouchIndex = pouchKeyIndex(e);
+  if (pouchIndex == null) return;
+  e.preventDefault();
+  document.documentElement.classList.add("using-keyboard");
+  sim.usePouch(pouchIndex);
+  updateUI();
 });
 
 // ─── Game events ─────────────────────────────────────────────
@@ -407,6 +431,15 @@ sim.on("quiver_empty", () => {
   if (now - lastEmptyAlertAt < 800) return;
   lastEmptyAlertAt = now;
   showAmmoAlert("Out of arrows", "empty");
+});
+
+sim.on("consumable_used", (e) => {
+  const applied = e.applied || {};
+  if (applied.type === "heal") showAmmoAlert(e.label || "Used", "last");
+  else if (applied.type === "curePoison") showAmmoAlert("Poison cleared", "last");
+  else if (applied.type === "shield") showAmmoAlert("Warding", "last");
+  else showAmmoAlert(e.label || "Used", "last");
+  updateUI();
 });
 
 const FX_TYPE = {
@@ -543,18 +576,23 @@ document.getElementById("run-bag")?.addEventListener("click", (e) => {
     if (!a) return;
     const wood = isWoodType(a.type);
     if (wood) return;
-    askRunBagDiscard(
+    askRunBagAction(
       { kind: "arrow", index: i },
       `Send ${getArrowDef(a.type).name} to the run stash? Recover it only if you escape.`
     );
     return;
   }
-  const pouchBtn = e.target.closest("[data-discard-pouch]");
-  if (pouchBtn) {
-    const i = Number(pouchBtn.dataset.discardPouch);
-    askRunBagDiscard(
-      { kind: "pouch", index: i },
-      "Send this pouch item to the run stash? Recover it only if you escape."
+  const bagBtn = e.target.closest("[data-bag-item]");
+  if (bagBtn) {
+    const i = Number(bagBtn.dataset.bagItem);
+    const id = sim.state.bag?.[i];
+    const def = getConsumable(id);
+    askRunBagAction(
+      { kind: "bag", index: i },
+      def
+        ? `Use ${def.name} now, or send it to the run stash? Stashed finds return only if you escape.`
+        : "Send this bag item to the run stash? Recover it only if you escape.",
+      { canUse: !!def }
     );
   }
 });
@@ -563,14 +601,35 @@ document.getElementById("btn-run-bag-cancel")?.addEventListener("click", () => {
   if (conf) conf.classList.remove("active");
   _runBagPending = null;
 });
-document.getElementById("btn-run-bag-confirm")?.addEventListener("click", () => {
-  if (!_runBagPending) return;
-  if (_runBagPending.kind === "arrow") sim.discardQuiverArrowToStash(_runBagPending.index);
-  if (_runBagPending.kind === "pouch") sim.discardPouchToStash(_runBagPending.index);
+document.getElementById("btn-run-bag-use")?.addEventListener("click", () => {
+  if (!_runBagPending || _runBagPending.kind !== "bag") return;
+  sim.useConsumable({ source: "bag", index: _runBagPending.index });
   _runBagPending = null;
   const conf = document.getElementById("run-bag-confirm");
   if (conf) conf.classList.remove("active");
   populateRunBag();
+  updateUI();
+});
+document.getElementById("btn-run-bag-confirm")?.addEventListener("click", () => {
+  if (!_runBagPending) return;
+  if (_runBagPending.kind === "arrow") sim.discardQuiverArrowToStash(_runBagPending.index);
+  if (_runBagPending.kind === "bag" || _runBagPending.kind === "pouch") {
+    sim.discardBagToStash(_runBagPending.index);
+  }
+  _runBagPending = null;
+  const conf = document.getElementById("run-bag-confirm");
+  if (conf) conf.classList.remove("active");
+  populateRunBag();
+});
+
+document.getElementById("run-pouch")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-pouch-use]");
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (sim.state.phase !== "run") return;
+  sim.usePouch(Number(btn.dataset.pouchUse));
+  updateUI();
 });
 
 // ─── UI Buttons ───────────────────────────────────────────────
@@ -659,6 +718,7 @@ function updateUI() {
     }
   }
 
+  renderRunPouch();
   drawMinimap();
 
   if (debugPanel && location.search.includes("debug=1")) {
@@ -667,6 +727,30 @@ function updateUI() {
   }
 
   setPathChoice(sim.state.phase === "run" && !!sim.junctionPending);
+}
+
+function renderRunPouch() {
+  const root = document.getElementById("run-pouch");
+  if (!root) return;
+  const cap = Math.max(1, sim.state.pouchCapacity || 1);
+  const bindings = sim.state.pouchBindings || [];
+  const bag = sim.state.bag || [];
+  let sig = String(cap);
+  const slots = [];
+  for (let i = 0; i < cap; i++) {
+    const bagIndex = bindings[i];
+    const id = bagIndex != null ? bag[bagIndex] : null;
+    const def = getConsumable(id);
+    sig += `|${def?.id || ""}:${bagIndex ?? ""}`;
+    slots.push({ i, def });
+  }
+  if (root.dataset.sig === sig) return;
+  root.dataset.sig = sig;
+  root.innerHTML = slots.map(({ i, def }) => `<button type="button" class="run-pouch-slot${def ? "" : " empty"}" data-pouch-use="${i}" aria-label="${def ? `Use ${def.name}` : `Pouch slot ${i + 1} empty`}">
+      <span class="run-pouch-num">${i + 1}</span>
+      <span class="run-pouch-mark">${def ? (def.short || def.icon || "✚") : "—"}</span>
+      <span class="run-pouch-tag">${def ? "Use" : "Empty"}</span>
+    </button>`).join("");
 }
 
 // ─── Minimap ─────────────────────────────────────────────────

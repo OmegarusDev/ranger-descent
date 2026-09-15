@@ -35,6 +35,20 @@ Save data is normalized at load boundaries. Ordinary mid-run state is
 ephemeral. Elevator checkpoints bank the purse, reconcile recoverable stash,
 and save a safe persistent snapshot before offering continue or return.
 
+Legacy `pouch` item arrays are ignored. Bag and pouch capacities clamp to
+their current maxima, and pouch capacity cannot exceed bag size.
+
+## Inventory
+
+- `state.bag` holds carried consumable instances. Starts at 2 slots, max 8.
+  Extra bag slots cost 100, then double (200, 400, …) up to 8.
+- `state.pouchBindings` points at bag indexes for real-time HUD use. Starts at
+  1 slot, max 5, and cannot exceed current bag size. Extra pouch slots cost
+  200, then double (400, 800, 1600).
+- `CorridorSim.useConsumable()` is the only consumable path for bag and pouch.
+- Hub selling uses centralized sell values. Bows cannot be sold. Equipped or
+  pouch-bound items must be unequipped or unbound first.
+
 ## Dormant Magic
 
 `AutoMagicSystem`, `hexUnlock`, and `prayerUnlock` are intentionally dormant.

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=91" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
@@ -133,8 +133,10 @@
                 <div id="pack-doll" class="pack-doll"></div>
               </section>
               <section class="pack-side">
-                <header>Pouch <small>2</small></header>
-                <div id="pack-pouch-slots" class="pack-pouch"></div>
+                <header>Bag <small id="pack-bag-count">2</small></header>
+                <div id="pack-bag-slots" class="pack-bag"></div>
+                <header>Quick Pouch <small id="pack-pouch-count">1</small></header>
+                <div id="pack-pouch-slots" class="pack-pouch-hotkeys"></div>
                 <div id="pack-load" class="pack-load"></div>
               </section>
             </div>
@@ -224,6 +226,7 @@
       <div class="bottom-bar">
         <div class="bottom-bar-row">
           <button type="button" class="run-bag-btn" id="btn-run-bag" data-open-run-bag aria-label="Bag">Bag</button>
+          <div id="run-pouch" class="run-pouch" aria-label="Quick Pouch"></div>
           <div class="run-quiver-wrap">
             <div id="run-quiver-count" class="run-quiver-count">Quiver 0 / 0</div>
             <div id="run-quiver" class="run-quiver" aria-label="Quiver"></div>
@@ -255,18 +258,19 @@
           <h3>Field bag</h3>
           <button type="button" class="btn-secondary" id="btn-run-bag-close">Close</button>
         </header>
-        <p class="run-bag-note">Only the quiver and pouch travel with you. Stashed finds are recovered if you escape — lost if you fall.</p>
+        <p class="run-bag-note">Only the quiver and bag travel with you. Stashed finds are recovered if you escape — lost if you fall.</p>
         <h4 class="wave-loot-section">Quiver</h4>
         <div class="run-bag-grid" id="run-bag-quiver"></div>
-        <h4 class="wave-loot-section">Pouch</h4>
-        <div class="run-bag-grid" id="run-bag-pouch"></div>
+        <h4 class="wave-loot-section">Bag</h4>
+        <div class="run-bag-grid" id="run-bag-slots"></div>
         <h4 class="wave-loot-section">Run stash</h4>
         <div class="run-bag-grid" id="run-bag-stash"></div>
         <div class="run-bag-confirm" id="run-bag-confirm">
           <p id="run-bag-confirm-text">Send to stash?</p>
           <div class="btn-row">
             <button type="button" class="btn-secondary" id="btn-run-bag-cancel">Cancel</button>
-            <button type="button" id="btn-run-bag-confirm">Send</button>
+            <button type="button" id="btn-run-bag-use" hidden>Use</button>
+            <button type="button" id="btn-run-bag-confirm">Stash</button>
           </div>
         </div>
       </div>
@@ -315,7 +319,7 @@
     </div>
   </div>
 
-  <script type="module" src="src/main.js?v=86"></script>
+  <script type="module" src="src/main.js?v=91"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=3";
     registerPwa();

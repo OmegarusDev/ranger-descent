@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { GameStateManager } from "../src/game/GameStateManager.js";
 
-test("normalizes malformed save progression and pouch data", () => {
+test("normalizes malformed save progression and ignores legacy pouch arrays", () => {
   const state = new GameStateManager();
   state.deserialize({
     coins: "17",
@@ -19,9 +19,11 @@ test("normalizes malformed save progression and pouch data", () => {
   assert.equal(state.getMaxElevatorUnlocked(), 9);
   assert.equal(state.getStartElevator(), 9);
   assert.deepEqual(state.notebookElevators, [2, 4]);
-  assert.deepEqual(state.pouch, ["potion_salve", null]);
+  assert.deepEqual(state.bag, [null, null]);
+  assert.equal(state.bagCapacity, 2);
   assert.equal(state.pouchCapacity, 2);
-  assert.equal(state.serialize().schemaVersion, 2);
+  assert.deepEqual(state.pouchBindings, [null, null]);
+  assert.equal(state.serialize().schemaVersion, 3);
 });
 
 test("terminal phases cannot receive new damage or kill coins", () => {

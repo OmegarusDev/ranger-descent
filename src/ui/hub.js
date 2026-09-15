@@ -2,6 +2,34 @@
  * hub.js — Hub sheets: training, shop, pack, bestiary, options, elevator picker.
  */
 import { CONFIG } from "../data/config.js";
+import {
+  ARMOUR_ITEMS,
+  ARMOUR_MATERIALS,
+  ARMOUR_QUALITIES,
+  ARMOUR_SLOTS,
+  SHOP_QUIVERS,
+  findItem,
+  generateArmourItem,
+  isBowItem,
+} from "../data/gear.js";
+import { shopConsumables } from "../data/consumables.js";
+import {
+  canSellBagItem,
+  canSellOwnedItem,
+  canSellStorageArrow,
+  getArrowSellValue,
+  isBagSlotPouchBound,
+  isConsumable,
+  moveBagToOwned,
+  moveOwnedToBag,
+  assignBagSlotFromOwned,
+  nextBagUpgrade,
+  nextPouchUpgrade,
+  normalizeBag,
+  normalizePouchBindings,
+  bagCapacityStart,
+  pouchCapacityStart,
+} from "../game/inventory.js";
 import { rollShopArrows, getArrowDef, getArrowStats, isWoodType } from "../game/QuiverDeckManager.js";
 import { ENEMY_DEFS } from "../game/CorridorSim.js";
 import { STAT_INFO, quiverCapacityFromId } from "../game/GameStateManager.js";
@@ -164,123 +192,48 @@ const ENEMY_DEFS_BESTIARY = Object.keys(BESTIARY_META).map((id) => {
   };
 });
 
-const ARMOUR_MATERIALS = [
-  { id: "cloth",   name: "Cloth",           color: "#a09080", tier: 1,  head: 1, body: 2, feet: 1 },
-  { id: "fur",     name: "Fur",             color: "#8a7060", tier: 2,  head: 2, body: 3, feet: 1 },
-  { id: "leather", name: "Leather",         color: "#7a5a3a", tier: 3,  head: 2, body: 4, feet: 2 },
-  { id: "hardened_leather", name: "Hardened Leather", color: "#6a4a2a", tier: 4, head: 3, body: 5, feet: 2 },
-  { id: "reinforced_leather", name: "Reinforced Leather", color: "#5a3a1a", tier: 5, head: 4, body: 6, feet: 3 },
-  { id: "bronze",  name: "Bronze",          color: "#b87333", tier: 6,  head: 4, body: 7, feet: 3 },
-  { id: "iron",    name: "Iron",            color: "#8a8a8a", tier: 7,  head: 5, body: 8, feet: 4 },
-  { id: "steel",   name: "Steel",           color: "#6a6a7a", tier: 8,  head: 6, body: 10, feet: 4 },
-  { id: "hardened_steel", name: "Hardened Steel", color: "#4a4a5a", tier: 9, head: 7, body: 12, feet: 5 },
-  { id: "tempered", name: "Tempered",       color: "#3a4a5a", tier: 10, head: 8, body: 14, feet: 5 },
-  { id: "mithril", name: "Mithril",         color: "#8ab8d0", tier: 11, head: 9, body: 16, feet: 6 },
-  { id: "elven",   name: "Elven",           color: "#60a070", tier: 12, head: 10, body: 18, feet: 7 },
-  { id: "dragon",  name: "Dragon",          color: "#c03030", tier: 13, head: 12, body: 22, feet: 8 },
-];
-
-const ARMOUR_QUALITIES = [
-  { id: "battered",   name: "Battered",   mult: 0.6, color: "#8a7a6a" },
-  { id: "old",        name: "Old",        mult: 0.8, color: "#7a8a6a" },
-  { id: "standard",   name: "",           mult: 1.0, color: "#e8e4dc" },
-  { id: "fine",       name: "Fine",       mult: 1.3, color: "#5a9ad0" },
-  { id: "masterwork", name: "Masterwork", mult: 1.6, color: "#c9a227" },
-  { id: "legendary",  name: "Legendary",  mult: 2.0, color: "#d4783a" },
-];
-
-const SLOT_ICONS = { head: "🪖", body: "🛡️", feet: "👢" };
-const SLOTS = ["head", "body", "feet"];
-
-function armourWeight(material, quality, slot) {
-  const slotW = slot === "body" ? 1 : slot === "head" ? 0.55 : 0.4;
-  const q = 0.7 + quality.mult * 0.3;
-  return Math.max(1, Math.round((1 + material.tier * 0.7) * slotW * q));
-}
-
-function generateArmourItem(material, quality, slot) {
-  const baseArmor = slot === "body" ? material.body : slot === "head" ? material.head : material.feet;
-  const armor = Math.max(1, Math.floor(baseArmor * quality.mult));
-  const weight = armourWeight(material, quality, slot);
-  const cost = Math.floor(10 + material.tier * 8 + (ARMOUR_QUALITIES.indexOf(quality)) * 15);
-  const prefix = quality.name ? quality.name + " " : "";
-  const name = `${prefix}${material.name} ${slot.charAt(0).toUpperCase() + slot.slice(1)}`;
-  return {
-    id: `${quality.id}_${material.id}_${slot}`,
-    name,
-    slot,
-    cost,
-    desc: `${material.name} ${slot} armor`,
-    stats: `Armor ${armor} · Wt ${weight}`,
-    icon: SLOT_ICONS[slot],
-    section: "armour",
-    armor,
-    weight,
-    material: material.id,
-    quality: quality.id,
-    tier: material.tier,
-  };
-}
-
-const ARMOUR_ITEMS = [];
-for (const mat of ARMOUR_MATERIALS) {
-  for (const qual of ARMOUR_QUALITIES) {
-    for (const slot of SLOTS) {
-      ARMOUR_ITEMS.push(generateArmourItem(mat, qual, slot));
-    }
-  }
-}
-
-
-const SHOP_QUIVERS = (() => {
-  const names = {
-    10: "Hide Quiver",
-    12: "Small Quiver",
-    14: "Field Quiver",
-    16: "Hunter Quiver",
-    18: "Ranger Quiver",
-    20: "Deep Quiver",
-    22: "War Quiver",
-    24: "Ashwood Quiver",
-    26: "Great Quiver",
-    28: "Vault Quiver",
-    30: "Enduring Quiver",
-  };
-  const list = [];
-  let cost = 40;
-  for (let cap = 10; cap <= 30; cap += 2) {
-    const step = (cap - 10) / 2;
-    list.push({
-      id: cap === 10 ? "quiver_basic" : `quiver_${cap}`,
-      name: names[cap] || `${cap}-Shaft Quiver`,
-      slot: "quiver",
-      cost: step === 0 ? 0 : cost,
-      capacity: cap,
-      desc: cap === 10 ? "A stitched hide tube. Ten shafts." : `Holds ${cap} arrows.`,
-      stats: `${cap} Capacity`,
-      icon: "🏹",
-      section: "quivers",
-    });
-    if (step >= 1) cost = Math.round(cost * 1.15);
-  }
-  return list;
-})();
-
 /** Always the next 3 upgrades after the equipped quiver's capacity. */
 function getShopQuivers(state) {
   const cur = quiverCapacityFromId(state.equipped?.quiver);
   return SHOP_QUIVERS.filter((q) => q.capacity > cur).slice(0, 3);
 }
 
-const STARTER_GEAR = [
-  { id: "bow_hunting", name: "Hunting Bow", slot: "bow", desc: "Your constant. Always strung.", stats: "Starter bow", icon: "🏹", section: "weapons" },
-  { id: "dagger_iron", name: "Iron Dagger", slot: "dagger", desc: "When they reach you, you trade blows.", stats: "Close work", icon: "🗡", section: "weapons" },
-  { id: "amulet_greenhorn", name: "Greenhorn Charm", slot: "amulet", desc: "A luck-stone for the unblooded.", stats: "+2 HP while worn", icon: "◆", section: "jewels" },
-  { id: "potion_salve", name: "Herbal Remedy", slot: "potion", cost: 12, desc: "A bitter draught of crushed herbs. Fits the pouch.", stats: "Consumable", icon: "✚", section: "potions" },
-  { id: "potion_bandage", name: "Field Bandage", slot: "potion", cost: 10, desc: "Linen and resin. Bind a wound between halls.", stats: "Consumable", icon: "✚", section: "potions" },
-  { id: "potion_tonic", name: "Clearing Tonic", slot: "potion", cost: 14, desc: "Burns contact venom out of the blood.", stats: "Consumable", icon: "✚", section: "potions" },
-  { id: "trinket_lucky_tooth", name: "Lucky Tooth", slot: "amulet", cost: 18, desc: "A goblin charm. More superstition than steel.", stats: "Trinket", icon: "◆", section: "jewels" },
-];
+function getShopKit(state) {
+  const items = [];
+  const bagNext = nextBagUpgrade(state);
+  if (bagNext.ok) {
+    items.push({
+      id: `bag_slot_${bagNext.next}`,
+      name: `Bag Slot ${bagNext.next}`,
+      cost: bagNext.cost,
+      desc: `Carry ${bagNext.next} items into the dungeon. Cheaper than a pouch slot.`,
+      stats: `${state.bagCapacity} → ${bagNext.next} bag slots`,
+      icon: "🎒",
+      section: "kit",
+      kind: "bag_upgrade",
+    });
+  }
+  const pouchNext = nextPouchUpgrade(state);
+  if (pouchNext.ok || pouchNext.reason === "bag") {
+    const locked = pouchNext.reason === "bag";
+    items.push({
+      id: `pouch_slot_${pouchNext.next}`,
+      name: `Pouch Slot ${pouchNext.next}`,
+      cost: pouchNext.cost,
+      desc: locked
+        ? `Need a ${pouchNext.need}-slot bag before this combat hotkey can be bought.`
+        : "Tap this slot in combat without opening the bag.",
+      stats: locked
+        ? `Requires a ${pouchNext.need}-slot bag`
+        : `${state.pouchCapacity} → ${pouchNext.next} pouch slots`,
+      icon: "✚",
+      section: "kit",
+      kind: "pouch_upgrade",
+      locked,
+    });
+  }
+  return items;
+}
 
 const DOLL_SLOTS = [
   { id: "cape", name: "Cape" },
@@ -298,20 +251,14 @@ const DOLL_SLOTS = [
 
 const GEAR_PICK_SLOTS = new Set(DOLL_SLOTS.map((s) => s.id));
 
-function allGearItems() {
-  return [...STARTER_GEAR, ...SHOP_QUIVERS, ...ARMOUR_ITEMS];
-}
-
-function findItem(id) {
-  if (!id) return null;
-  return allGearItems().find((i) => i.id === id) || null;
-}
-
 function ensureStarterKit(state) {
   if (!state.ownedItems) state.ownedItems = [];
   if (!state.equipped) state.equipped = {};
-  if (!state.pouch || !state.pouch.length) state.pouch = [null, null];
-  state.pouchCapacity = state.pouchCapacity || 2;
+  state.bagCapacity = state.bagCapacity || bagCapacityStart();
+  state.pouchCapacity = state.pouchCapacity || pouchCapacityStart();
+  state.bag = normalizeBag(state.bag, state.bagCapacity);
+  state.pouchBindings = normalizePouchBindings(state.pouchBindings, state.pouchCapacity, state.bagCapacity, state.bag);
+  const needsStarters = !(state.ownedItems || []).includes("bow_hunting");
   const starters = ["bow_hunting", "dagger_iron", "amulet_greenhorn", "quiver_basic"];
   for (const id of starters) {
     if (!state.ownedItems.includes(id)) state.ownedItems.push(id);
@@ -320,7 +267,9 @@ function ensureStarterKit(state) {
   if (!state.equipped.dagger) state.equipped.dagger = "dagger_iron";
   if (state.equipped.amulet === undefined) state.equipped.amulet = "amulet_greenhorn";
   if (!state.equipped.quiver) state.equipped.quiver = "quiver_basic";
-  if (!state.ownedItems.includes("potion_salve")) state.ownedItems.push("potion_salve");
+  const hasSalve = (state.ownedItems || []).includes("potion_salve")
+    || (state.bag || []).includes("potion_salve");
+  if (needsStarters && !hasSalve) state.ownedItems.push("potion_salve");
 }
 
 function mulberry32(seed) {
@@ -343,7 +292,7 @@ function pickArmourQuality(rand, luck = 1) {
 function rollShopArmour(rand = Math.random, luck = 1) {
   const pool = [];
   for (const mat of ARMOUR_MATERIALS) {
-    for (const slot of SLOTS) {
+    for (const slot of ARMOUR_SLOTS) {
       pool.push(generateArmourItem(mat, pickArmourQuality(rand, luck), slot));
     }
   }
@@ -505,9 +454,10 @@ function populatePack(state) {
   const quiverSlots = document.getElementById("pack-quiver-slots");
   const quiverCount = document.getElementById("pack-quiver-count");
   const dollEl = document.getElementById("pack-doll");
+  const bagEl = document.getElementById("pack-bag-slots");
   const pouchEl = document.getElementById("pack-pouch-slots");
   const chestEl = document.getElementById("pack-chest-grid");
-  if (!quiverSlots || !dollEl || !pouchEl || !chestEl) return;
+  if (!quiverSlots || !dollEl || !bagEl || !chestEl) return;
 
   hidePackOverlays();
   const q = sim.quiver;
@@ -515,7 +465,14 @@ function populatePack(state) {
   const cap = q.capacity;
   const stored = q.peekStorage();
   const worn = equippedIds(state);
-  const pouch = state.pouch || [null, null];
+  const bag = state.bag || [null, null];
+  const pouchBindings = state.pouchBindings || [null];
+  const pouchCap = state.pouchCapacity || 1;
+
+  const bagCountEl = document.getElementById("pack-bag-count");
+  const pouchCountEl = document.getElementById("pack-pouch-count");
+  if (bagCountEl) bagCountEl.textContent = String(state.bagCapacity || bag.length);
+  if (pouchCountEl) pouchCountEl.textContent = String(pouchCap);
 
   if (quiverCount) quiverCount.textContent = `${loaded.length} / ${cap}`;
 
@@ -533,7 +490,6 @@ function populatePack(state) {
     }
   }
   quiverSlots.innerHTML = cells.join("");
-  // Even capacities → equal rows (8 → 4+4, 10 → 5+5, …).
   const cols = Math.max(2, Math.floor(cap / 2));
   quiverSlots.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
@@ -546,20 +502,33 @@ function populatePack(state) {
     </button>`;
   }).join("");
 
-  pouchEl.innerHTML = [0, 1].map((i) => {
-    const item = findItem(pouch[i]);
-    return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
-      ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
+  bagEl.style.gridTemplateColumns = `repeat(${Math.min(2, Math.max(1, bag.length))}, minmax(0, 1fr))`;
+  bagEl.innerHTML = bag.map((id, i) => {
+    const item = findItem(id);
+    const bound = isBagSlotPouchBound(state, i);
+    return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-bag="${i}">
+      ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-cell-sub">pouch</span>` : ""}` : `<span class="pack-cell-sub">empty</span>`}
     </button>`;
   }).join("");
 
+  if (pouchEl) {
+    pouchEl.innerHTML = Array.from({ length: pouchCap }, (_, i) => {
+      const bagIndex = pouchBindings[i];
+      const item = bagIndex != null ? findItem(bag[bagIndex]) : null;
+      return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
+        <span class="pack-pouch-num">${i + 1}</span>
+        ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
+      </button>`;
+    }).join("");
+  }
+
   const chestItems = [];
   stored.forEach((a, i) => chestItems.push({ kind: "arrow", i, arrow: a }));
-  for (const id of state.ownedItems || []) {
-    if (worn.has(id) || pouch.includes(id)) continue;
+  (state.ownedItems || []).forEach((id, ownedIndex) => {
+    if (worn.has(id)) return;
     const item = findItem(id);
-    if (item) chestItems.push({ kind: "gear", id, item });
-  }
+    if (item) chestItems.push({ kind: "gear", ownedIndex, id, item });
+  });
 
   chestEl.innerHTML = chestItems.length
     ? chestItems.map((c) => {
@@ -570,7 +539,7 @@ function populatePack(state) {
           <span class="pack-cell-sub">Lv${c.arrow.level}</span>
         </button>`;
       }
-      return `<button type="button" class="pack-cell filled" data-chest-g="${c.id}">
+      return `<button type="button" class="pack-cell filled" data-chest-g="${c.ownedIndex}">
         <span class="pack-cell-mark">${c.item.icon || "•"}</span>
         <span class="pack-cell-sub">${c.item.name}</span>
       </button>`;
@@ -591,6 +560,25 @@ function populatePack(state) {
   } else if (!packSel) {
     inspectItem(null, "Tap a slot to change it.");
   }
+
+  const sellNote = (reason) => {
+    if (reason === "bow") return "Bows cannot be sold.";
+    if (reason === "equipped") return "Unequip this before selling.";
+    if (reason === "pouch") return "Unbind this from the pouch before selling.";
+    if (reason === "wood") return "Wood never reaches storage.";
+    if (reason === "disabled") return "Arrow selling is turned off.";
+    return "Cannot sell this.";
+  };
+
+  const afterSell = (result, item) => {
+    if (!result.ok) {
+      inspectItem(item || null, sellNote(result.reason));
+      return;
+    }
+    packNote = `Sold for ${coinLabel(result.value)}.`;
+    saveGame();
+    populateHub();
+  };
 
   const openQuiverPicker = (slotIndex, el, evt) => {
     const current = loaded[slotIndex];
@@ -644,51 +632,100 @@ function populatePack(state) {
 
   chestEl.querySelectorAll("[data-chest-a]").forEach((el) => {
     const i = parseInt(el.dataset.chestA, 10);
-    const def = getArrowDef(stored[i].type);
-    const tipItem = { name: def.name, desc: def.desc, stats: getArrowStats(stored[i].type, stored[i].level) };
+    const arrow = stored[i];
+    const def = getArrowDef(arrow.type);
+    const tipItem = { name: def.name, desc: def.desc, stats: getArrowStats(arrow.type, arrow.level) };
     el.addEventListener("pointerenter", (evt) => showPackTip(tipItem, el, evt.clientX, evt.clientY));
     el.addEventListener("pointerleave", () => {
       const tip = document.getElementById("pack-tip");
       if (tip) tip.hidden = true;
     });
-    el.addEventListener("click", () => {
-      if (q.setQuiverSlot(loaded.length, i)) {
-        packNote = "Loaded into the quiver.";
-        saveGame();
-        populateHub();
+    el.addEventListener("click", (evt) => {
+      const sellCheck = canSellStorageArrow(arrow.type);
+      const options = [
+        { label: def.name, sub: `Chest · Lv${arrow.level}`, current: true, onPick: () => inspectItem(tipItem) },
+        {
+          label: "Load into quiver",
+          sub: "Fill an empty slot",
+          onPick: () => {
+            if (q.setQuiverSlot(loaded.length, i)) {
+              packNote = "Loaded into the quiver.";
+              saveGame();
+              populateHub();
+            } else {
+              inspectItem(def, "Quiver is full. Tap a quiver slot to swap.");
+            }
+          },
+        },
+      ];
+      if (sellCheck.ok) {
+        const value = getArrowSellValue(arrow.type, arrow.level);
+        options.push({
+          label: `Sell for ${coinLabel(value)}`,
+          sub: "Remove this shaft",
+          onPick: () => afterSell(sim.sellStorageArrow(i), tipItem),
+        });
       } else {
-        inspectItem(def, "Quiver is full. Tap a quiver slot to swap.");
+        options.push({ label: "Cannot sell", sub: sellNote(sellCheck.reason), onPick: () => inspectItem(tipItem, sellNote(sellCheck.reason)) });
       }
+      openPackPicker(def.name, options, el, evt);
     });
   });
 
   chestEl.querySelectorAll("[data-chest-g]").forEach((el) => {
-    const item = findItem(el.dataset.chestG);
+    const ownedIndex = parseInt(el.dataset.chestG, 10);
+    const id = state.ownedItems[ownedIndex];
+    const item = findItem(id);
     if (!item) return;
     el.addEventListener("pointerenter", (evt) => showPackTip(item, el, evt.clientX, evt.clientY));
     el.addEventListener("pointerleave", () => {
       const tip = document.getElementById("pack-tip");
       if (tip) tip.hidden = true;
     });
-    el.addEventListener("click", () => {
-      inspectItem(item);
-      if (item.slot === "potion") {
-        const empty = pouch.findIndex((x) => !x);
-        if (empty >= 0) {
-          state.pouch[empty] = item.id;
-          saveGame();
-          populateHub();
-          return;
-        }
-        inspectItem(item, "Pouch is full. Tap a pouch slot to swap.");
-        return;
+    el.addEventListener("click", (evt) => {
+      const options = [
+        { label: item.name, sub: item.stats || "In chest", current: true, onPick: () => inspectItem(item) },
+      ];
+      if (isConsumable(id)) {
+        options.push({
+          label: "Put in bag",
+          sub: "Carry this into the dungeon",
+          onPick: () => {
+            const moved = moveOwnedToBag(state, ownedIndex);
+            if (!moved.ok) inspectItem(item, "Bag is full. Tap a bag slot to swap.");
+            else {
+              saveGame();
+              populateHub();
+            }
+          },
+        });
+      } else if (item.slot && GEAR_PICK_SLOTS.has(item.slot) && !isBowItem(item)) {
+        options.push({
+          label: "Equip",
+          sub: item.stats || "",
+          onPick: () => {
+            state.equipped[item.slot] = item.id;
+            if (item.slot === "quiver") refillQuiverEmptySlots(state);
+            saveGame();
+            populateHub();
+          },
+        });
       }
-      if (item.slot && GEAR_PICK_SLOTS.has(item.slot)) {
-        state.equipped[item.slot] = item.id;
-        if (item.slot === "quiver") refillQuiverEmptySlots(state);
-        saveGame();
-        populateHub();
+      const sellCheck = canSellOwnedItem(state, ownedIndex);
+      if (sellCheck.ok) {
+        options.push({
+          label: `Sell for ${coinLabel(sellCheck.value)}`,
+          sub: "Remove this item",
+          onPick: () => afterSell(sim.sellOwnedItem(ownedIndex), item),
+        });
+      } else {
+        options.push({
+          label: "Cannot sell",
+          sub: sellNote(sellCheck.reason),
+          onPick: () => inspectItem(item, sellNote(sellCheck.reason)),
+        });
       }
+      openPackPicker(item.name, options, el, evt);
     });
   });
 
@@ -744,48 +781,127 @@ function populatePack(state) {
     });
   });
 
-  pouchEl.querySelectorAll("[data-pouch]").forEach((el) => {
+  bagEl.querySelectorAll("[data-bag]").forEach((el) => {
     el.addEventListener("click", (evt) => {
-      const i = parseInt(el.dataset.pouch, 10);
-      const current = findItem(pouch[i]);
+      const i = parseInt(el.dataset.bag, 10);
+      const current = findItem(bag[i]);
       const options = [];
       if (current) {
         options.push({
           label: current.name,
-          sub: current.stats || "In pouch",
+          sub: current.stats || "In bag",
           current: true,
           onPick: () => inspectItem(current),
         });
+        const bound = isBagSlotPouchBound(state, i);
+        if (bound) {
+          options.push({
+            label: "Unbind from pouch",
+            sub: "Keep the item in the bag",
+            onPick: () => {
+              state.clearPouchForBagSlot(i);
+              saveGame();
+              populateHub();
+            },
+          });
+        } else {
+          const emptyPouch = (state.pouchBindings || []).findIndex((slot) => slot == null);
+          if (emptyPouch >= 0) {
+            options.push({
+              label: "Bind to pouch",
+              sub: "Quick-use during a run",
+              onPick: () => {
+                state.bindPouch(emptyPouch, i);
+                saveGame();
+                populateHub();
+              },
+            });
+          }
+        }
         options.push({
           label: "Put back in chest",
           sub: "Clear this cell",
           onPick: () => {
-            state.pouch[i] = null;
+            moveBagToOwned(state, i);
+            saveGame();
+            populateHub();
+          },
+        });
+        const sellCheck = canSellBagItem(state, i);
+        if (sellCheck.ok) {
+          options.push({
+            label: `Sell for ${coinLabel(sellCheck.value)}`,
+            sub: "Remove this item",
+            onPick: () => afterSell(sim.sellBagItem(i), current),
+          });
+        }
+      } else {
+        options.push({ label: "Empty", sub: "No vial here", current: true, onPick: () => {} });
+      }
+      (state.ownedItems || []).forEach((id, ownedIndex) => {
+        if (!isConsumable(id)) return;
+        const it = findItem(id);
+        if (!it) return;
+        options.push({
+          label: it.name,
+          sub: "From chest",
+          onPick: () => {
+            assignBagSlotFromOwned(state, i, ownedIndex);
+            saveGame();
+            populateHub();
+          },
+        });
+      });
+      if (!current && !(state.ownedItems || []).some(isConsumable)) {
+        options.push({ label: "No potions", sub: "Buy one in the shop", onPick: () => {} });
+      }
+      openPackPicker("Bag", options, el, evt);
+    });
+  });
+
+  pouchEl?.querySelectorAll("[data-pouch]").forEach((el) => {
+    el.addEventListener("click", (evt) => {
+      const pouchIndex = parseInt(el.dataset.pouch, 10);
+      const bound = pouchBindings[pouchIndex];
+      const current = bound != null ? findItem(bag[bound]) : null;
+      const options = [];
+      if (current) {
+        options.push({
+          label: current.name,
+          sub: `Bag slot ${bound + 1}`,
+          current: true,
+          onPick: () => inspectItem(current),
+        });
+        options.push({
+          label: "Unbind",
+          sub: "Keep the item in the bag",
+          onPick: () => {
+            state.bindPouch(pouchIndex, null);
             saveGame();
             populateHub();
           },
         });
       } else {
-        options.push({ label: "Empty", sub: "No vial here", current: true, onPick: () => {} });
+        options.push({ label: "Empty", sub: "No quick-use bound", current: true, onPick: () => {} });
       }
-      const potions = (state.ownedItems || [])
-        .map(findItem)
-        .filter((it) => it && it.slot === "potion" && !pouch.includes(it.id));
-      for (const it of potions) {
+      bag.forEach((id, bagIndex) => {
+        if (!id) return;
+        const it = findItem(id);
+        if (!it) return;
         options.push({
           label: it.name,
-          sub: it.stats || "From chest",
+          sub: `Bind bag slot ${bagIndex + 1}`,
           onPick: () => {
-            state.pouch[i] = it.id;
+            state.bindPouch(pouchIndex, bagIndex);
             saveGame();
             populateHub();
           },
         });
+      });
+      if (!current && !bag.some(Boolean)) {
+        options.push({ label: "Bag is empty", sub: "Move a potion into the bag first", onPick: () => {} });
       }
-      if (!current && potions.length === 0) {
-        options.push({ label: "No potions", sub: "Buy one in the shop", onPick: () => {} });
-      }
-      openPackPicker("Pouch", options, el, evt);
+      openPackPicker("Quick Pouch", options, el, evt);
     });
   });
 }
@@ -918,30 +1034,35 @@ export function populateHub() {
     const armourItems = getShopArmour(state);
     const arrowItems = getShopArrows(state);
     const quiverItems = getShopQuivers(state);
-    const potionItems = STARTER_GEAR.filter((i) => i.section === "potions" && i.cost);
+    const potionItems = shopConsumables();
+    const kitItems = getShopKit(state);
     const sections = [
       { id: "arrows",  label: "Arrows",  items: arrowItems },
       { id: "potions", label: "Supplies", items: potionItems },
+      { id: "kit",     label: "Pack",    items: kitItems },
       { id: "quivers", label: "Quivers", items: quiverItems },
       { id: "armour",  label: "Armour",  items: armourItems },
-    ];
+    ].filter((section) => section.items.length > 0);
     shopList.innerHTML = sections.map(section => {
       return `<div class="shop-section">
         <div class="shop-section-title" data-toggle="${section.id}">${section.label} ▾</div>
         <div class="shop-section-items" id="shop-section-${section.id}">
           ${section.items.map(item => {
             const repeatable = item.section === "arrows" || item.section === "potions";
-            const isOwned = !repeatable && owned.includes(item.id);
-            const afford = state.coins >= item.cost;
+            const isOwned = !repeatable && item.section !== "kit" && owned.includes(item.id);
+            const locked = !!item.locked;
+            const afford = !locked && state.coins >= item.cost;
             const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
             const qualColor = qual ? qual.color : "#e8e4dc";
+            const costLabel = isOwned ? "Owned" : coinLabel(item.cost);
+            const buyLabel = locked ? "Locked" : (isOwned ? "Owned" : "Buy");
             return `<div class="shop-item">
               <div class="shop-icon">${item.icon}</div>
               <div class="shop-name" style="color:${qualColor}">${item.name}</div>
               <div class="shop-desc">${item.desc}<br><span style="color:#8a7348">${item.stats}</span></div>
               <div class="shop-bottom">
-                <span class="shop-cost">${isOwned ? "Owned" : coinLabel(item.cost)}</span>
-                <button class="shop-buy ${isOwned ? 'owned' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${isOwned ? "Owned" : "Buy"}</button>
+                <span class="shop-cost">${costLabel}</span>
+                <button class="shop-buy ${isOwned ? 'owned' : ''}${locked ? ' locked' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${buyLabel}</button>
               </div>
             </div>`;
           }).join("")}
@@ -965,28 +1086,34 @@ export function populateHub() {
         const id = btn.dataset.item;
         const item = arrowItems.find((i) => i.id === id)
           || potionItems.find((i) => i.id === id)
+          || kitItems.find((i) => i.id === id)
           || quiverItems.find((i) => i.id === id)
           || armourItems.find((i) => i.id === id)
           || findItem(id);
-        if (!item || !state.spendCoins(item.cost)) return;
-        if (!state.ownedItems) state.ownedItems = [];
-        if (item.section === "arrows") {
-          const arrow = {
-            type: item.element || item.type || "wood",
-            level: item.level || 1,
-          };
-          sim.quiver.addToStorage(arrow);
-        } else if (item.section === "potions") {
-          state.ownedItems.push(id);
-          const pouch = state.pouch || [];
-          const empty = pouch.findIndex((s) => !s);
-          if (empty >= 0) state.pouch[empty] = id;
+        if (!item) return;
+        if (item.kind === "bag_upgrade") {
+          if (!state.buyBagSlot()) return;
+        } else if (item.kind === "pouch_upgrade") {
+          if (!state.buyPouchSlot()) return;
         } else {
-          if (!state.ownedItems.includes(id)) state.ownedItems.push(id);
-          if (item.section === "quivers") {
-            if (!state.equipped) state.equipped = {};
-            state.equipped.quiver = id;
-            refillQuiverEmptySlots(state);
+          if (!state.spendCoins(item.cost)) return;
+          if (!state.ownedItems) state.ownedItems = [];
+          if (item.section === "arrows") {
+            const arrow = {
+              type: item.element || item.type || "wood",
+              level: item.level || 1,
+            };
+            sim.quiver.addToStorage(arrow);
+          } else if (item.section === "potions") {
+            const placed = state.placeInBag(id);
+            if (!placed.ok) state.ownedItems.push(id);
+          } else {
+            if (!state.ownedItems.includes(id)) state.ownedItems.push(id);
+            if (item.section === "quivers") {
+              if (!state.equipped) state.equipped = {};
+              state.equipped.quiver = id;
+              refillQuiverEmptySlots(state);
+            }
           }
         }
         saveGame();

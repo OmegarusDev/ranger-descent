@@ -387,7 +387,8 @@ button.elev-chip.selected {
 }
 .pack button.pack-cell { min-height: 72px; }
 .pack-quiver button.pack-cell { min-height: 64px; }
-.pack-pouch button.pack-cell { min-height: 64px; }
+.pack-bag button.pack-cell { min-height: 64px; }
+.pack-pouch-hotkeys button.pack-cell { min-height: 64px; }
 .pack-cell {
   border: 2px solid rgba(201,162,39,0.28);
   background: rgba(16, 10, 6, 0.72);
@@ -442,7 +443,7 @@ button.elev-chip.selected {
 .pack-slot.rare { border-style: dashed; opacity: 0.75; }
 .pack-slot-lab { color: #b89a68; font-size: 0.78em; letter-spacing: 0.06em; text-transform: uppercase; }
 .pack-slot-name { color: #f3ead4; text-align: center; line-height: 1.2; font-size: 0.92em; }
-.pack-pouch {
+.pack-bag {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
@@ -452,6 +453,31 @@ button.elev-chip.selected {
   border: 1px solid rgba(140, 96, 40, 0.35);
   border-radius: 2px;
 }
+.pack-pouch-hotkeys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px;
+  background: rgba(32, 22, 10, 0.4);
+  border: 1px solid rgba(140, 96, 40, 0.35);
+  border-radius: 2px;
+}
+.pack-pouch-hotkeys .pack-cell { position: relative; }
+.pack-pouch-num {
+  display: none;
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  font-size: 0.7em;
+  font-weight: 700;
+  color: #c9a227;
+  line-height: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .pack-pouch-num { display: block; }
+}
+html.using-keyboard .pack-pouch-num { display: block; }
 .pack-side header { margin-top: 0; }
 .pack-load { color: #c9b48a; font-size: 0.92em; }
 .pack-load.overencumbered { color: #c45a4a; }
@@ -735,6 +761,7 @@ button.elev-chip.selected {
 .shop-buy:hover { background: rgba(201,162,39,0.25); }
 .shop-buy:disabled { opacity: 0.3; cursor: default; }
 .shop-buy.owned { border-color: #4a6a4a; color: #8aba7a; background: rgba(74,106,74,0.1); }
+.shop-buy.locked { opacity: 0.45; }
 @media (min-width: 560px) {
   .shop-section-items { grid-template-columns: 1fr 1fr 1fr; }
 }
@@ -1066,6 +1093,7 @@ button.elev-chip.selected {
 }
 .bottom-bar-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -1089,6 +1117,68 @@ button.elev-chip.selected {
   box-shadow: 0 4px 12px rgba(0,0,0,0.35);
 }
 .run-bag-btn:hover { background: rgba(40, 26, 12, 0.95); }
+.run-pouch {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 4px;
+}
+.run-pouch-slot {
+  pointer-events: auto !important;
+  position: relative;
+  flex: 1 1 40px;
+  width: 44px;
+  min-width: 40px;
+  max-width: 56px;
+  min-height: 48px;
+  padding: 4px 3px;
+  border: 2px solid rgba(201, 162, 39, 0.45);
+  border-radius: 2px;
+  background: rgba(22, 14, 8, 0.88);
+  color: #e8dcc4;
+  font-family: "Chakra Petch", sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+}
+.run-pouch-slot:hover { background: rgba(40, 26, 12, 0.95); }
+.run-pouch-slot.empty { opacity: 0.7; }
+.run-pouch-num {
+  display: none;
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.48em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #c9a227;
+  line-height: 1;
+}
+.run-pouch-mark {
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1.1;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #f3ead4;
+}
+.run-pouch-tag {
+  font-family: "Cinzel", serif;
+  font-size: 0.52em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #e8c56a;
+}
+@media (hover: hover) and (pointer: fine) {
+  .run-pouch-num { display: block; }
+}
+html.using-keyboard .run-pouch-num { display: block; }
 .run-quiver-wrap {
   flex: 1;
   min-width: 0;
