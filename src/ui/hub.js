@@ -58,6 +58,163 @@ const TRAINING_METRIC_INFO = {
   weight: "Maximum armour carry weight. Current carry weight is the weight of equipped armour only.",
 };
 
+const PACK_FOLD_BODY = {
+  quiver: "pack-quiver-slots",
+  equipped: "pack-doll",
+  bag: "pack-bag-slots",
+  pouch: "pack-pouch-slots",
+  chest: "pack-chest-grid",
+};
+
+const TIP_PAD = 8;
+
+function ensureUiTip() {
+  let tip = document.getElementById("ui-tip");
+  if (tip) return tip;
+  tip = document.createElement("div");
+  tip.id = "ui-tip";
+  tip.className = "ui-tip";
+  tip.hidden = true;
+  tip.setAttribute("role", "tooltip");
+  (document.getElementById("ui") || document.body).appendChild(tip);
+  return tip;
+}
+
+function hideUiTip({ onlyIfIdle = false } = {}) {
+  const tip = document.getElementById("ui-tip");
+  if (!tip) return;
+  if (onlyIfIdle && tip.dataset.sticky === "1") return;
+  tip.hidden = true;
+  tip.dataset.sticky = "0";
+  tip.dataset.source = "";
+  tip.innerHTML = "";
+  tip._place = null;
+}
+
+/** Keep floating UI fully on-screen: prefer below the anchor/cursor, flip if needed. */
+function placeInView(el, { anchor, clientX, clientY } = {}) {
+  if (!el) return;
+  el.hidden = false;
+  el.style.position = "fixed";
+  el.style.maxWidth = `${Math.max(120, window.innerWidth - TIP_PAD * 2)}px`;
+  el.style.left = "0px";
+  el.style.top = "0px";
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const boxW = el.offsetWidth || 220;
+  const boxH = el.offsetHeight || 80;
+  const ar = anchor?.getBoundingClientRect?.();
+  let x = clientX != null ? clientX + 12 : (ar ? ar.left : TIP_PAD);
+  let y = clientY != null ? clientY + 14 : (ar ? ar.bottom + 8 : TIP_PAD);
+  if (x + boxW > vw - TIP_PAD) x = vw - TIP_PAD - boxW;
+  if (x < TIP_PAD) x = TIP_PAD;
+  if (y + boxH > vh - TIP_PAD) {
+    const above = (clientY != null ? clientY : (ar ? ar.top : y)) - boxH - 10;
+    y = above >= TIP_PAD ? above : Math.max(TIP_PAD, vh - TIP_PAD - boxH);
+  }
+  if (y < TIP_PAD) y = TIP_PAD;
+  el.style.left = `${Math.round(x)}px`;
+  el.style.top = `${Math.round(y)}px`;
+  el._place = { anchor, clientX, clientY };
+}
+
+function showUiTip(html, { anchor, clientX, clientY, sticky = false, source = "" } = {}) {
+  if (!html) return;
+  const tip = ensureUiTip();
+  if (sticky && !tip.hidden && tip.dataset.sticky === "1" && source && tip.dataset.source === source) {
+    hideUiTip();
+    return;
+  }
+  tip.innerHTML = html;
+  if (sticky) {
+    tip.dataset.sticky = "1";
+    tip.dataset.source = source || "";
+  } else if (tip.hidden || tip.dataset.sticky !== "1") {
+    tip.dataset.sticky = "0";
+    tip.dataset.source = source || "";
+  }
+  placeInView(tip, { anchor, clientX, clientY });
+}
+
+function itemTipHtml(item, { showCost = false } = {}) {
+  if (!item) return "";
+  const lines = [`<b>${item.name}</b>`];
+  if (item.desc) lines.push(`<p>${item.desc}</p>`);
+  const stats = [];
+  if (item.stats) stats.push(item.stats);
+  if (item.effect?.type === "heal" && item.effect.amount) stats.push(`Heals ${item.effect.amount} HP`);
+  if (item.effect?.type === "curePoison") stats.push("Cures poison");
+  if (item.slot && item.section === "armour") stats.push(`Slot ${item.slot}`);
+  if (item.quality) {
+    const q = ARMOUR_QUALITIES.find((x) => x.id === item.quality);
+    if (q) stats.push(q.name);
+  }
+  if (item.material) {
+    const m = ARMOUR_MATERIALS.find((x) => x.id === item.material);
+    if (m) stats.push(m.name);
+  }
+  if (item.capacity) stats.push(`${item.capacity} shafts`);
+  const seen = new Set();
+  const unique = stats.filter((s) => {
+    const k = String(s).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  if (unique.length) lines.push(`<span>${unique.join(" · ")}</span>`);
+  if (showCost && item.cost != null && coinLabel) lines.push(`<em>${coinLabel(item.cost)}</em>`);
+  return lines.join("");
+}
+
+function bindHoverTip(el, itemOrHtml) {
+  if (!el) return;
+  const html = typeof itemOrHtml === "string" ? itemOrHtml : itemTipHtml(itemOrHtml);
+  if (!html) return;
+  el.addEventListener("pointerenter", (evt) => {
+    if (evt.pointerType && evt.pointerType !== "mouse") return;
+    showUiTip(html, { anchor: el, clientX: evt.clientX, clientY: evt.clientY, sticky: false });
+  });
+  el.addEventListener("pointermove", (evt) => {
+    if (evt.pointerType && evt.pointerType !== "mouse") return;
+    const tip = document.getElementById("ui-tip");
+    if (!tip || tip.hidden || tip.dataset.sticky === "1") return;
+    placeInView(tip, { anchor: el, clientX: evt.clientX, clientY: evt.clientY });
+  });
+  el.addEventListener("pointerleave", () => hideUiTip({ onlyIfIdle: true }));
+  el.addEventListener("focus", () => {
+    showUiTip(html, { anchor: el, sticky: false });
+  });
+  el.addEventListener("blur", () => hideUiTip({ onlyIfIdle: true }));
+}
+
+function bindStickyTip(el, html, source) {
+  if (!el || !html) return;
+  bindHoverTip(el, html);
+  el.addEventListener("click", (evt) => {
+    evt.preventDefault();
+    evt.stopPropagation();
+    showUiTip(html, {
+      anchor: el,
+      clientX: evt.clientX,
+      clientY: evt.clientY,
+      sticky: true,
+      source,
+    });
+  });
+}
+
+function togglePackFold(title) {
+  const id = title?.dataset?.toggle;
+  const body = document.getElementById(PACK_FOLD_BODY[id]);
+  if (!title || !body) return;
+  const collapse = body.style.display !== "none";
+  body.style.display = collapse ? "none" : "";
+  title.classList.toggle("collapsed", collapse);
+  title.setAttribute("aria-expanded", collapse ? "false" : "true");
+  const mark = title.querySelector(".pack-fold-mark");
+  if (mark) mark.textContent = collapse ? "▸" : "▾";
+}
+
 export function initHub(d) {
   deps = d;
   sim = d.sim;
@@ -72,9 +229,41 @@ export function initHub(d) {
   $("#btn-pack-bag").addEventListener("click", () => openHubSheet("sheet-pack"));
   $("#btn-bestiary").addEventListener("click", () => openHubSheet("sheet-bestiary"));
   $("#btn-hub-options").addEventListener("click", () => openHubSheet("sheet-options"));
-  $("#btn-shop-chest").addEventListener("click", () => openHubSheet("sheet-pack"));
+  document.querySelectorAll("[data-open-pack]").forEach((btn) => {
+    btn.addEventListener("click", () => openHubSheet("sheet-pack"));
+  });
+  $("#btn-pack-train")?.addEventListener("click", () => openHubSheet("sheet-training"));
+  $("#btn-pack-shop")?.addEventListener("click", () => openHubSheet("sheet-shop"));
   document.querySelectorAll("[data-close-sheet]").forEach((btn) => {
     btn.addEventListener("click", () => closeHubSheets());
+  });
+  const packRoot = document.getElementById("pack-root");
+  if (packRoot) {
+    packRoot.addEventListener("click", (e) => {
+      const title = e.target.closest(".pack-section-title[data-toggle]");
+      if (!title || !packRoot.contains(title)) return;
+      e.preventDefault();
+      togglePackFold(title);
+    });
+    packRoot.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const title = e.target.closest(".pack-section-title[data-toggle]");
+      if (!title) return;
+      e.preventDefault();
+      togglePackFold(title);
+    });
+  }
+  document.addEventListener("pointerdown", (e) => {
+    const tip = document.getElementById("ui-tip");
+    if (!tip || tip.hidden) return;
+    if (e.target.closest("#ui-tip")) return;
+    if (e.target.closest("[data-tip-source], .shop-item, .train-stat, .train-hint")) return;
+    hideUiTip();
+  }, true);
+  window.addEventListener("resize", () => {
+    const tip = document.getElementById("ui-tip");
+    if (!tip || tip.hidden) return;
+    placeInView(tip, tip._place || {});
   });
 
   (function bindHoldReset() {
@@ -140,6 +329,7 @@ export function initHub(d) {
 export function closeHubSheets() {
   document.querySelectorAll(".hub-sheet").forEach((el) => el.classList.remove("open"));
   hidePackOverlays();
+  hideUiTip();
 }
 function openHubSheet(id) {
   closeElevatorModal();
@@ -366,7 +556,6 @@ function inspectItem(item, extra = "") {
 
 function hidePackOverlays() {
   const picker = document.getElementById("pack-picker");
-  const tip = document.getElementById("pack-tip");
   if (picker) {
     if (picker._awayHandler) {
       document.removeEventListener("pointerdown", picker._awayHandler, true);
@@ -375,32 +564,18 @@ function hidePackOverlays() {
     picker.hidden = true;
     picker.innerHTML = "";
   }
-  if (tip) tip.hidden = true;
+  hideUiTip();
 }
 
 function placeNear(el, anchorEl, clientX, clientY) {
-  const root = document.getElementById("pack-root") || document.getElementById("sheet-pack");
-  if (!root || !el) return;
-  const rr = root.getBoundingClientRect();
-  let x = (clientX != null ? clientX : (anchorEl?.getBoundingClientRect().left || rr.left)) - rr.left;
-  let y = (clientY != null ? clientY : (anchorEl?.getBoundingClientRect().bottom || rr.top)) - rr.top + 8;
-  el.hidden = false;
-  el.style.left = "0px";
-  el.style.top = "0px";
-  const w = el.offsetWidth || 220;
-  const h = el.offsetHeight || 120;
-  x = Math.max(6, Math.min(x, rr.width - w - 6));
-  y = Math.max(6, Math.min(y, rr.height - h - 6));
-  el.style.left = `${x}px`;
-  el.style.top = `${y}px`;
+  placeInView(el, { anchor: anchorEl, clientX, clientY });
 }
 
 function showPackTip(item, anchorEl, clientX, clientY) {
-  const tip = document.getElementById("pack-tip");
-  if (!tip || !item) return;
-  hidePackOverlays();
-  tip.innerHTML = `<b>${item.name}</b>${item.desc || ""}${item.stats ? `<span>${item.stats}</span>` : ""}`;
-  placeNear(tip, anchorEl, clientX, clientY);
+  if (!item) return;
+  const picker = document.getElementById("pack-picker");
+  if (picker && !picker.hidden) return;
+  showUiTip(itemTipHtml(item), { anchor: anchorEl, clientX, clientY, sticky: false, source: item.id || item.name });
 }
 
 function arrowPackLabel(type) {
@@ -411,8 +586,7 @@ function arrowPackLabel(type) {
 function openPackPicker(title, options, anchorEl, evt) {
   const picker = document.getElementById("pack-picker");
   if (!picker) return;
-  const tip = document.getElementById("pack-tip");
-  if (tip) tip.hidden = true;
+  hideUiTip();
   if (picker._awayHandler) {
     document.removeEventListener("pointerdown", picker._awayHandler, true);
     picker._awayHandler = null;
@@ -475,7 +649,7 @@ function populatePack(state) {
     const a = loaded[i];
     if (a) {
       const def = getArrowDef(a.type);
-      cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}" title="${def.name}">
+      cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}">
         <span class="pack-cell-mark">${arrowPackLabel(a.type)}</span>
         <span class="pack-cell-sub">Lv${a.level}</span>
       </button>`);
@@ -618,8 +792,13 @@ function populatePack(state) {
   };
 
   quiverSlots.querySelectorAll("[data-q], [data-q-empty]").forEach((el) => {
+    const i = parseInt(el.dataset.q != null ? el.dataset.q : el.dataset.qEmpty, 10);
+    const a = loaded[i];
+    if (a) {
+      const def = getArrowDef(a.type);
+      bindHoverTip(el, { name: def.name, desc: def.desc, stats: getArrowStats(a.type, a.level) });
+    }
     el.addEventListener("click", (evt) => {
-      const i = parseInt(el.dataset.q != null ? el.dataset.q : el.dataset.qEmpty, 10);
       openQuiverPicker(i, el, evt);
     });
   });
@@ -630,10 +809,7 @@ function populatePack(state) {
     const def = getArrowDef(arrow.type);
     const tipItem = { name: def.name, desc: def.desc, stats: getArrowStats(arrow.type, arrow.level) };
     el.addEventListener("pointerenter", (evt) => showPackTip(tipItem, el, evt.clientX, evt.clientY));
-    el.addEventListener("pointerleave", () => {
-      const tip = document.getElementById("pack-tip");
-      if (tip) tip.hidden = true;
-    });
+    el.addEventListener("pointerleave", () => hideUiTip({ onlyIfIdle: true }));
     el.addEventListener("click", (evt) => {
       const sellCheck = canSellStorageArrow(arrow.type);
       const options = [
@@ -672,10 +848,7 @@ function populatePack(state) {
     const item = findItem(id);
     if (!item) return;
     el.addEventListener("pointerenter", (evt) => showPackTip(item, el, evt.clientX, evt.clientY));
-    el.addEventListener("pointerleave", () => {
-      const tip = document.getElementById("pack-tip");
-      if (tip) tip.hidden = true;
-    });
+    el.addEventListener("pointerleave", () => hideUiTip({ onlyIfIdle: true }));
     el.addEventListener("click", (evt) => {
       const options = [
         { label: item.name, sub: item.stats || "In chest", current: true, onPick: () => inspectItem(item) },
@@ -724,9 +897,10 @@ function populatePack(state) {
   });
 
   dollEl.querySelectorAll("[data-slot]").forEach((el) => {
+    const slot = el.dataset.slot;
+    const current = findItem(state.equipped?.[slot]);
+    if (current) bindHoverTip(el, current);
     el.addEventListener("click", (evt) => {
-      const slot = el.dataset.slot;
-      const current = findItem(state.equipped?.[slot]);
       const options = [];
       if (current) {
         options.push({
@@ -776,9 +950,10 @@ function populatePack(state) {
   });
 
   bagEl.querySelectorAll("[data-bag]").forEach((el) => {
+    const i = parseInt(el.dataset.bag, 10);
+    const current = findItem(bag[i]);
+    if (current) bindHoverTip(el, current);
     el.addEventListener("click", (evt) => {
-      const i = parseInt(el.dataset.bag, 10);
-      const current = findItem(bag[i]);
       const options = [];
       if (current) {
         options.push({
@@ -854,10 +1029,11 @@ function populatePack(state) {
   });
 
   pouchEl?.querySelectorAll("[data-pouch]").forEach((el) => {
+    const pouchIndex = parseInt(el.dataset.pouch, 10);
+    const bound = pouchBindings[pouchIndex];
+    const current = bound != null ? findItem(bag[bound]) : null;
+    if (current) bindHoverTip(el, current);
     el.addEventListener("click", (evt) => {
-      const pouchIndex = parseInt(el.dataset.pouch, 10);
-      const bound = pouchBindings[pouchIndex];
-      const current = bound != null ? findItem(bag[bound]) : null;
       const options = [];
       if (current) {
         options.push({
@@ -950,6 +1126,7 @@ function renderElevatorPicker() {
 
 export function populateHub() {
   const state = sim.state;
+  hideUiTip();
   ensureStarterKit(state);
   refillQuiverEmptySlots(state);
   syncArmorRating(state);
@@ -970,13 +1147,14 @@ export function populateHub() {
     const recovery = Math.round(state.getArrowReturnChance() * 100);
     const equipMax = state.getMaxEquipLoad();
     const allMaxed = STAT_INFO.every((u) => state.isUpgradeMaxed(u.id));
+    const equipLoad = state.equipLoad || 0;
     const metrics = [
-      { id: "hp", value: state.playerMaxHp, label: "HP" },
-      { id: "dmg", value: `+${state.getStrengthBonus()}`, label: "DMG" },
-      { id: "rof", value: `${rof.toFixed(2)}/s`, label: "ROF" },
-      { id: "crit", value: `${critX}x / ${crit}%`, label: "Crit dmg / %" },
-      { id: "recovery", value: `${recovery}%`, label: "Arrow rec." },
-      { id: "weight", value: equipMax, label: "Weight max." },
+      { id: "hp", value: state.playerMaxHp, label: "HP", tip: `${TRAINING_METRIC_INFO.hp} Currently ${state.playerMaxHp} HP.` },
+      { id: "dmg", value: `+${state.getStrengthBonus()}`, label: "DMG", tip: TRAINING_METRIC_INFO.dmg },
+      { id: "rof", value: `${rof.toFixed(2)}/s`, label: "ROF", tip: TRAINING_METRIC_INFO.rof },
+      { id: "crit", value: `${critX}x / ${crit}%`, label: "Crit dmg / %", tip: TRAINING_METRIC_INFO.crit },
+      { id: "recovery", value: `${recovery}%`, label: "Arrow rec.", tip: TRAINING_METRIC_INFO.recovery },
+      { id: "weight", value: `${equipLoad} / ${equipMax}`, label: "Weight", tip: `${TRAINING_METRIC_INFO.weight} Now ${equipLoad} / ${equipMax}.` },
     ];
     trainingList.innerHTML = `
       <div class="train-summary">
@@ -985,10 +1163,7 @@ export function populateHub() {
         <span class="train-summary-next">Next lvlup: ${allMaxed ? "MAX" : coinLabel(cost)}</span>
       </div>
       <div class="train-stats" aria-label="Current ranger stats">
-        ${metrics.map((metric) => `<details class="train-stat train-metric">
-          <summary aria-label="${metric.label} information"><strong>${metric.value}</strong><span>${metric.label}</span></summary>
-          <div class="train-hint-popover">${TRAINING_METRIC_INFO[metric.id]}</div>
-        </details>`).join("")}
+        ${metrics.map((metric) => `<button type="button" class="train-stat train-metric" data-tip-source="train-${metric.id}" aria-label="${metric.label} information"><strong>${metric.value}</strong><span>${metric.label}</span></button>`).join("")}
       </div>
       <div class="train-upgrades">
     ` + STAT_INFO.map((u) => {
@@ -999,10 +1174,7 @@ export function populateHub() {
         <div class="train-info">
           <div class="train-name-line">
             <div class="train-name">${u.name}</div>
-            <details class="train-hint">
-              <summary aria-label="${u.name} information">i</summary>
-              <div class="train-hint-popover">${u.desc}</div>
-            </details>
+            <button type="button" class="train-hint" data-tip-source="stat-${u.id}" aria-label="${u.name} information">i</button>
           </div>
         </div>
         <div class="train-right">
@@ -1011,6 +1183,14 @@ export function populateHub() {
         </div>
       </div>`;
     }).join("") + `</div>`;
+    trainingList.querySelectorAll(".train-stat").forEach((el, i) => {
+      bindStickyTip(el, `<b>${metrics[i].label}</b><p>${metrics[i].tip}</p>`, `train-${metrics[i].id}`);
+    });
+    trainingList.querySelectorAll(".train-hint").forEach((el) => {
+      const id = el.dataset.tipSource.replace("stat-", "");
+      const stat = STAT_INFO.find((u) => u.id === id);
+      if (stat) bindStickyTip(el, `<b>${stat.name}</b><p>${stat.desc}</p>`, el.dataset.tipSource);
+    });
     trainingList.querySelectorAll(".train-buy").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.upgrade;
@@ -1047,13 +1227,20 @@ export function populateHub() {
             const locked = !!item.locked;
             const afford = !locked && state.coins >= item.cost;
             const qual = ARMOUR_QUALITIES.find(q => q.id === item.quality);
-            const qualColor = qual ? qual.color : "#e8e4dc";
+            const parchmentInk = {
+              battered: "#5a4a3a",
+              old: "#3a4a28",
+              standard: "#2c1a0c",
+              fine: "#1a4a78",
+              masterwork: "#6b4a08",
+              legendary: "#8a3010",
+            };
+            const qualColor = qual ? (parchmentInk[qual.id] || qual.color) : "#2c1a0c";
             const costLabel = isOwned ? "Owned" : coinLabel(item.cost);
             const buyLabel = locked ? "Locked" : (isOwned ? "Owned" : "Buy");
-            return `<div class="shop-item">
+            return `<div class="shop-item" data-item-id="${item.id}" data-tip-source="shop-${item.id}">
               <div class="shop-icon">${item.icon}</div>
               <div class="shop-name" style="color:${qualColor}">${item.name}</div>
-              <div class="shop-desc">${item.desc}<br><span style="color:#8a7348">${item.stats}</span></div>
               <div class="shop-bottom">
                 <span class="shop-cost">${costLabel}</span>
                 <button class="shop-buy ${isOwned ? 'owned' : ''}${locked ? ' locked' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${buyLabel}</button>
@@ -1073,6 +1260,25 @@ export function populateHub() {
           el.textContent = el.textContent.includes("▾") ? el.textContent.replace("▾", "▸") : el.textContent.replace("▸", "▾");
         }
       });
+    });
+
+    const catalog = [...arrowItems, ...potionItems, ...kitItems, ...quiverItems, ...armourItems];
+    shopList.querySelectorAll(".shop-item").forEach((card) => {
+      const item = catalog.find((i) => i.id === card.dataset.itemId);
+      if (!item) return;
+      const html = itemTipHtml(item, { showCost: true });
+      card.addEventListener("click", (e) => {
+        if (e.target.closest(".shop-buy")) return;
+        showUiTip(html, {
+          anchor: card,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          sticky: true,
+          source: `shop-${item.id}`,
+        });
+      });
+      const buy = card.querySelector(".shop-buy");
+      if (buy) bindHoverTip(buy, html);
     });
 
     shopList.querySelectorAll(".shop-buy").forEach(btn => {

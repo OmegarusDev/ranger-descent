@@ -17,7 +17,7 @@ test("reports absolute floors and repeating floor-local waves", () => {
   assert.equal(sim.getWaveNumber(), 10);
 });
 
-test("junction selection enters the requested transition without rerolling", () => {
+test("junction selection hidden-loads the next hall before the turn starts", () => {
   const sim = new CorridorSim();
   sim.state.startRun();
   const choice = { direction: "left", groups: [["slime"]], coinBonus: 1 };
@@ -28,8 +28,10 @@ test("junction selection enters the requested transition without rerolling", () 
 
   assert.equal(sim.junctionPending, false);
   assert.equal(sim.turning, true);
-  assert.equal(sim._pendingEncounter, choice);
   assert.equal(sim._pendingTurnDir, "left");
+  assert.equal(sim.waveActive, true);
+  assert.ok(sim.enemies.length > 0, "first pack should exist before the camera turns");
+  assert.equal(sim.movingForward, false);
 });
 
 test("full wood quivers account for rejected wood loot without stashing it", () => {
@@ -151,4 +153,94 @@ test("loot reports use awarded rather than base kill coins", () => {
 
   assert.equal(sim.waveLootLog[0].baseCoins, 5);
   assert.equal(sim.waveLootLog[0].coins, 7);
+});
+
+test("a tap on a close centered enemy stabs with the dagger", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.state.equipped.dagger = "dagger_iron";
+  sim.movingForward = false;
+  sim.enemies.push({
+    id: 1,
+    type: "slime",
+    x: 0,
+    worldZ: sim.playerWorldZ + 22,
+    hp: 8,
+    maxHp: 8,
+    shieldHp: 0,
+    size: 1,
+  });
+
+  const hit = sim.tryDaggerAt(200, 400, () => true);
+
+  assert.equal(hit, true);
+  assert.ok(sim.enemies[0].hp < 8);
+  assert.ok((sim.state.daggerCooldown || 0) > 0);
+});
+
+test("a tap that misses the foe does not stab", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.state.equipped.dagger = "dagger_iron";
+  sim.enemies.push({
+    id: 2,
+    type: "slime",
+    x: 0,
+    worldZ: sim.playerWorldZ + 70,
+    hp: 8,
+    maxHp: 8,
+    shieldHp: 0,
+    size: 1,
+  });
+
+  const hit = sim.tryDaggerAt(200, 400, () => false);
+
+  assert.equal(hit, false);
+  assert.equal(sim.enemies[0].hp, 8);
+});
+
+test("an in-your-face tap stabs even if the sprite hit-test misses", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.state.equipped.dagger = "dagger_iron";
+  sim.enemies.push({
+    id: 3,
+    type: "slime",
+    x: 0,
+    worldZ: sim.playerWorldZ + 24,
+    hp: 8,
+    maxHp: 8,
+    shieldHp: 0,
+    size: 1,
+  });
+
+  const hit = sim.tryDaggerAt(200, 400, () => false);
+
+  assert.equal(hit, true);
+  assert.ok(sim.enemies[0].hp < 8);
+});
+
+test("firing during arrow cooldown emits not-ready feedback", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  let blocked = 0;
+  sim.on("arrow_not_ready", () => { blocked++; });
+  sim.state.arrowCooldown = 0.4;
+  const shot = sim.fireArrow({ vector: { x: 0, y: -1 }, speed: 400 });
+  assert.equal(shot, null);
+  assert.equal(blocked, 1);
+  assert.equal(sim.quiver.peekQuiver().length >= 1, true);
+});
+
+test("clearing a wave starts the walk to the fork without a loot pause", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.waveActive = false;
+  sim.waveQueue = [];
+  sim.enemies = [];
+  sim._beginWaveLootSequence("junction");
+  assert.equal(sim.lootPending, false);
+  assert.ok(sim._approachingJunction || sim.junctionPending);
+  assert.ok(sim.pendingWaveReport);
 });

@@ -2,7 +2,7 @@
  * Ranger Descent service worker — network-first, update on every open.
  * Online: always prefer the live site. Offline: last successful response if any.
  */
-const CACHE = "ranger-descent-shell-v3";
+const CACHE = "ranger-descent-shell-v8";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -42,6 +42,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (/\.(svg|png|jpe?g|gif|webp|ico)$/i.test(url.pathname)) return;
 
   event.respondWith(
     (async () => {
@@ -53,10 +54,10 @@ self.addEventListener("fetch", (event) => {
         }
         return fresh;
       } catch (_) {
-        const cached = await caches.match(req);
+        const cached = await caches.match(req, { ignoreSearch: true });
         if (cached) return cached;
         if (req.mode === "navigate") {
-          const shell = await caches.match("./index.html");
+          const shell = await caches.match("./index.html") || await caches.match("/");
           if (shell) return shell;
         }
         return Response.error();

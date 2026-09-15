@@ -1,0 +1,13 @@
+---
+description: Keep Ranger Descent on its own local port; never fight other games for 8000/8765/8080.
+alwaysApply: true
+---
+
+# Local server
+
+Ranger Descent is served only at `http://127.0.0.1:8877/`.
+
+- Start or reuse `./scripts/serve-local.sh` or `python3 scripts/serve.py`.
+- Do not run `python3 -m http.server` on 8000, 8080, 8123, 8765, 8770, 5173, 5174, 5299, or 5300 — those belong to other local games.
+- If 8877 is busy with a non-Ranger process, stop and tell the user. Do not kill that listener or switch this game onto another project's port.
+- Bind `127.0.0.1` only. Leave the server running in a task or `--daemon`; agent background shells get killed with the chat.

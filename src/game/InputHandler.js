@@ -125,11 +125,13 @@ export class InputHandler {
     this._suppressClick = true;
     if (wasDragging) {
       this._compute();
+      const pull = Math.hypot(this.originX - this.dragX, this.originY - this.dragY);
+      const isTap = pull < 24 || this.power < CONFIG.SLINGSHOT_MIN_POWER;
       if (performance.now() >= this.blockUntil) {
-        if (this.power >= 1 && this.onDragEnd) {
+        if (isTap) {
+          if (this.onTap) this.onTap(x, y);
+        } else if (this.onDragEnd) {
           this.onDragEnd(this.angle, this.power, { ...this.vector });
-        } else if (this.onTap) {
-          this.onTap(this.originX, this.originY);
         }
       }
       this.power = 0;

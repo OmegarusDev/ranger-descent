@@ -2,12 +2,13 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
-import { DungeonView } from "./engine/DungeonView.js";
+import { DungeonView } from "./engine/DungeonView.js?v=126";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
-import { getConsumable } from "./data/consumables.js";
+import { getConsumable, consumableIconSvg } from "./data/consumables.js";
 import { CorridorSim } from "./game/CorridorSim.js";
 import { InputHandler } from "./game/InputHandler.js";
+import { lockMobileAppPortrait } from "./engine/immersive.js";
 import {
   initHub,
   populateHub,
@@ -35,6 +36,11 @@ const engine = new RenderEngine2D5(canvas);
 const dungeon = new DungeonView();
 const sim = new CorridorSim();
 const input = new InputHandler(canvas);
+lockMobileAppPortrait();
+if (typeof location !== "undefined" && location.search.includes("debug=1")) {
+  globalThis.sim = sim;
+  globalThis.dungeon = dungeon;
+}
 
 function saveGame() {
   try {
@@ -65,6 +71,7 @@ const distEl = $("#distance-display");
 const timerEl = $("#timer-display");
 const cooldownRing = $("#cooldown-ring");
 const cooldownLabel = $("#cooldown-label");
+const nockMeter = $("#nock-meter");
 const minimapCanvas = $("#minimap");
 const deathStats = $("#death-stats");
 const debugPanel = $("#debug-panel");
@@ -85,6 +92,48 @@ function familyIconSvg(family) {
   return icons[family] || icons.beast;
 }
 
+function hallSpoilsHtml(report) {
+  if (!report) return "";
+  const kills = report.kills || [];
+  const broken = report.broken || [];
+  const discarded = report.discarded || [];
+  const ground = report.ground;
+
+  let killHtml = kills.map((k) => {
+    const drop = k.drop ? `<span class="gold">${k.drop.label}</span>` : `<span class="muted">—</span>`;
+    return `<div class="wave-loot-line"><span>${k.name}</span><span><span class="gold">${coinLabel(k.coins)}</span> · ${drop}</span></div>`;
+  }).join("");
+  if (!killHtml) killHtml = `<div class="wave-loot-empty">No foes left spoils worth naming.</div>`;
+
+  const groundHtml = ground
+    ? `<div class="wave-loot-line"><span>${ground.detail || "On the ground"}</span><span class="gold">${ground.kind === "coins" ? coinLabel(ground.amount) : ground.label}</span></div>`
+    : `<div class="wave-loot-empty">Nothing else on the floor.</div>`;
+
+  let brokeHtml = [...broken, ...discarded].map((b) => {
+    const why = b.reason === "no_room"
+      ? "no room"
+      : b.reason === "replaced"
+        ? "replaced by a new arrow"
+        : "broke";
+    return `<div class="wave-loot-line"><span class="broke">${b.label}</span><span class="muted">${why}</span></div>`;
+  }).join("");
+  if (!brokeHtml) brokeHtml = `<div class="wave-loot-empty">Nothing was discarded.</div>`;
+
+  return `
+    <div class="wave-loot-section"><h4>From the fallen</h4>${killHtml}</div>
+    <div class="wave-loot-section"><h4>On the ground</h4>${groundHtml}</div>
+    <div class="wave-loot-section"><h4>Discarded shafts</h4>${brokeHtml}</div>
+  `;
+}
+
+function fillPathSpoils() {
+  const spoils = document.getElementById("path-spoils");
+  if (!spoils) return;
+  const html = hallSpoilsHtml(sim.pendingWaveReport);
+  spoils.innerHTML = html;
+  spoils.hidden = !html;
+}
+
 function setPathChoice(on) {
   if (!pathChoice) return;
   const active = !!on;
@@ -96,7 +145,11 @@ function setPathChoice(on) {
     return;
   }
   input.choiceMode = true;
-  const sig = (sim.junctionChoices || []).map((c) => `${c.direction}:${c.coinBonus || 0}`).join("|");
+  const report = sim.pendingWaveReport;
+  const lootSig = report
+    ? `${(report.kills || []).length}:${report.ground?.kind || ""}:${(report.discarded || []).length}`
+    : "";
+  const sig = `${(sim.junctionChoices || []).map((c) => `${c.direction}:${c.coinBonus || 0}`).join("|")}|${lootSig}`;
   if (wasActive && pathChoice.dataset.sig === sig) {
     const escapeCoins = document.getElementById("escape-coins");
     if (escapeCoins) {
@@ -106,6 +159,7 @@ function setPathChoice(on) {
     return;
   }
   pathChoice.dataset.sig = sig;
+  fillPathSpoils();
 
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   const labels = { left: "‹ Left", forward: "Ahead", right: "Right ›" };
@@ -150,43 +204,8 @@ function escapeToSurface() {
   if (hubCoins) hubCoins.textContent = sim.state.coins;
 }
 
-function showWaveLoot(report) {
-  const panel = document.getElementById("wave-loot");
-  const body = document.getElementById("wave-loot-body");
-  if (!panel || !body) return;
-  const kills = report?.kills || [];
-  const broken = report?.broken || [];
-  const discarded = report?.discarded || [];
-  const ground = report?.ground;
-
-  let killHtml = kills.map((k) => {
-    const drop = k.drop ? `<span class="gold">${k.drop.label}</span>` : `<span class="muted">—</span>`;
-    return `<div class="wave-loot-line"><span>${k.name}</span><span><span class="gold">${coinLabel(k.coins)}</span> · ${drop}</span></div>`;
-  }).join("");
-  if (!killHtml) killHtml = `<div class="wave-loot-empty">No foes left spoils worth naming.</div>`;
-
-  let groundHtml = ground
-    ? `<div class="wave-loot-line"><span>${ground.detail || "On the ground"}</span><span class="gold">${ground.kind === "coins" ? coinLabel(ground.amount) : ground.label}</span></div>`
-    : `<div class="wave-loot-empty">Nothing else on the floor.</div>`;
-
-  let brokeHtml = [...broken, ...discarded].map((b) => {
-    const why = b.reason === "no_room"
-      ? "no room"
-      : b.reason === "replaced"
-        ? "replaced by a new arrow"
-        : "broke";
-    return `<div class="wave-loot-line"><span class="broke">${b.label}</span><span class="muted">${why}</span></div>`;
-  }).join("");
-  if (!brokeHtml) brokeHtml = `<div class="wave-loot-empty">Nothing was discarded.</div>`;
-
-  body.innerHTML = `
-    <div class="wave-loot-section"><h4>From the fallen</h4>${killHtml}</div>
-    <div class="wave-loot-section"><h4>On the ground</h4>${groundHtml}</div>
-    <div class="wave-loot-section"><h4>Discarded shafts</h4>${brokeHtml}</div>
-  `;
-  panel.classList.add("active");
-  setPathChoice(false);
-  closeRunBag();
+function showWaveLoot() {
+  /* Hall spoils now ride with the junction card after the walk-up. */
 }
 
 function hideWaveLoot() {
@@ -209,6 +228,7 @@ function showAmmoAlert(text, kind = "last") {
 }
 
 let _runBagPending = null;
+let _bagOpenedAt = 0;
 
 function closeRunBag() {
   const panel = document.getElementById("run-bag");
@@ -254,6 +274,7 @@ function openRunBag() {
     panel.classList.add("active");
     panel.setAttribute("aria-hidden", "false");
   }
+  _bagOpenedAt = performance.now();
 }
 
 function populateRunBag() {
@@ -277,6 +298,7 @@ function populateRunBag() {
     if (!id) return `<div class="run-bag-cell"><small>empty</small></div>`;
     const def = getConsumable(id);
     return `<button type="button" class="run-bag-cell" data-bag-item="${i}">
+      <span class="run-bag-icon">${consumableIconSvg(id)}</span>
       <span>${def?.short || def?.name || id}</span>
       <small>use / stash</small>
     </button>`;
@@ -288,7 +310,7 @@ function populateRunBag() {
       const def = getArrowDef(a.type);
       return `<div class="run-bag-cell"><span>${arrowShort(a.type)}</span><small>Lv${a.level || 1}</small></div>`;
     }),
-    ...(stash.items || []).map((it) => `<div class="run-bag-cell"><span>${it.label || it.itemId}</span><small>stashed</small></div>`),
+    ...(stash.items || []).map((it) => `<div class="run-bag-cell">${it.itemId ? `<span class="run-bag-icon">${consumableIconSvg(it.itemId)}</span>` : ""}<span>${it.label || it.itemId}</span><small>stashed</small></div>`),
   ];
   sEl.innerHTML = bits.join("") || `<div class="wave-loot-empty">Nothing stashed this delve</div>`;
 }
@@ -334,7 +356,7 @@ input.onDragEnd = (angle, power, vector) => {
 input.onTap = (x, y) => {
   if (tryChoosePath(x, y)) return;
   if (sim.state.phase === "run" && !sim.junctionPending) {
-    sim.tryDaggerAt(x, y, (wx, dist) => dungeon.project(wx, dist));
+    sim.tryDaggerAt(x, y, (enemy, cx, cy) => dungeon.hitTestEnemy(enemy, cx, cy));
   }
 };
 
@@ -433,6 +455,20 @@ sim.on("quiver_empty", () => {
   showAmmoAlert("Out of arrows", "empty");
 });
 
+let lastNotReadyAt = 0;
+sim.on("arrow_not_ready", () => {
+  const now = performance.now();
+  if (now - lastNotReadyAt < 320) return;
+  lastNotReadyAt = now;
+  showAmmoAlert("Hold — string recovering", "wait");
+  if (nockMeter) {
+    nockMeter.classList.remove("blocked");
+    void nockMeter.offsetWidth;
+    nockMeter.classList.add("blocked");
+  }
+  dungeon.bowJoltUntil = (sim.runTime || 0) + 0.32;
+});
+
 sim.on("consumable_used", (e) => {
   const applied = e.applied || {};
   if (applied.type === "heal") showAmmoAlert(e.label || "Used", "last");
@@ -508,8 +544,8 @@ sim.on("elevator_checkpoint", (e) => {
   saveGame();
 });
 
-sim.on("wave_loot", (e) => {
-  showWaveLoot(e.report);
+sim.on("wave_loot", () => {
+  hideWaveLoot();
 });
 
 sim.on("wave_loot_done", () => {
@@ -545,10 +581,6 @@ if (pathChoice) {
   });
 }
 
-document.getElementById("btn-wave-loot-ok")?.addEventListener("click", () => {
-  sim.acknowledgeWaveLoot();
-});
-
 document.getElementById("btn-run-elevator-continue")?.addEventListener("click", () => {
   closeElevatorCheckpoint();
   sim.continueAtElevator();
@@ -568,7 +600,11 @@ document.querySelectorAll("[data-open-run-bag]").forEach((btn) => {
 });
 document.getElementById("btn-run-bag-close")?.addEventListener("click", () => closeRunBag());
 document.getElementById("run-bag")?.addEventListener("click", (e) => {
-  if (e.target.id === "run-bag") closeRunBag();
+  if (e.target.id === "run-bag") {
+    if (performance.now() - _bagOpenedAt < 400) return;
+    closeRunBag();
+    return;
+  }
   const arrowBtn = e.target.closest("[data-discard-arrow]");
   if (arrowBtn) {
     const i = Number(arrowBtn.dataset.discardArrow);
@@ -683,10 +719,16 @@ function updateUI() {
   if (cooldownRing && cooldownLabel) {
     const cd = sim.state.arrowCooldown || 0;
     const maxCd = sim.state.getArrowCooldown();
-    const pct = maxCd > 0 ? (1 - cd / maxCd) : 1;
-    const circ = 2 * Math.PI * 17;
-    cooldownRing.setAttribute("stroke-dasharray", `${pct * circ} ${circ}`);
-    cooldownLabel.style.opacity = pct >= 1 ? "1" : "0.4";
+    const pct = maxCd > 0 ? Math.max(0, Math.min(1, 1 - cd / maxCd)) : 1;
+    cooldownRing.setAttribute("stroke-dasharray", `${pct * 100} 100`);
+    const ready = pct >= 0.995;
+    cooldownLabel.textContent = ready ? "DRAW" : "";
+    if (nockMeter) {
+      nockMeter.classList.toggle("ready", ready);
+      nockMeter.classList.toggle("charging", !ready);
+      if (ready) nockMeter.classList.remove("blocked");
+      nockMeter.style.visibility = sim.junctionPending ? "hidden" : "visible";
+    }
   }
 
   const runQuiver = document.getElementById("run-quiver");
@@ -705,12 +747,11 @@ function updateUI() {
         runQuiver.innerHTML = queue.map((a, i) => {
           const def = getArrowDef(a.type);
           const lv = a.level || 1;
-          return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="border-color:${def.color}">
-            <div class="rq-mark">${arrowShort(a.type)}</div>
-            <div class="rq-tag">${i === 0 ? "Ready" : "Next"}</div>
-            ${lv > 1 ? `<div class="rq-lv">Lv${lv}</div>` : ""}
+          return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="--shaft:${def.color};border-color:${def.color}" title="${def.name} Lv${lv}">
+            <svg class="rq-icon" viewBox="0 0 16 22" aria-hidden="true"><polygon points="8,0 15,8 10,8 10,22 6,22 6,8 1,8" fill="currentColor"/></svg>
+            <div class="rq-lv">Lv${lv}</div>
           </div>`;
-        }).join("") || `<div class="run-quiver-card"><div class="rq-mark">—</div><div class="rq-tag">Empty</div></div>`;
+        }).join("") || `<div class="run-quiver-card"><div class="rq-lv">Empty</div></div>`;
       }
     } else if (runQuiver.dataset.sig !== "off") {
       runQuiver.dataset.sig = "off";
@@ -748,7 +789,7 @@ function renderRunPouch() {
   root.dataset.sig = sig;
   root.innerHTML = slots.map(({ i, def }) => `<button type="button" class="run-pouch-slot${def ? "" : " empty"}" data-pouch-use="${i}" aria-label="${def ? `Use ${def.name}` : `Pouch slot ${i + 1} empty`}">
       <span class="run-pouch-num">${i + 1}</span>
-      <span class="run-pouch-mark">${def ? (def.short || def.icon || "✚") : "—"}</span>
+      <span class="run-pouch-mark">${def ? consumableIconSvg(def.id) : "—"}</span>
       <span class="run-pouch-tag">${def ? "Use" : "Empty"}</span>
     </button>`).join("");
 }
@@ -810,63 +851,17 @@ function drawMinimap() {
 
 function getJunctionView() {
   if (sim.state.phase !== "run") return null;
-  // Keep fork openings visible while approaching / turning / choosing.
-  if (!sim.junctionPending && !sim.turning && !sim._forwardCommit && !sim._approachingJunction && !sim._approachingElevator) return null;
-  if (!sim.junctionChoices || !sim.junctionChoices.length) {
-    // Choices are rolled at wave start; if missing during approach, still show geometry.
-    if (!sim._approachingJunction && !sim._approachingElevator) return null;
-  }
+  const dist = Math.max(6, (sim.segmentEndZ || 0) - (sim.playerWorldZ || 0));
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
-  if (sim.turning && sim._pendingTurnDir) {
-    return {
-      dist: Math.max(70, sim.segmentEndZ - sim.playerWorldZ),
-      left: sim._pendingTurnDir === "left",
-      right: sim._pendingTurnDir === "right",
-      forward: false,
-      pending: false,
-      choices: sim.junctionChoices,
-      turnU: sim.turnU || 0,
-      turnSign: sim._pendingTurnDir === "left" ? -1 : 1,
-    };
-  }
-  if (sim._forwardCommit) {
-    return {
-      dist: Math.max(55, sim.segmentEndZ - sim.playerWorldZ),
-      left: false,
-      right: false,
-      forward: true,
-      pending: false,
-      choices: sim.junctionChoices,
-    };
-  }
-  if (sim._approachingElevator) {
-    return {
-      dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
-      left: false,
-      right: false,
-      forward: true,
-      pending: false,
-      choices: [],
-      elevator: true,
-    };
-  }
-  if (sim._approachingJunction) {
-    return {
-      dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
-      left: dirs.has("left"),
-      right: dirs.has("right"),
-      forward: dirs.has("forward"),
-      pending: false,
-      choices: sim.junctionChoices || [],
-    };
-  }
+  const elevator = !!sim._approachingElevator || !dirs.size;
   return {
-    dist: Math.max(80, sim.segmentEndZ - sim.playerWorldZ),
+    dist,
     left: dirs.has("left"),
     right: dirs.has("right"),
-    forward: dirs.has("forward"),
-    pending: true,
-    choices: sim.junctionChoices,
+    forward: elevator || dirs.has("forward"),
+    pending: !!sim.junctionPending,
+    choices: sim.junctionChoices || [],
+    elevator,
   };
 }
 
@@ -874,20 +869,29 @@ function getJunctionView() {
 function drawCorridor(ctx) {
   dungeon.resize(canvas.clientWidth, canvas.clientHeight);
   const t = Number.isFinite(sim.runTime) ? sim.runTime : 0;
-  dungeon.yaw = (sim.turnAngle || 0) * Math.PI / 180;
+  dungeon.setPose({
+    x: sim.mapX || 0,
+    z: sim.mapZ || 0,
+    lookYaw: ((sim.heading + (sim.turnAngle || 0)) * Math.PI) / 180,
+    walkYaw: ((sim.heading || 0) * Math.PI) / 180,
+    along: (sim.playerWorldZ || 0) - (sim.segmentStartZ || 0),
+    ahead: (sim.segmentEndZ || 0) - (sim.playerWorldZ || 0),
+    segmentIndex: sim.segmentIndex || 0,
+  });
+  dungeon.combatYaw = sim.turning
+    ? ((sim.heading + (sim.turnTarget || 0)) * Math.PI) / 180
+    : null;
+  const nocked = sim.quiver?.peekQueue?.()?.[0];
+  const nockDef = getArrowDef(nocked ? nocked.type : "wood");
+  dungeon.nockedArrow = nocked ? { type: nockDef.type, color: nockDef.color } : null;
   dungeon.drawHall(ctx, sim.playerWorldZ, t, getJunctionView(), {
-    walking: (sim.movingForward || sim.turning || sim._forwardCommit || sim._approachingJunction || sim._approachingElevator) && !sim.junctionPending,
+    walking: (sim.movingForward || sim._forwardCommit || sim._approachingJunction || sim._approachingElevator) && !sim.junctionPending && !sim.turning,
     turning: !!sim.turning,
     turnU: sim.turnU || 0,
     turnSign: Math.sign(sim.turnTarget || 0) || 1,
   });
 
   ctx.save();
-  if (dungeon.roll) {
-    ctx.translate(dungeon.cssW * 0.5, dungeon.cssH * 0.5);
-    ctx.rotate(dungeon.roll);
-    ctx.translate(-dungeon.cssW * 0.5, -dungeon.cssH * 0.5);
-  }
   const entities = sim.getAllEntities();
   for (let i = entities.length - 1; i >= 0; i--) {
     const ent = entities[i];
@@ -917,7 +921,8 @@ function gameLoop(now) {
     while (accum >= step && guard++ < 8) {
       accum -= step;
       try {
-        sim.tick();
+        const bagOpen = document.getElementById("run-bag")?.classList.contains("active");
+        if (!bagOpen) sim.tick();
       } catch(err) {
         console.error("Tick error:", err);
         sim.running = false;
@@ -929,6 +934,7 @@ function gameLoop(now) {
 
   try {
     engine.draw(dt, (ctx) => {
+      if (sim.state.phase === "hub") return;
       try { drawCorridor(ctx); }
       catch(err) {
         console.error("Draw error:", err);

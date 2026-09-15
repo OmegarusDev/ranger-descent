@@ -87,9 +87,12 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
 const FIGHT_LANE = HALF_CORRIDOR * 0.22;
-const SEGMENT_LENGTH = 800;
-const JUNCTION_STOP = 180;
-const PACK_NEAR = 420;
+const SEGMENT_LENGTH = CONFIG.HALL_LENGTH || 560;
+const JUNCTION_STOP = CONFIG.JUNCTION_STOP || 52;
+/** Hold the ranger short of the T during a fight so the far mouths stay in view. */
+const COMBAT_HOLD = 280;
+/** First pack sits down-hall so a turn already looks into the wave. */
+const PACK_NEAR = 300;
 
 export class CorridorSim {
   constructor() {
@@ -125,7 +128,7 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnFrom = 0;
     this.turnT = 0;
-    this.turnDur = 0.92;
+    this.turnDur = 0.7;
     this.turnU = 0;
     this.turning = false;
     this._forwardCommit = false;
@@ -136,6 +139,7 @@ export class CorridorSim {
     this._pendingElevatorTarget = null;
     this._finalBoss = false;
     this._pendingBurst = null;
+    this._hallPreloaded = false;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -197,6 +201,7 @@ export class CorridorSim {
     this._pendingElevatorTarget = null;
     this._finalBoss = false;
     this._pendingBurst = null;
+    this._hallPreloaded = false;
     this.heading = 0;
     this.mapX = 0;
     this.mapZ = 0;
@@ -257,18 +262,9 @@ export class CorridorSim {
     if (this.turning) {
       this.turnT += this.dt;
       this.turnU = Math.min(1, this.turnT / this.turnDur);
-      // Ease-in-out with a slightly heavier settle into the new hall.
       const u = this.turnU;
       const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
       this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
-      // Walk into the corner while yawing — not a standing spin.
-      const step = CONFIG.PLAYER_SPEED * (1.05 + Math.sin(u * Math.PI) * 0.85);
-      this.playerWorldZ += step;
-      const rad = ((this.heading + this.turnAngle) * Math.PI) / 180;
-      this.mapX += Math.sin(rad) * step;
-      this.mapZ += Math.cos(rad) * step;
-      this.state.playerZ = this.playerWorldZ;
-      this.state.runDistance = this.playerWorldZ;
       if (this.turnU >= 1) {
         this.turnAngle = this.turnTarget;
         this.turning = false;
@@ -287,7 +283,7 @@ export class CorridorSim {
       if (u >= 1) {
         this._forwardCommit = false;
         this._forwardCommitT = 0;
-        this._advanceSegment();
+        this._finishHallEntry();
       }
     } else if (this._approachingJunction || this._approachingElevator) {
       // Sprint to the fork / elevator shaft after a clear — never choose from mid-hall.
@@ -322,13 +318,13 @@ export class CorridorSim {
       this.state.playerZ = this.playerWorldZ;
       this.state.runDistance = this.playerWorldZ;
 
-      if (!this._waveCleared() && this.playerWorldZ > this.segmentEndZ - JUNCTION_STOP) {
-        this.playerWorldZ = this.segmentEndZ - JUNCTION_STOP;
+      if (!this._waveCleared() && this.playerWorldZ > this.segmentEndZ - COMBAT_HOLD) {
+        this.playerWorldZ = this.segmentEndZ - COMBAT_HOLD;
       }
     }
 
     this._tickSpawning();
-    this._tickEnemies();
+    if (!this.turning && !this._forwardCommit) this._tickEnemies();
     if (this.state.phase !== "run") {
       this.running = false;
       return;
@@ -474,9 +470,12 @@ export class CorridorSim {
     if (!choice) return;
     direction = choice.direction;
     this.junctionPending = false;
+    this.pendingWaveReport = null;
     this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
     this.emit("junction_chosen", { direction });
+    this._beginNextHall({ hold: true });
+    this._hallPreloaded = true;
     if (direction === "left" || direction === "right") {
       this.turning = true;
       this._forwardCommit = false;
@@ -506,10 +505,20 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnU = 0;
     this._pendingTurnDir = null;
-    this._advanceSegment();
+    this._finishHallEntry();
   }
 
-  _advanceSegment() {
+  /** Hidden-load the next hall (wave + first pack) before the camera eases into it. */
+  _beginNextHall({ hold = false } = {}) {
+    this._advanceSegment({ hold });
+  }
+
+  _finishHallEntry() {
+    this._hallPreloaded = false;
+    this.movingForward = true;
+  }
+
+  _advanceSegment({ hold = false } = {}) {
     const halls = CONFIG.SECTIONS_PER_FLOOR || 10;
     const floors = CONFIG.FLOORS_PER_ELEVATOR || 10;
     this.sectionIndex++;
@@ -525,7 +534,7 @@ export class CorridorSim {
     this.segmentIndex++;
     this.segmentStartZ = this.playerWorldZ;
     this.segmentEndZ = this.playerWorldZ + SEGMENT_LENGTH;
-    this.movingForward = true;
+    this.movingForward = !hold;
     this._checkNotebookDiscovery();
     this._startWave();
   }
@@ -554,17 +563,25 @@ export class CorridorSim {
       this.waveGroups = this._openingWave();
       this._waveCoinBonus = 0;
     }
-    this.groupGap = 0.2;
+    this.groupGap = 0;
     this.waveArrowsFired = 0;
     this.waveSpentArrows = [];
     this.waveLootLog = [];
     this.quiver.shuffleForWave();
     this._rollJunction();
+    this._flushFirstPack();
     this.emit("wave_start", {
       wave: this.waveIndex,
       floor: this.floorIndex + 1,
       section: this.sectionIndex + 1,
     });
+  }
+
+  _flushFirstPack() {
+    if (this.waveGroups.length > 0 && this.enemies.length === 0) {
+      this._spawnGroup(this.waveGroups.shift());
+      this.groupGap = this._groupGapSeconds();
+    }
   }
 
   _rosterForFloor() {
@@ -667,6 +684,7 @@ export class CorridorSim {
 
   _tickSpawning() {
     if (!this.waveActive) return;
+    if (this.turning || this._forwardCommit) return;
 
     if (this.enemies.length === 0 && this.waveGroups.length > 0) {
       this.groupGap -= this.dt;
@@ -1253,19 +1271,24 @@ export class CorridorSim {
     }
     this.pendingWaveReport = this._collectWaveReport(this._buildWaveReport(recovery));
     this._afterLootAction = nextAction;
-    this._lootDelayT = 0.5;
+    this._lootDelayT = -1;
     this.lootPending = false;
     this.movingForward = false;
     this.emit("wave_end", { wave: this.waveIndex });
+    this.emit("wave_loot", { report: this.pendingWaveReport });
+    const next = this._afterLootAction;
+    this._afterLootAction = null;
+    if (next === "elevator") this._beginApproachToElevator();
+    else if (next === "victory") this.state.victory();
+    else this._beginApproachToJunction();
   }
 
-  /** Player closed the hall spoils panel — collect picks and resume approach. */
+  /** Kept for tests / leftover UI — loot is already collected when the hall clears. */
   acknowledgeWaveLoot() {
     if (!this.lootPending && this._lootDelayT < 0) return;
     this.lootPending = false;
     this._lootDelayT = -1;
     const report = this.pendingWaveReport;
-    this.pendingWaveReport = null;
     this.emit("wave_loot_done", { report });
     const next = this._afterLootAction;
     this._afterLootAction = null;
@@ -1644,43 +1667,43 @@ export class CorridorSim {
   // ─── Arrow Firing ────────────────────────────────────────
 
   /**
-   * Tap a foe that is already in your face (and preferably off to the side)
-   * to stab with the equipped dagger. Very short range only.
+   * Tap a foe that is already in your face to stab with the equipped dagger.
+   * Close-range only — a click, not a slingshot pull.
    * @param {number} cssX
    * @param {number} cssY
-   * @param {(worldX:number, dist:number) => {x:number,y:number,s?:number}} projectFn
+   * @param {(enemy: object, cssX: number, cssY: number) => boolean} hitFn
    */
-  tryDaggerAt(cssX, cssY, projectFn) {
+  tryDaggerAt(cssX, cssY, hitFn) {
     if (this.lootPending || this._lootDelayT > 0) return false;
-    if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return false;
+    if (this.junctionPending || this.turning || this._approachingElevator) return false;
     if (this.state.phase !== "run") return false;
     if (!this.state.equipped?.dagger) return false;
     if ((this.state.daggerCooldown || 0) > 0) return false;
-    if (typeof projectFn !== "function") return false;
+    if (typeof hitFn !== "function") return false;
 
-    const MELEE_DIST = 44;
-    const MELEE_LAT = 58;
-    let best = null;
-    let bestScore = Infinity;
+    const MELEE_DIST = 88;
+    const MELEE_LAT = 70;
+    let bestHit = null;
+    let bestHitScore = Infinity;
+    let bestNear = null;
+    let bestNearDist = Infinity;
 
     for (const e of this.enemies) {
       const dist = e.worldZ - this.playerWorldZ;
-      if (dist < 6 || dist > MELEE_DIST) continue;
+      if (dist < 2 || dist > MELEE_DIST) continue;
       const dx = Math.abs(e.x - this.playerWorldX);
       if (dx > MELEE_LAT) continue;
-      // Prefer side targets; dead-center only if extremely close.
-      if (dx < 10 && dist > 28) continue;
-
-      const p = projectFn(e.x, dist);
-      if (!p) continue;
-      const sd = Math.hypot((p.x || 0) - cssX, (p.y || 0) - cssY);
-      const hitR = Math.max(36, 26 * (p.s || 1));
-      if (sd > hitR) continue;
-      if (sd < bestScore) {
-        bestScore = sd;
-        best = e;
+      e.dist = dist;
+      if (dist < bestNearDist) {
+        bestNearDist = dist;
+        bestNear = e;
+      }
+      if (hitFn(e, cssX, cssY) && dist < bestHitScore) {
+        bestHitScore = dist;
+        bestHit = e;
       }
     }
+    const best = bestHit || (bestNear && bestNearDist <= 42 ? bestNear : null);
     if (!best) return false;
 
     const raw = this.state.getDaggerDamage();
@@ -1711,7 +1734,10 @@ export class CorridorSim {
     if (this.lootPending || this._lootDelayT > 0) return null;
     if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return null;
     if (this.state.phase !== "run") return null;
-    if (this.state.arrowCooldown > 0) return null;
+    if (this.state.arrowCooldown > 0) {
+      this.emit("arrow_not_ready", { remaining: this.state.arrowCooldown });
+      return null;
+    }
     const arrow = this.quiver.fireArrow();
     if (!arrow) {
       this.emit("quiver_empty");

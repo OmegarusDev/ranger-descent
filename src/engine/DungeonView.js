@@ -1,13 +1,16 @@
 /**
- * First-person dungeon hall — vector pinhole, full canvas resolution.
- * Warm torchlit stone. No pixel buffer.
+ * First-person dungeon hall — Wolfenstein-style raycaster (2.5D).
+ * Combat sprites, bow, and path overlay sit on top of the column renderer.
  */
 import { CONFIG } from "../data/config.js";
+import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
+import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=126";
 
 const NEAR = 6;
-const FAR = 640;
-const OPEN_LEN = 240;
+const FAR = 760;
+const OPEN_LEN = 280;
 const TORCH_EVERY = 160;
+const STUB_LEN = 160;
 const TILE_Z = CONFIG.CELL_SIZE || 40;
 
 const PAL = {
@@ -34,15 +37,24 @@ export class DungeonView {
     this.playerZ = 0;
     this.time = 0;
     this.yaw = 0;
+    this.lookYaw = 0;
+    this.walkYaw = 0;
+    this.camX = 0;
+    this.camZ = 0;
+    this.hallLen = CONFIG.HALL_LENGTH || 560;
     this.bob = 0;
     this.sway = 0;
     this.roll = 0;
+    this.combatYaw = null;
     this.junction = null;
+    this._worldHalls = [];
+    this._forks = [];
     this.hits = [];
     this.ctx = null;
     this.cssW = 400;
     this.cssH = 720;
     this._setupProjection();
+    updateRayBasis(this);
   }
 
   resize(cssW, cssH) {
@@ -61,24 +73,111 @@ export class DungeonView {
     this.focal = Math.max(90, (w * 0.34) * frameDist / this.half);
   }
 
+  setPose({ x = 0, z = 0, lookYaw = 0, walkYaw = 0, along = 0, ahead = 0, segmentIndex = 0 } = {}) {
+    this.camX = x;
+    this.camZ = z;
+    this.lookYaw = lookYaw;
+    this.walkYaw = walkYaw;
+    this.yaw = lookYaw;
+    this.along = along;
+    this.ahead = ahead || this.hallLen;
+    this.segmentIndex = segmentIndex;
+    updateRayBasis(this);
+  }
+
   /**
-   * CSS-pixel pinhole. Same contract as CorridorCamera.project.
+   * Corridor-local (lateral, forward) → world → pinhole.
+   * Combat still speaks this language; turning uses lookYaw separately.
    */
   project(worldX, dist, worldY = 18) {
-    const yaw = this.yaw || 0;
-    const camX = worldX * Math.cos(yaw) - dist * Math.sin(yaw);
-    const camZ = worldX * Math.sin(yaw) + dist * Math.cos(yaw);
-    const d = Math.max(NEAR * 0.6, camZ);
-    const s = this.focal / d;
+    const walk = this.combatYaw != null ? this.combatYaw : (this.walkYaw || 0);
+    const sin = Math.sin(walk);
+    const cos = Math.cos(walk);
+    const wx = this.camX + worldX * cos + dist * sin;
+    const wz = this.camZ - worldX * sin + dist * cos;
+    return this.projectWorld(wx, wz, worldY);
+  }
+
+  /** World XZ + height Y, matching the raycaster dir/plane camera. */
+  projectWorld(wx, wz, worldY = 18) {
+    if (this._dirX == null) updateRayBasis(this);
+    const dx = wx - this.camX;
+    const dz = wz - this.camZ;
+    const dirX = this._dirX;
+    const dirZ = this._dirZ;
+    const planeX = this._planeX;
+    const planeZ = this._planeZ;
+    const invDet = 1 / (planeX * dirZ - dirX * planeZ || 1e-8);
+    const transformX = invDet * (dirZ * dx - dirX * dz);
+    const transformY = invDet * (-planeZ * dx + planeX * dz);
+    const behind = transformY < NEAR * 0.4;
+    const d = Math.max(NEAR * 0.6, transformY);
+    const perp = d / this.cell;
+    const wallH = this.cssH / Math.max(0.08, perp);
+    const s = wallH / this.ceilH;
+    const horizon = this.cy + (this.bob || 0);
+    const x = this.cssW * 0.5 * (1 + transformX / d) + (this.sway || 0);
+    const floorY = horizon + wallH * 0.5;
     return {
-      x: this.cx + this.sway + camX * s,
-      y: this.cy + this.bob - (worldY - this.eyeH) * s,
-      floorY: this.cy + this.bob + this.eyeH * s,
-      ceilY: this.cy + this.bob + (this.eyeH - this.ceilH) * s,
+      x,
+      y: floorY - worldY * s,
+      floorY,
+      ceilY: horizon - wallH * 0.5,
       s,
       dist: d,
-      behind: camZ < NEAR * 0.4,
+      behind,
+      occluded: !behind && rayOccluded(this, x, d),
       v: 1 - Math.min(1, d / FAR),
+    };
+  }
+
+  _toCam(wx, wy, wz) {
+    const sin = Math.sin(this.lookYaw || 0);
+    const cos = Math.cos(this.lookYaw || 0);
+    const dx = wx - this.camX;
+    const dz = wz - this.camZ;
+    return {
+      lat: dx * cos - dz * sin,
+      fwd: dx * sin + dz * cos,
+      y: wy,
+    };
+  }
+
+  _lerpCam(a, b, t) {
+    return {
+      lat: a.lat + (b.lat - a.lat) * t,
+      fwd: a.fwd + (b.fwd - a.fwd) * t,
+      y: a.y + (b.y - a.y) * t,
+    };
+  }
+
+  _clipNear(poly, near = NEAR) {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      const ain = a.fwd >= near;
+      const bin = b.fwd >= near;
+      if (ain && bin) {
+        out.push(b);
+      } else if (ain && !bin) {
+        out.push(this._lerpCam(a, b, (near - a.fwd) / ((b.fwd - a.fwd) || 1e-6)));
+      } else if (!ain && bin) {
+        out.push(this._lerpCam(a, b, (near - a.fwd) / ((b.fwd - a.fwd) || 1e-6)));
+        out.push(b);
+      }
+    }
+    return out;
+  }
+
+  _projectCam(pt) {
+    const d = Math.max(NEAR, pt.fwd);
+    const s = this.focal / d;
+    return {
+      x: this.cx + this.sway + pt.lat * s,
+      y: this.cy + this.bob - (pt.y - this.eyeH) * s,
+      s,
+      dist: d,
     };
   }
 
@@ -87,12 +186,17 @@ export class DungeonView {
     return t * t * 0.82;
   }
 
-  _torchWarm(dist) {
-    const z = this.playerZ + dist;
-    const n = Math.round(z / TORCH_EVERY) * TORCH_EVERY;
-    const d = Math.abs(z - n);
-    const flicker = 0.7 + Math.sin(this.time * 6.8 + n * 0.02) * 0.2;
-    return Math.max(0, 1 - d / 88) * flicker;
+  _torchWarm(dist, worldZ = null) {
+    const z = worldZ != null ? worldZ : this.playerZ + dist;
+    const period = TORCH_EVERY;
+    const n0 = Math.floor(z / period);
+    let acc = 0;
+    for (let n = n0 - 1; n <= n0 + 1; n++) {
+      const d = Math.abs(z - n * period);
+      acc += Math.max(0, 1 - d / 88);
+    }
+    const flicker = 0.7 + Math.sin(this.time * 6.8 + z * 0.02) * 0.2;
+    return Math.min(1, acc) * flicker;
   }
 
   _hash(n) {
@@ -112,6 +216,13 @@ export class DungeonView {
     const xN = near.xl + (near.xr - near.xl) * u;
     const xF = far.xl + (far.xr - far.xl) * u;
     return [xN + (xF - xN) * v, near.yf + (far.yf - near.yf) * v];
+  }
+
+  _stripTile(near, far) {
+    const z = far && far.worldZ != null
+      ? far.worldZ
+      : (near.worldZ != null ? near.worldZ : this.playerZ + near.dist);
+    return Math.floor(z / TILE_Z);
   }
 
   _frame(dist) {
@@ -142,55 +253,427 @@ export class DungeonView {
     return slices;
   }
 
+  _dir(deg) {
+    const r = (deg * Math.PI) / 180;
+    return { x: Math.sin(r), z: Math.cos(r) };
+  }
+
+  _makeHall(x0, z0, x1, z1, tags = {}) {
+    const dx = x1 - x0;
+    const dz = z1 - z0;
+    if (Math.abs(dx) >= Math.abs(dz)) {
+      return {
+        axis: "x",
+        c: (z0 + z1) * 0.5,
+        a: Math.min(x0, x1),
+        b: Math.max(x0, x1),
+        ...tags,
+      };
+    }
+    return {
+      axis: "z",
+      c: (x0 + x1) * 0.5,
+      a: Math.min(z0, z1),
+      b: Math.max(z0, z1),
+      ...tags,
+    };
+  }
+
+  _pushHall(list, x0, z0, x1, z1, tags) {
+    const len = Math.hypot(x1 - x0, z1 - z0);
+    if (len < 12) return;
+    list.push(this._makeHall(x0, z0, x1, z1, tags));
+  }
+
+  _layoutHalls(j, motion) {
+    const hallLen = this.hallLen;
+    const walkDeg = ((this.walkYaw || 0) * 180) / Math.PI;
+    const fwd = this._dir(walkDeg);
+    const left = this._dir(walkDeg - 90);
+    const right = this._dir(walkDeg + 90);
+    const back = { x: -fwd.x, z: -fwd.z };
+    const turning = !!(motion && motion.turning);
+    const atFork = turning || !!(j && j.pending && (j.dist == null || j.dist < 88));
+    const along = atFork ? 0 : Math.max(0, this.along || 0);
+    const ahead = atFork ? 8 : Math.max(24, (j && j.dist) || this.ahead || hallLen);
+    const nearX = this.camX - fwd.x * along;
+    const nearZ = this.camZ - fwd.z * along;
+    const farX = this.camX + fwd.x * ahead;
+    const farZ = this.camZ + fwd.z * ahead;
+    const halls = [];
+    // Keep carved tunnel behind the camera so the near cap never sits in view.
+    const backPad = atFork ? 0 : this.cell * 3;
+    this._pushHall(
+      halls,
+      nearX - fwd.x * backPad,
+      nearZ - fwd.z * backPad,
+      farX,
+      farZ,
+      { current: true },
+    );
+
+    const addFork = (ox, oz, opts) => {
+      this._forks.push({
+        x: ox,
+        z: oz,
+        left: !!opts.left,
+        right: !!opts.right,
+        forward: !!opts.forward,
+        back: !!opts.back,
+      });
+      const branches = [
+        { on: opts.forward, dir: fwd, deep: true },
+        { on: opts.left, dir: left, deep: true },
+        { on: opts.right, dir: right, deep: true },
+        { on: opts.back, dir: back, deep: false },
+      ];
+      for (const b of branches) {
+        if (!b.on) continue;
+        // Overlap the main hall so the mouth is a real opening, not a one-cell wall.
+        const start = b.deep ? -this.half * 0.45 : 0;
+        const len = b.deep ? hallLen : STUB_LEN;
+        const x0 = ox + b.dir.x * start;
+        const z0 = oz + b.dir.z * start;
+        const x1 = ox + b.dir.x * len;
+        const z1 = oz + b.dir.z * len;
+        this._pushHall(halls, x0, z0, x1, z1, { branch: true });
+      }
+    };
+
+    this._forks = [];
+    const shaft = !!(j && j.elevator);
+    const openSide = !shaft;
+    if (atFork) {
+      addFork(this.camX, this.camZ, {
+        forward: true,
+        left: openSide,
+        right: openSide,
+        back: true,
+      });
+    } else {
+      addFork(farX, farZ, {
+        forward: true,
+        left: openSide,
+        right: openSide,
+        back: false,
+      });
+    }
+
+    // Wide plus at the T so forward-facing FOV rays actually enter the side halls.
+    if (openSide) {
+      const fx = atFork ? this.camX : farX;
+      const fz = atFork ? this.camZ : farZ;
+      const span = this.half * 2.2;
+      const step = this.half * 0.9;
+      this._pushHall(halls, fx - span, fz - step, fx + span, fz - step, { branch: true });
+      this._pushHall(halls, fx - span, fz, fx + span, fz, { branch: true });
+      this._pushHall(halls, fx - span, fz + step, fx + span, fz + step, { branch: true });
+    }
+
+    this._fork = { x: farX, z: farZ, r: this.half + 10 };
+    this._worldHalls = halls;
+    return halls;
+  }
+
+  _crossSection(hall, s) {
+    const h = this.half;
+    if (hall.axis === "z") {
+      return this._frameWorld(hall.c - h, s, hall.c + h, s, s);
+    }
+    return this._frameWorld(s, hall.c + h, s, hall.c - h, s);
+  }
+
+  _frameWorld(x0, z0, x1, z1, along) {
+    const L = this.projectWorld(x0, z0, 0);
+    const R = this.projectWorld(x1, z1, 0);
+    const TL = this.projectWorld(x0, z0, this.ceilH);
+    const dist = (L.dist + R.dist) * 0.5;
+    return {
+      xl: L.x, xr: R.x, yf: L.floorY, yc: TL.y, dist, s: L.s,
+      behind: L.behind || R.behind,
+      worldZ: along,
+      wx0: x0, wz0: z0, wx1: x1, wz1: z1,
+    };
+  }
+
+  _pointInHall(hall, x, z) {
+    const pad = 2;
+    if (hall.axis === "z") {
+      return Math.abs(x - hall.c) <= this.half + pad && z >= hall.a - pad && z <= hall.b + pad;
+    }
+    return Math.abs(z - hall.c) <= this.half + pad && x >= hall.a - pad && x <= hall.b + pad;
+  }
+
+  _walkLeftDir() {
+    return this._dir(((this.walkYaw || 0) * 180) / Math.PI - 90);
+  }
+
+  _wallMatchesDir(hall, wall, dir) {
+    if (hall.axis === "z") {
+      return wall === "lo" ? dir.x < -0.5 : dir.x > 0.5;
+    }
+    return wall === "lo" ? dir.z < -0.5 : dir.z > 0.5;
+  }
+
+  _sideIsOpen(hall, wall, alongMid) {
+    if (!hall.current) return false;
+    const mouth = this.half * 0.52;
+    const left = this._walkLeftDir();
+    const right = { x: -left.x, z: -left.z };
+    for (const f of this._forks || []) {
+      const alongF = hall.axis === "z" ? f.z : f.x;
+      if (Math.abs(alongMid - alongF) > mouth) continue;
+      const onHall = hall.axis === "z"
+        ? Math.abs(f.x - hall.c) < 12
+        : Math.abs(f.z - hall.c) < 12;
+      if (!onHall) continue;
+      if (f.left && this._wallMatchesDir(hall, wall, left)) return true;
+      if (f.right && this._wallMatchesDir(hall, wall, right)) return true;
+    }
+    return false;
+  }
+
+  _emitFace(faces, pts, fill, stroke, clipNear = NEAR) {
+    const cam = pts.map((p) => this._toCam(p.x, p.y, p.z));
+    let avg = 0;
+    let maxFwd = -Infinity;
+    for (const c of cam) {
+      avg += c.fwd;
+      if (c.fwd > maxFwd) maxFwd = c.fwd;
+    }
+    avg /= cam.length;
+    if (maxFwd < clipNear * 0.5) return;
+    if (avg > FAR + 60) return;
+    faces.push({ cam, avg, fill, stroke, clipNear });
+  }
+
+  _drawFaces(ctx, faces) {
+    faces.sort((a, b) => b.avg - a.avg);
+    for (const face of faces) {
+      const clipped = this._clipNear(face.cam, face.clipNear || NEAR);
+      if (clipped.length < 3) continue;
+      const p0 = this._projectCam(clipped[0]);
+      if (!Number.isFinite(p0.x) || !Number.isFinite(p0.y)) continue;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      let ok = true;
+      for (let i = 1; i < clipped.length; i++) {
+        const p = this._projectCam(clipped[i]);
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+          ok = false;
+          break;
+        }
+        ctx.lineTo(p.x, p.y);
+      }
+      if (!ok) continue;
+      ctx.closePath();
+      ctx.fillStyle = face.fill;
+      ctx.fill();
+      if (face.stroke) {
+        ctx.strokeStyle = face.stroke;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+  }
+
+  _faceStyle(avgFwd, along, litMul, floor, warmMul = 0.55) {
+    const fog = this._fogK(Math.max(8, avgFwd));
+    const warm = this._torchWarm(avgFwd, along);
+    const lit = 0.42 + 0.5 * (1 - Math.min(1, avgFwd / FAR)) + warm * 0.18;
+    const fill = this._stoneFill(lit * litMul, fog, floor, warm * warmMul);
+    const stroke = floor
+      ? `rgba(16, 10, 6, ${0.42 * (1 - fog)})`
+      : `rgba(18, 12, 8, ${0.38 * (1 - fog)})`;
+    return { fill, stroke, fog, warm, lit };
+  }
+
+  _emitHallFaces(buckets, hall) {
+    const h = this.half;
+    const tile = TILE_Z;
+    const cols = 5;
+    const courses = 7;
+    const a0 = Math.floor(hall.a / tile) * tile;
+    for (let s = a0; s < hall.b - 0.5; s += tile) {
+      const s0 = Math.max(hall.a, s);
+      const s1 = Math.min(hall.b, s + tile);
+      if (s1 - s0 < 1.5) continue;
+      const mid = (s0 + s1) * 0.5;
+      const tileId = Math.floor(s / tile);
+
+      for (let c = 0; c < cols; c++) {
+        const u0 = (c / cols) * 2 * h - h;
+        const u1 = ((c + 1) / cols) * 2 * h - h;
+        const pts = hall.axis === "z"
+          ? [
+            { x: hall.c + u0, y: 0, z: s0 },
+            { x: hall.c + u1, y: 0, z: s0 },
+            { x: hall.c + u1, y: 0, z: s1 },
+            { x: hall.c + u0, y: 0, z: s1 },
+          ]
+          : [
+            { x: s0, y: 0, z: hall.c + u0 },
+            { x: s1, y: 0, z: hall.c + u0 },
+            { x: s1, y: 0, z: hall.c + u1 },
+            { x: s0, y: 0, z: hall.c + u1 },
+          ];
+        const cam = pts.map((p) => this._toCam(p.x, p.y, p.z));
+        const avg = cam.reduce((n, p) => n + p.fwd, 0) / 4;
+        const shade = 0.62 + this._hash(c * 11 + tileId * 19) * 0.4;
+        const st = this._faceStyle(avg, mid, shade, true, 0.5);
+        this._emitFace(buckets.floors, pts, st.fill, st.stroke, NEAR);
+      }
+
+      const ceilPts = hall.axis === "z"
+        ? [
+          { x: hall.c - h, y: this.ceilH, z: s0 },
+          { x: hall.c + h, y: this.ceilH, z: s0 },
+          { x: hall.c + h, y: this.ceilH, z: s1 },
+          { x: hall.c - h, y: this.ceilH, z: s1 },
+        ]
+        : [
+          { x: s0, y: this.ceilH, z: hall.c - h },
+          { x: s1, y: this.ceilH, z: hall.c - h },
+          { x: s1, y: this.ceilH, z: hall.c + h },
+          { x: s0, y: this.ceilH, z: hall.c + h },
+        ];
+      const ceilCam = ceilPts.map((p) => this._toCam(p.x, p.y, p.z));
+      const ceilAvg = ceilCam.reduce((n, p) => n + p.fwd, 0) / 4;
+      const ceilSt = this._faceStyle(ceilAvg, mid, 0.48, false, 0.25);
+      this._emitFace(buckets.ceils, ceilPts, ceilSt.fill, null, 18);
+
+      for (const wall of ["lo", "hi"]) {
+        if (this._sideIsOpen(hall, wall, mid)) continue;
+        const sign = wall === "lo" ? -1 : 1;
+        for (let course = 0; course < courses; course++) {
+          const y0 = (course / courses) * this.ceilH;
+          const y1 = ((course + 1) / courses) * this.ceilH;
+          let pts;
+          if (hall.axis === "z") {
+            const x = hall.c + sign * h;
+            pts = [
+              { x, y: y0, z: s0 },
+              { x, y: y1, z: s0 },
+              { x, y: y1, z: s1 },
+              { x, y: y0, z: s1 },
+            ];
+          } else {
+            const z = hall.c + sign * h;
+            pts = [
+              { x: s0, y: y0, z },
+              { x: s0, y: y1, z },
+              { x: s1, y: y1, z },
+              { x: s1, y: y0, z },
+            ];
+          }
+          const cam = pts.map((p) => this._toCam(p.x, p.y, p.z));
+          const avg = cam.reduce((n, p) => n + p.fwd, 0) / 4;
+          const sideLit = sign < 0 ? 0.86 : 1.08;
+          const shade = sideLit * (0.74 + this._hash(course * 17 + tileId * 23 + sign) * 0.4);
+          const st = this._faceStyle(avg, mid, shade, false, 0.65);
+          this._emitFace(buckets.walls, pts, st.fill, st.stroke, 34);
+        }
+      }
+    }
+  }
+
+  _paintWorldHalls(ctx) {
+    const step = TILE_Z;
+    const strips = [];
+    for (const hall of this._worldHalls || []) {
+      const samples = this._hallSamples(hall);
+      const frames = samples.map((s) => this._crossSection(hall, s));
+      for (let i = 0; i < frames.length - 1; i++) {
+        const near = frames[i];
+        const far = frames[i + 1];
+        if (near.behind || far.behind) continue;
+        if (near.dist >= FAR && far.dist >= FAR) continue;
+        if (Math.abs(far.worldZ - near.worldZ) > step * 1.51) continue;
+        if (!Number.isFinite(near.xl) || !Number.isFinite(far.xl)) continue;
+        strips.push({ hall, near, far });
+      }
+    }
+    strips.sort((a, b) => (b.near.dist + b.far.dist) - (a.near.dist + a.far.dist));
+
+    for (const { hall, near, far } of strips) {
+      const fog = this._fogK(near.dist);
+      const warm = this._torchWarm(near.dist, far.worldZ);
+      const lit = 0.4 + 0.5 * (1 - near.dist / FAR) + warm * 0.18;
+      const mid = (near.worldZ + far.worldZ) * 0.5;
+
+      this._fillQuad(ctx, [
+        [near.xl, near.yf], [near.xr, near.yf], [far.xr, far.yf], [far.xl, far.yf],
+      ], this._stoneFill(lit * 0.82, fog, true, warm * 0.55));
+      this._strokeFlagstones(ctx, near, far, fog, warm);
+
+      this._fillQuad(ctx, [
+        [near.xl, near.yc], [near.xr, near.yc], [far.xr, far.yc], [far.xl, far.yc],
+      ], this._stoneFill(lit * 0.48, fog, false, warm * 0.25));
+      this._strokeBeams(ctx, near, far, fog, warm);
+
+      if (!this._sideIsOpen(hall, "lo", mid)) {
+        this._paintWall(ctx, near, far, -1, lit, fog, warm);
+        this._paintMoss(ctx, near, far, -1, fog);
+      }
+      if (!this._sideIsOpen(hall, "hi", mid)) {
+        this._paintWall(ctx, near, far, 1, lit, fog, warm);
+        this._paintMoss(ctx, near, far, 1, fog);
+      }
+    }
+  }
+
+  _hallSamples(hall) {
+    const step = TILE_Z;
+    const samples = [];
+    const push = (s) => {
+      const v = Math.max(hall.a, Math.min(hall.b, s));
+      const prev = samples[samples.length - 1];
+      if (prev == null || Math.abs(prev - v) > 0.8) samples.push(v);
+    };
+    const cam = hall.axis === "z" ? this.camZ : this.camX;
+    const yaw = this.lookYaw || 0;
+    const alongFwd = hall.axis === "z" ? Math.cos(yaw) : Math.sin(yaw);
+    const dir = alongFwd >= 0 ? 1 : -1;
+    const eye = Math.max(hall.a, Math.min(hall.b, cam + dir * Math.max(28, this._feetDist())));
+    const farEnd = dir > 0 ? hall.b : hall.a;
+    push(eye);
+    let s = dir > 0
+      ? Math.ceil((eye + 1) / step) * step
+      : Math.floor((eye - 1) / step) * step;
+    while (dir > 0 ? s < farEnd - 0.8 : s > farEnd + 0.8) {
+      push(s);
+      s += dir * step;
+    }
+    push(farEnd);
+    return samples;
+  }
+
   drawHall(ctx, playerZ, time, junction = null, motion = null) {
     this.ctx = ctx;
     this.playerZ = playerZ;
     this.time = time;
     const walking = !!(motion && motion.walking);
     const turning = !!(motion && motion.turning);
-    const turnU = motion && motion.turnU ? motion.turnU : 0;
-    this.bob = Math.sin(playerZ * 0.11) * (walking ? 4.4 : 1.1) + Math.sin(time * 1.35) * 0.55;
-    this.sway = Math.sin(playerZ * 0.055) * (walking ? 2.4 : 0.4)
-      + (turning ? Math.sin(turnU * Math.PI) * 7.2 * (motion.turnSign || 1) : 0);
-    // Bank into the turn, peaking mid-corner, then settle.
-    this.roll = turning
-      ? Math.sin(turnU * Math.PI) * 0.118 * (motion.turnSign || 1)
-      : 0;
-    // Pull the fork closer as you walk into it so the opening fills the frame.
-    let j = junction && junction.dist < FAR && junction.dist > 8 ? junction : null;
+    this.bob = Math.sin(playerZ * 0.11) * (walking ? 3.2 : 1.1) + Math.sin(time * 1.35) * 0.55;
+    this.sway = Math.sin(playerZ * 0.055) * (walking ? 1.6 : 0.4);
+    this.roll = 0;
+    let j = junction || null;
     if (j && turning) {
-      const pull = 1 - Math.min(1, turnU * 1.35);
-      j = {
-        ...j,
-        dist: Math.max(22, j.dist * pull),
-        pending: false,
-        turnSign: motion.turnSign || 1,
-        turnU,
-      };
+      j = { ...j, pending: false, turnSign: motion.turnSign || 1, turnU: motion.turnU || 0 };
     }
     this.junction = j;
     this.hits = [];
+    this._layoutHalls(j, motion);
 
     ctx.save();
-    if (this.roll) {
-      ctx.translate(this.cssW * 0.5, this.cssH * 0.5);
-      ctx.rotate(this.roll);
-      ctx.translate(-this.cssW * 0.5, -this.cssH * 0.5);
-    }
-
-    this._paintBackdrop(ctx);
-    this._paintUnderfoot(ctx);
-    this._paintSlices(ctx);
-    this._paintRibs(ctx);
-    this._paintTorchPools(ctx);
-    this._paintEndDark(ctx);
+    ctx.fillStyle = "#100c08";
+    ctx.fillRect(0, 0, this.cssW, this.cssH);
+    paintRaycast(this, ctx);
     this._paintDecor(ctx);
     this._paintTorches(ctx);
-    this._paintOpeningDepth(ctx);
     this._drawScreenCobwebs(ctx);
     this._paintVignette(ctx);
     if (this.junction) this._drawOpenings();
-
     ctx.restore();
   }
 
@@ -240,59 +723,22 @@ export class DungeonView {
     }
   }
 
-  /** Close the gap between the lens and the first stone ring — kills the void under the bow. */
+  /** Near-field fill so the lens never shows the backdrop under the bow. */
   _paintUnderfoot(ctx) {
+    const saved = this.walkYaw;
+    this.walkYaw = this.lookYaw;
     const feet = this._frame(this._feetDist());
     const floorCol = this._stoneFill(1.02, 0, true);
-    const wallL = this._stoneFill(0.92, 0, false);
-    const wallR = this._stoneFill(1.08, 0, false);
-    const bottom = this.cssH + 28;
-    const left = -80;
-    const right = this.cssW + 80;
-
+    const floorTop = Math.min(this.cssH * 0.52, Math.max(this.cy + 24, feet.yf));
+    ctx.fillStyle = floorCol;
+    ctx.fillRect(-20, floorTop, this.cssW + 40, this.cssH);
     this._fillQuad(ctx, [
-      [feet.xl, feet.yf], [feet.xr, feet.yf], [right, bottom], [left, bottom],
-    ], floorCol);
-
+      [feet.xl, feet.yc], [feet.xl, feet.yf], [-60, this.cssH + 24], [-60, -20],
+    ], this._stoneFill(0.92, 0, false));
     this._fillQuad(ctx, [
-      [feet.xl, feet.yc], [feet.xl, feet.yf], [left, bottom], [left, -24],
-    ], wallL);
-    this._fillQuad(ctx, [
-      [feet.xr, feet.yc], [right, -24], [right, bottom], [feet.xr, feet.yf],
-    ], wallR);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(feet.xl, feet.yf);
-    ctx.lineTo(feet.xr, feet.yf);
-    ctx.lineTo(right, bottom);
-    ctx.lineTo(left, bottom);
-    ctx.closePath();
-    ctx.clip();
-    ctx.strokeStyle = "rgba(16, 10, 6, 0.45)";
-    ctx.lineWidth = 1.4;
-    const lanes = 5;
-    for (let k = 1; k < lanes; k++) {
-      const t = k / lanes;
-      const x0 = feet.xl + (feet.xr - feet.xl) * t;
-      const x1 = left + (right - left) * t;
-      ctx.beginPath();
-      ctx.moveTo(x0, feet.yf);
-      ctx.lineTo(x1, bottom);
-      ctx.stroke();
-    }
-    const phase = ((this.playerZ % TILE_Z) + TILE_Z) % TILE_Z;
-    for (let n = 0; n < 3; n++) {
-      const next = TILE_Z - phase + n * TILE_Z * 0.35;
-      if (next > 2 && next < 90) {
-        const line = this._frame(Math.max(this._feetDist() + 0.5, next));
-        ctx.beginPath();
-        ctx.moveTo(line.xl, line.yf);
-        ctx.lineTo(line.xr, line.yf);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
+      [feet.xr, feet.yc], [this.cssW + 60, -20], [this.cssW + 60, this.cssH + 24], [feet.xr, feet.yf],
+    ], this._stoneFill(1.08, 0, false));
+    this.walkYaw = saved;
   }
 
   _stoneFill(lit, fog, floor, warm = 0) {
@@ -337,10 +783,9 @@ export class DungeonView {
     ctx.closePath();
     ctx.clip();
 
-    const span = Math.max(8, (far.dist || 0) - (near.dist || 0));
     const courses = 7;
-    const bricks = span > TILE_Z * 0.85 ? 3 : 2;
-    const tile = ((near.worldZ != null ? near.worldZ : this.playerZ + near.dist) / TILE_Z) | 0;
+    const bricks = 2;
+    const tile = this._stripTile(near, far);
 
     for (let c = 0; c < courses; c++) {
       const t0 = c / courses;
@@ -403,7 +848,7 @@ export class DungeonView {
     ctx.closePath();
     ctx.clip();
 
-    const tile = ((near.worldZ != null ? near.worldZ : this.playerZ + near.dist) / TILE_Z) | 0;
+    const tile = this._stripTile(near, far);
     const cols = 5;
     const stagger = (tile % 2) * (0.5 / cols);
     for (let c = -1; c < cols; c++) {
@@ -430,7 +875,7 @@ export class DungeonView {
   }
 
   _strokeBeams(ctx, near, far, fog, warm = 0) {
-    const tile = ((near.worldZ != null ? near.worldZ : this.playerZ + near.dist) / TILE_Z) | 0;
+    const tile = this._stripTile(near, far);
     const dropN = Math.max(2.5, 7 * (near.s || 1) * 0.05);
     const dropF = Math.max(1.6, 5 * (far.s || 1) * 0.05);
     const wood = this._woodFill(0.78 + warm * 0.2, fog);
@@ -468,7 +913,7 @@ export class DungeonView {
   _paintMoss(ctx, near, far, sign, fog) {
     const nx = sign < 0 ? near.xl : near.xr;
     const fx = sign < 0 ? far.xl : far.xr;
-    const h = this._hash(Math.floor((this.playerZ + near.dist) / 30) + sign * 9);
+    const h = this._hash(this._stripTile(near, far) + sign * 9);
     if (h < 0.18) return;
     ctx.fillStyle = `rgba(62, 102, 48, ${0.62 * (1 - fog)})`;
     ctx.beginPath();
@@ -624,136 +1069,44 @@ export class DungeonView {
 
   _drawBarrel(ctx, side, dist, h) {
     const p = this.project(side * (this.half - 18), dist, 0);
-    if (p.behind) return;
-    const s = p.s;
-    const w = 11 * s;
-    const ht = 16 * s;
-    const x = p.x;
-    const y = p.floorY;
-    ctx.save();
-    ctx.globalAlpha = 1 - this._fogK(dist) * 0.7;
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.beginPath();
-    ctx.ellipse(x, y, w * 0.7, 3 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = h > 0.7 ? "#5a3a1c" : "#6b4424";
-    ctx.beginPath();
-    ctx.ellipse(x, y - ht, w, 4 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillRect(x - w, y - ht, w * 2, ht);
-    ctx.fillStyle = "#4a2e14";
-    ctx.beginPath();
-    ctx.ellipse(x, y, w, 4 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#2a1810";
-    ctx.lineWidth = Math.max(1, 1.4 * s * 0.08);
-    for (const t of [0.28, 0.68]) {
-      ctx.beginPath();
-      ctx.ellipse(x, y - ht * t, w, 3.2 * s, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
+    if (p.behind || p.occluded) return;
+    blitSprite(ctx, h > 0.7 ? SPRITES.barrelB : SPRITES.barrelA, p.x, p.floorY, 16 * p.s, {
+      alpha: 1 - this._fogK(dist) * 0.7,
+      flip: side < 0,
+    });
   }
 
   _drawCrate(ctx, side, dist, h) {
     const p = this.project(side * (this.half - 20), dist, 0);
-    if (p.behind) return;
-    const s = p.s;
-    const w = 14 * s;
-    const ht = 12 * s;
-    const x = p.x - w * 0.5;
-    const y = p.floorY - ht;
-    ctx.save();
-    ctx.globalAlpha = 1 - this._fogK(dist) * 0.7;
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.fillRect(x + 2, p.floorY - 2, w, 3);
-    ctx.fillStyle = h > 0.6 ? "#7a5330" : "#8a5a32";
-    ctx.fillRect(x, y, w, ht);
-    ctx.strokeStyle = "#2a1810";
-    ctx.lineWidth = Math.max(1, 1.2 * s * 0.08);
-    ctx.strokeRect(x, y, w, ht);
-    ctx.beginPath();
-    ctx.moveTo(x + 2, y + 2);
-    ctx.lineTo(x + w - 2, y + ht - 2);
-    ctx.moveTo(x + w - 2, y + 2);
-    ctx.lineTo(x + 2, y + ht - 2);
-    ctx.stroke();
-    ctx.restore();
+    if (p.behind || p.occluded) return;
+    blitSprite(ctx, h > 0.6 ? SPRITES.crateB : SPRITES.crateA, p.x, p.floorY, 12 * p.s, {
+      alpha: 1 - this._fogK(dist) * 0.7,
+    });
   }
 
   _drawUrn(ctx, side, dist) {
     const p = this.project(side * (this.half - 16), dist, 0);
-    if (p.behind) return;
-    const s = p.s;
-    ctx.save();
-    ctx.globalAlpha = 1 - this._fogK(dist) * 0.7;
-    ctx.fillStyle = "#4a3a30";
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.floorY - 10 * s, 5 * s, 8 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#3a2a20";
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.floorY - 16 * s, 3.2 * s, 2 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    if (p.behind || p.occluded) return;
+    blitSprite(ctx, SPRITES.urn, p.x, p.floorY, 14 * p.s, {
+      alpha: 1 - this._fogK(dist) * 0.7,
+    });
   }
 
   _drawScreenCobwebs(ctx) {
-    this._webCorner(ctx, 4, 6, 1, 70);
-    this._webCorner(ctx, this.cssW - 4, 10, -1, 78);
-  }
-
-  _webCorner(ctx, ox, oy, side, s) {
-    ctx.save();
-    ctx.globalAlpha = 0.38;
-    ctx.strokeStyle = "#d8d0c0";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 5; i++) {
-      const a = (side < 0 ? Math.PI - 0.08 : 0.08) + i * 0.2 * side;
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox + Math.cos(a) * s, oy + Math.sin(a) * s * 0.9);
-      ctx.stroke();
-    }
-    for (let r = 0.22; r < 1; r += 0.18) {
-      ctx.beginPath();
-      const a0 = side < 0 ? Math.PI - 0.05 : 0.05;
-      ctx.arc(ox, oy, s * r, a0, a0 + 0.85 * side, side > 0);
-      ctx.stroke();
-    }
-    ctx.restore();
+    const s = Math.max(48, Math.min(96, this.cssW * 0.16));
+    blitSprite(ctx, SPRITES.cobweb, s * 0.5, 0, s, { alpha: 0.55, anchor: "top" });
+    blitSprite(ctx, SPRITES.cobweb, this.cssW - s * 0.5, 0, s, { alpha: 0.5, flip: true, anchor: "top" });
   }
 
   _drawCobweb(ctx, side, dist, h) {
-    const corner = this.project(side * (this.half - 4), dist, this.ceilH - 4);
-    if (corner.behind) return;
-    const s = Math.max(8, 28 * corner.s);
-    ctx.save();
-    ctx.globalAlpha = 0.4 * (1 - this._fogK(dist));
-    ctx.strokeStyle = "#d8d0c0";
-    ctx.lineWidth = 0.9;
-    const ox = corner.x;
-    const oy = corner.y;
-    for (let i = 0; i < 4; i++) {
-      const a = (side < 0 ? 0.15 : Math.PI - 0.15) + i * 0.22 * side;
-      ctx.beginPath();
-      ctx.moveTo(ox, oy);
-      ctx.lineTo(ox + Math.cos(a) * s, oy + Math.sin(a) * s * 0.85);
-      ctx.stroke();
-    }
-    for (let r = 0.28; r < 1; r += 0.22) {
-      ctx.beginPath();
-      const a0 = side < 0 ? 0.12 : Math.PI - 0.12;
-      ctx.arc(ox, oy, s * r, a0, a0 + 0.7 * side, side > 0);
-      ctx.stroke();
-    }
-    if (h > 0.8) {
-      ctx.fillStyle = "rgba(20,16,12,0.55)";
-      ctx.beginPath();
-      ctx.arc(ox + side * s * 0.45, oy + s * 0.4, 1.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    const corner = this.project(side * this.half, dist, this.ceilH - 2);
+    if (corner.behind || corner.occluded) return;
+    const size = Math.max(10, 22 * corner.s);
+    blitSprite(ctx, SPRITES.cobweb, corner.x, corner.y, size, {
+      alpha: 0.5 * (1 - this._fogK(dist)),
+      flip: side > 0,
+      anchor: "top",
+    });
   }
 
   _drawChains(ctx) {
@@ -763,16 +1116,11 @@ export class DungeonView {
       if (dist < 50 || dist > 280) continue;
       const side = this._hash(k + 4) > 0.5 ? 1 : -1;
       const top = this.project(side * this.half * 0.35, dist, this.ceilH - 2);
-      const s = top.s;
-      ctx.save();
-      ctx.globalAlpha = 0.45 * (1 - this._fogK(dist));
-      ctx.strokeStyle = "#3a3228";
-      ctx.lineWidth = Math.max(1, 1.6 * s * 0.06);
-      ctx.beginPath();
-      ctx.moveTo(top.x, top.y);
-      ctx.lineTo(top.x + side * 3, top.y + 38 * s);
-      ctx.stroke();
-      ctx.restore();
+      if (top.behind || top.occluded) continue;
+      blitSprite(ctx, SPRITES.chain, top.x, top.y, 22 * top.s, {
+        alpha: 0.7 * (1 - this._fogK(dist)),
+        anchor: "top",
+      });
     }
   }
 
@@ -783,29 +1131,11 @@ export class DungeonView {
       for (const side of [-1, 1]) {
         const p = this.project(side * (this.half - 6), z, 36);
         if (p.behind) continue;
-        const r = Math.max(6, 22 * p.s);
-        const flicker = 0.7 + Math.sin(this.time * 6.2 + i * 1.7 + side) * 0.18;
-        ctx.save();
-        ctx.fillStyle = "#2a2218";
-        ctx.fillRect(p.x - 2 * p.s, p.y + 4 * p.s, 4 * p.s, 10 * p.s);
-        ctx.strokeStyle = "#c9a227";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(p.x - 2.2 * p.s, p.y + 3.5 * p.s, 4.4 * p.s, 3 * p.s);
-        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 2.2);
-        g.addColorStop(0, `rgba(255, 220, 140, ${0.55 * flicker})`);
-        g.addColorStop(0.35, `rgba(230, 120, 40, ${0.22 * flicker})`);
-        g.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r * 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = `rgba(255, 236, 180, ${0.92 * flicker})`;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y - 7 * p.s);
-        ctx.quadraticCurveTo(p.x + 4 * p.s, p.y, p.x, p.y + 6 * p.s);
-        ctx.quadraticCurveTo(p.x - 4 * p.s, p.y, p.x, p.y - 7 * p.s);
-        ctx.fill();
-        ctx.restore();
+        const frame = Math.sin(this.time * 6.2 + i * 1.7 + side) > 0 ? SPRITES.torch1 : SPRITES.torch0;
+        blitSprite(ctx, frame, p.x, p.y + 10 * p.s, 18 * p.s, {
+          alpha: 1 - this._fogK(z) * 0.55,
+          flip: side > 0,
+        });
       }
     }
   }
@@ -858,6 +1188,7 @@ export class DungeonView {
     const fog = this._fogK(near.dist);
     const turnU = j.turnU || 0;
     const turning = turnU > 0.02;
+    if (turning) return;
     const glow = 0.22 + (1 - Math.min(1, j.dist / 280)) * 0.35;
 
     const paintSide = (sign) => {
@@ -912,9 +1243,9 @@ export class DungeonView {
     ).join(" · ");
   }
 
-  drawEnemy(e) {
+  _enemyLayout(e) {
     const dist = e.dist;
-    if (dist < 12 || dist > FAR) return;
+    if (dist < 4 || dist > FAR) return null;
     const flying = !!(e.flying || e.behavior === "hover");
     const type = e.type || "";
     const sz = e.size || 1;
@@ -933,7 +1264,7 @@ export class DungeonView {
       worldH = 20 + sz * 8;
     }
     const p = this.project(e.x, dist, flying ? worldY : 0);
-    if (p.behind) return;
+    if (p.behind) return null;
     const squash = e._squash > 0 ? 1 - e._squash * 0.24 : 1;
     const stretch = e._squash > 0 ? 1 + e._squash * 0.2 : 1;
     const h = Math.max(10, worldH * p.s) * squash;
@@ -942,6 +1273,23 @@ export class DungeonView {
     const x = p.x;
     const foot = flying ? p.y + h * 0.38 : p.floorY;
     const top = foot - h;
+    return { x, top, w, h, foot, p, dist, flying };
+  }
+
+  hitTestEnemy(e, cssX, cssY) {
+    const layout = this._enemyLayout(e);
+    if (!layout) return false;
+    const { x, top, w, foot } = layout;
+    const padX = Math.max(18, w * 0.28);
+    const padY = Math.max(18, (foot - top) * 0.2);
+    return cssX >= x - w / 2 - padX && cssX <= x + w / 2 + padX
+      && cssY >= top - padY && cssY <= foot + padY;
+  }
+
+  drawEnemy(e) {
+    const layout = this._enemyLayout(e);
+    if (!layout || layout.p.occluded) return;
+    const { x, top, w, h, foot, p, dist, flying } = layout;
     const ctx = this.ctx;
     const fog = this._fogK(dist);
 
@@ -1111,6 +1459,7 @@ export class DungeonView {
     const py = 12;
     if (enemy) {
       const sp = this.project(p.x, dist, py);
+      if (sp.behind || sp.occluded) return;
       const r = Math.max(2.2, 3.2 * sp.s);
       ctx.fillStyle = "#c45a4a";
       ctx.beginPath();
@@ -1123,6 +1472,7 @@ export class DungeonView {
       return;
     }
     const tip = this.project(p.x, dist, py);
+    if (tip.behind || tip.occluded) return;
     const tail = this.project(p.x, dist + 16, py);
     ctx.save();
     ctx.strokeStyle = "#e8d8b0";
@@ -1173,7 +1523,7 @@ export class DungeonView {
     ctx.textBaseline = "middle";
 
     if (this.junction && this.junction.pending) {
-      ctx.font = `700 ${titleSize}px "Cinzel", "Chakra Petch", serif`;
+      ctx.font = `700 ${titleSize}px "Cinzel", "IM Fell English", serif`;
       ctx.letterSpacing = "0.16em";
       const titleY = Math.max(64, this.cssH * 0.075);
       this._strokeFill(ctx, "CHOOSE PATH", this.cssW / 2, titleY, "#e8c56a");
@@ -1193,7 +1543,7 @@ export class DungeonView {
         h.families.forEach((fam, i) => this._drawFamilyIcon(ctx, fam, start + i * gap, cy + 6, 26));
       }
       if (h.names) {
-        ctx.font = `600 ${labelSize}px "Chakra Petch", sans-serif`;
+        ctx.font = `600 ${labelSize}px "IM Fell English", serif`;
         ctx.letterSpacing = "0.03em";
         const tw = ctx.measureText(h.names).width;
         ctx.fillStyle = "rgba(8, 6, 4, 0.58)";
@@ -1307,93 +1657,20 @@ export class DungeonView {
 
   _drawBowOverlay(ctx, input) {
     if (this.junction && this.junction.pending) return;
-    const w = this.cssW;
-    const h = this.cssH;
-    const portrait = w / Math.max(1, h) < 0.85;
-    const x = w * 0.5;
-    const y = h * (portrait ? 0.81 : 0.76);
-    const half = w * (portrait ? 0.46 : 0.48);
-    const lift = Math.max(64, h * (portrait ? 0.11 : 0.145));
-    const thick = Math.max(18, w * 0.028);
     const pulling = input && input.isDragging && input.power > 2;
-    const pull = pulling ? Math.min(48, input.power * 1.5) : 0;
-
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.fillStyle = "rgba(8, 6, 4, 0.2)";
-    ctx.beginPath();
-    ctx.ellipse(x, y + 30, half * 0.55, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const limb = ctx.createLinearGradient(x - half, y, x + half, y);
-    limb.addColorStop(0, "#5a3414");
-    limb.addColorStop(0.45, "#8a5a28");
-    limb.addColorStop(0.5, "#c4a060");
-    limb.addColorStop(0.55, "#8a5a28");
-    limb.addColorStop(1, "#5a3414");
-
-    ctx.beginPath();
-    ctx.moveTo(x - half, y + 26);
-    ctx.quadraticCurveTo(x - half * 0.56, y - lift, x, y - lift - 12);
-    ctx.quadraticCurveTo(x + half * 0.56, y - lift, x + half, y + 26);
-    ctx.lineTo(x + half - 10, y + 34);
-    ctx.quadraticCurveTo(x + half * 0.56, y - lift + thick, x, y - lift - 12 + thick);
-    ctx.quadraticCurveTo(x - half * 0.56, y - lift + thick, x - half + 10, y + 34);
-    ctx.closePath();
-    ctx.fillStyle = limb;
-    ctx.fill();
-    ctx.strokeStyle = "#2a1810";
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.moveTo(x - half + 14, y + 18);
-    ctx.quadraticCurveTo(x - half * 0.5, y - lift + 10, x, y - lift);
-    ctx.quadraticCurveTo(x + half * 0.5, y - lift + 10, x + half - 14, y + 18);
-    ctx.strokeStyle = "#d4a86a";
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#4a2a12";
-    ctx.fillRect(x - 13, y - 18, 26, 50);
-    ctx.fillStyle = "#2e1a0c";
-    ctx.fillRect(x - 8, y - 6, 16, 28);
-    ctx.strokeStyle = "rgba(201, 162, 39, 0.45)";
-    ctx.lineWidth = 1.1;
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath();
-      ctx.moveTo(x - 8, y - 2 + i * 5);
-      ctx.lineTo(x + 8, y - 2 + i * 5);
-      ctx.stroke();
+    const pull = pulling ? Math.min(1, input.power / 24) : 0;
+    let tilt = 0;
+    if (pulling) {
+      tilt = Math.max(-0.55, Math.min(0.55, (input.angle || 0) + Math.PI / 2));
     }
-
-    ctx.strokeStyle = "#f2e6c8";
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(x - half + 8, y + 24);
-    ctx.lineTo(x, y + 14 + pull);
-    ctx.lineTo(x + half - 8, y + 24);
-    ctx.stroke();
-
-    ctx.strokeStyle = "#e8d8b0";
-    ctx.lineWidth = 5.4;
-    ctx.beginPath();
-    ctx.moveTo(x, y - lift - 36);
-    ctx.lineTo(x, y + 14 + pull);
-    ctx.stroke();
-    ctx.fillStyle = "#c9a227";
-    ctx.beginPath();
-    ctx.moveTo(x, y - lift - 52);
-    ctx.lineTo(x + 9, y - lift - 24);
-    ctx.lineTo(x - 9, y - lift - 24);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = "#2a1810";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.restore();
+    if (this.bowJoltUntil && this.time < this.bowJoltUntil) {
+      tilt += Math.sin(this.time * 64) * 0.045;
+    }
+    const nocked = this.nockedArrow || null;
+    blitBow(ctx, this.cssW, this.cssH, pull, {
+      tilt,
+      type: nocked && nocked.type,
+      color: nocked && nocked.color,
+    });
   }
 }

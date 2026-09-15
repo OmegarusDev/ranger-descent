@@ -11,6 +11,10 @@ export const CONFIG = {
   CORRIDOR_WIDTH: 5,
   CORRIDOR_LENGTH: 500,
   CELL_SIZE: 40,
+  /** Worldspace hall length. Far junction must stay inside the view far plane. */
+  HALL_LENGTH: 560,
+  /** Stop this far short of the fork so the camera stands in the junction. */
+  JUNCTION_STOP: 52,
 
   // On-rails movement
   PLAYER_SPEED: 0.2,

@@ -46,12 +46,15 @@ A roguelite dungeon crawler with on-rails corridor combat. You are the last Rang
 
 No build step required — vanilla HTML/CSS/ES modules.
 
+This game **always** uses `127.0.0.1:8877` so it does not collide with other local projects (8000, 8080, 8765, Vite 517x, etc.).
+
 ```bash
 npm run dev
 # or: ./scripts/serve-local.sh
+# or: python3 scripts/serve.py
 ```
 
-Open `http://127.0.0.1:8877/?v=86` in your browser.
+Open `http://127.0.0.1:8877/?v=126` in your browser. If that port is already taken by another process, the script refuses to start — it will not steal the port.
 
 ## Development
 

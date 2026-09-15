@@ -338,7 +338,7 @@ export class FxSystem {
       const p = cam.project(f.x * cell, f.y * cell);
       const col = colorFn(f.type);
       ctx.globalAlpha = a;
-      ctx.font = `700 ${Math.max(10, 13 * p.s)}px "Chakra Petch", sans-serif`;
+      ctx.font = `700 ${Math.max(10, 13 * p.s)}px "Cinzel", "IM Fell English", serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.strokeStyle = "rgba(10,12,16,0.75)";
