@@ -30,7 +30,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=161" />
+  <link rel="stylesheet" href="styles.css?v=162" />
   <style>
     .hub-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
   </style>
@@ -642,17 +642,33 @@
           <button type="button" class="hub-close" data-close-sheet aria-label="Close">×</button>
         </div>
         <div class="hub-sheet-body pack-body">
-          <div id="pack-inspect" class="pack-inspect">Tap a slot to change it.</div>
+          <p id="pack-inspect" class="pack-inspect">Tap a slot to change it.</p>
           <div id="pack-root" class="pack">
             <section class="pack-section pack-quiver">
               <div class="pack-section-title" data-toggle="quiver" role="button" tabindex="0" aria-expanded="true">
                 <span class="pack-section-label">Quiver</span>
-                <span id="pack-quiver-count">0 / 10</span>
+                <span id="pack-quiver-count" class="pack-section-count">0 / 10</span>
                 <span class="pack-fold-mark" aria-hidden="true">▾</span>
               </div>
               <div id="pack-quiver-slots" class="pack-quiver-grid pack-section-body"></div>
             </section>
-            <div class="pack-mid">
+            <section class="pack-section pack-bag-panel">
+              <div class="pack-section-title" data-toggle="bag" role="button" tabindex="0" aria-expanded="true">
+                <span class="pack-section-label">Bag</span>
+                <span id="pack-bag-count" class="pack-section-count">2 / 8</span>
+                <span class="pack-fold-mark" aria-hidden="true">▾</span>
+              </div>
+              <div id="pack-bag-slots" class="pack-bag pack-section-body"></div>
+            </section>
+            <section class="pack-section pack-pouch-panel">
+              <div class="pack-section-title" data-toggle="pouch" role="button" tabindex="0" aria-expanded="true">
+                <span class="pack-section-label">Quick Pouch</span>
+                <span id="pack-pouch-count" class="pack-section-count">1 / 5</span>
+                <span class="pack-fold-mark" aria-hidden="true">▾</span>
+              </div>
+              <div id="pack-pouch-slots" class="pack-pouch-hotkeys pack-section-body"></div>
+            </section>
+            <div class="pack-lower">
               <section class="pack-section pack-equipped">
                 <div class="pack-section-title" data-toggle="equipped" role="button" tabindex="0" aria-expanded="true">
                   <span class="pack-section-label">Equipped</span>
@@ -661,32 +677,14 @@
                 </div>
                 <div id="pack-doll" class="pack-doll pack-section-body"></div>
               </section>
-              <section class="pack-side">
-                <section class="pack-section pack-bag-panel">
-                  <div class="pack-section-title" data-toggle="bag" role="button" tabindex="0" aria-expanded="true">
-                    <span class="pack-section-label">Bag</span>
-                    <small id="pack-bag-count">2</small>
-                    <span class="pack-fold-mark" aria-hidden="true">▾</span>
-                  </div>
-                  <div id="pack-bag-slots" class="pack-bag pack-section-body"></div>
-                </section>
-                <section class="pack-section pack-pouch-panel">
-                  <div class="pack-section-title" data-toggle="pouch" role="button" tabindex="0" aria-expanded="true">
-                    <span class="pack-section-label">Quick Pouch</span>
-                    <small id="pack-pouch-count">1</small>
-                    <span class="pack-fold-mark" aria-hidden="true">▾</span>
-                  </div>
-                  <div id="pack-pouch-slots" class="pack-pouch-hotkeys pack-section-body"></div>
-                </section>
+              <section class="pack-section pack-chest">
+                <div class="pack-section-title" data-toggle="chest" role="button" tabindex="0" aria-expanded="true">
+                  <span class="pack-section-label">Chest</span>
+                  <span class="pack-fold-mark" aria-hidden="true">▾</span>
+                </div>
+                <div id="pack-chest-grid" class="pack-chest-grid pack-section-body"></div>
               </section>
             </div>
-            <section class="pack-section pack-chest">
-              <div class="pack-section-title" data-toggle="chest" role="button" tabindex="0" aria-expanded="true">
-                <span class="pack-section-label">Storage chest</span>
-                <span class="pack-fold-mark" aria-hidden="true">▾</span>
-              </div>
-              <div id="pack-chest-grid" class="pack-chest-grid pack-section-body"></div>
-            </section>
             <div id="pack-picker" class="pack-picker" hidden></div>
           </div>
         </div>
@@ -901,7 +899,7 @@
     <div id="ui-tip" class="ui-tip ink-frame" role="tooltip" hidden></div>
   </div>
 
-  <script type="module" src="src/main.js?v=161"></script>
+  <script type="module" src="src/main.js?v=162"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=4";
     registerPwa();
