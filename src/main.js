@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=138";
+import { DungeonView } from "./engine/DungeonView.js?v=140";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -967,6 +967,19 @@ function drawMinimap() {
 
 function getJunctionView(playerZ) {
   if (sim.state.phase !== "run") return null;
+  if (sim.turning && sim._turnMouth && sim._turnFork) {
+    const mx = sim.mapX || 0;
+    const mz = sim.mapZ || 0;
+    return {
+      dist: Math.hypot(sim._turnFork.x - mx, sim._turnFork.z - mz),
+      left: !!sim._turnMouth.left,
+      right: !!sim._turnMouth.right,
+      forward: !!sim._turnMouth.forward,
+      pending: false,
+      choices: [],
+      elevator: false,
+    };
+  }
   const dist = Math.max(0, (sim.segmentEndZ || 0) - (playerZ ?? sim.playerWorldZ ?? 0));
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
   const elevator = !!sim._approachingElevator;
@@ -993,12 +1006,15 @@ function drawCorridor(ctx, dt = 1 / 60) {
   };
   const lookYaw = (cam.yawDeg * Math.PI) / 180;
   const headingRad = ((sim.heading || 0) * Math.PI) / 180;
-  const align = sim.turning && typeof sim.turnAlign === "function" ? sim.turnAlign() : 0;
+  const turning = !!sim.turning;
+  const corner = typeof sim._cornerMotion === "function" ? sim._cornerMotion() : null;
   dungeon.setPose({
     x: cam.mapX,
     z: cam.mapZ,
     lookYaw,
-    walkYaw: headingRad + (lookYaw - headingRad) * align,
+    walkYaw: turning
+      ? (((sim._turnOldHeading ?? sim.heading) || 0) * Math.PI) / 180
+      : headingRad,
     along: cam.playerWorldZ - (sim.segmentStartZ || 0),
     ahead: (sim.segmentEndZ || 0) - cam.playerWorldZ,
     segmentIndex: sim.segmentIndex || 0,
@@ -1010,10 +1026,11 @@ function drawCorridor(ctx, dt = 1 / 60) {
   const viewDt = (sim.hitStop > 0 || overlayBlocksSim()) ? 0 : dt;
   dungeon.drawHall(ctx, cam.playerWorldZ, t, getJunctionView(cam.playerWorldZ), {
     walking: typeof sim.isWalkingView === "function" ? sim.isWalkingView() : !!sim.movingForward,
-    turning: !!sim.turning,
+    turning,
     turnU: sim.turnU || 0,
     turnPull: typeof sim.turnEase === "function" ? sim.turnEase() : (sim.turnU || 0),
     turnSign: Math.sign(sim.turnTarget || 0) || 1,
+    corner,
   }, viewDt);
 
   ctx.save();

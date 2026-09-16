@@ -89,6 +89,8 @@ const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
 const FIGHT_LANE = HALF_CORRIDOR * 0.68;
 const SEGMENT_LENGTH = CONFIG.HALL_LENGTH || 560;
 const JUNCTION_STOP = CONFIG.JUNCTION_STOP || 120;
+/** Step into the chosen mouth after the yaw so the spin does not pin on the crossing. */
+const TURN_INTO_NEW = 52;
 /** Hold the ranger short of the T during a fight so the far mouths stay in view. */
 const COMBAT_HOLD = 280;
 /** First pack sits down-hall so a turn already looks into the wave. */
@@ -129,9 +131,14 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnFrom = 0;
     this.turnT = 0;
-    this.turnDur = 0.82;
+    this.turnDur = 1.12;
     this.turnU = 0;
     this.turning = false;
+    this._turnMouth = null;
+    this._turnOrigin = null;
+    this._turnFork = null;
+    this._turnOldHeading = 0;
+    this._cornerHold = null;
     this._forwardCommit = false;
     this._forwardCommitT = 0;
     this._approachingJunction = false;
@@ -197,6 +204,11 @@ export class CorridorSim {
     this.turnT = 0;
     this.turnU = 0;
     this.turning = false;
+    this._turnMouth = null;
+    this._turnOrigin = null;
+    this._turnFork = null;
+    this._turnOldHeading = 0;
+    this._cornerHold = null;
     this._forwardCommit = false;
     this._forwardCommitT = 0;
     this._approachingJunction = false;
@@ -361,10 +373,8 @@ export class CorridorSim {
     if (this.turning) {
       this.turnT += this.dt;
       this.turnU = Math.min(1, this.turnT / this.turnDur);
-      const e = this.turnEase(this.turnU);
-      this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
+      this._applyTurnPose();
       if (this.turnU >= 1) {
-        this.turnAngle = this.turnTarget;
         this.turning = false;
         this.turnComplete();
       }
@@ -381,6 +391,8 @@ export class CorridorSim {
     } else if (this._approachingJunction || this._approachingElevator) {
       this._tickApproach();
     }
+
+    this._dropCornerHold();
 
     if (this.movingForward && !this.junctionPending && !this.turning && !this._forwardCommit && !this._approachingJunction && !this._approachingElevator) {
       let step = CONFIG.PLAYER_SPEED;
@@ -537,34 +549,80 @@ export class CorridorSim {
     };
   }
 
+  _smoothstep(a, b, u) {
+    const t = Math.max(0, Math.min(1, ((u || 0) - a) / ((b - a) || 1)));
+    return t * t * (3 - 2 * t);
+  }
+
+  /** Yaw envelope: reach the crossing first, then look into the mouth. */
   turnEase(u = this.turnU) {
-    const t = Math.max(0, Math.min(1, u || 0));
-    const cubic = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    return cubic * 0.86 + t * 0.14;
+    return this._smoothstep(0.42, 0.90, u);
   }
 
   /** 0 while looking into the old T, 1 when the camera has yawed onto the chosen hall. */
   turnAlign(u = this.turnU) {
-    const pull = this.turnEase(u);
-    return Math.max(0, Math.min(1, (pull - 0.42) / 0.58));
+    return this._smoothstep(0.48, 0.94, u);
+  }
+
+  _applyTurnPose() {
+    if (!this._turnOrigin || !this._turnFork) return;
+    const u = Math.max(0, Math.min(1, this.turnU || 0));
+    const yaw = this.turnEase(u);
+    this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * yaw;
+    const toFork = this._smoothstep(0, 0.40, u);
+    const toNew = this._smoothstep(0.72, 1, u);
+    const o = this._turnOrigin;
+    const f = this._turnFork;
+    const newRad = ((this._turnOldHeading + this.turnTarget) * Math.PI) / 180;
+    this.mapX = o.x + (f.x - o.x) * toFork + Math.sin(newRad) * TURN_INTO_NEW * toNew;
+    this.mapZ = o.z + (f.z - o.z) * toFork + Math.cos(newRad) * TURN_INTO_NEW * toNew;
+    this.playerWorldZ = (this.segmentStartZ || 0) + TURN_INTO_NEW * toNew;
+    this.state.playerZ = this.playerWorldZ;
+    this.state.runDistance = this.playerWorldZ;
+  }
+
+  _dropCornerHold() {
+    if (!this._cornerHold || this.turning) return;
+    const dx = this.mapX - this._cornerHold.forkX;
+    const dz = this.mapZ - this._cornerHold.forkZ;
+    const rad = (this.heading * Math.PI) / 180;
+    const along = dx * Math.sin(rad) + dz * Math.cos(rad);
+    if (along > 340) this._cornerHold = null;
+  }
+
+  _cornerMotion() {
+    if (this._turnFork && this._turnOrigin) {
+      return {
+        forkX: this._turnFork.x,
+        forkZ: this._turnFork.z,
+        originX: this._turnOrigin.x,
+        originZ: this._turnOrigin.z,
+        oldHeading: this._turnOldHeading,
+        left: !!(this._turnMouth && this._turnMouth.left),
+        right: !!(this._turnMouth && this._turnMouth.right),
+        forward: !!(this._turnMouth && this._turnMouth.forward),
+        chosen: this.turnTarget < 0 ? "left" : "right",
+      };
+    }
+    return this._cornerHold || null;
   }
 
   /** Corridor-local sprite pose while the camera looks into a chosen fork. */
   poseForTurnView(entity, camZ) {
-    if (!this.turning || !entity) return null;
-    const along = (entity.worldZ != null ? entity.worldZ : camZ + (entity.dist || 0)) - camZ;
+    if (!this.turning || !entity || !this._turnFork) return null;
+    const along = (entity.worldZ != null ? entity.worldZ : (this.segmentStartZ || 0) + (entity.dist || 0))
+      - (this.segmentStartZ || 0);
     if (!Number.isFinite(along) || along < 4) return null;
-    const align = this.turnAlign();
-    if (align >= 0.995) return null;
-    const pull = this.turnEase();
-    const stop = CONFIG.JUNCTION_STOP || 120;
-    const ahead = Math.max(6, stop * (1 - pull));
-    const sign = Math.sign(this.turnTarget) || 1;
-    const sideX = sign * along + (entity.x || 0) * 0.2;
-    const natX = entity.x || 0;
+    const lat = entity.x || 0;
+    const oldRad = (this._turnOldHeading * Math.PI) / 180;
+    const newRad = ((this._turnOldHeading + this.turnTarget) * Math.PI) / 180;
+    const wx = this._turnFork.x + Math.sin(newRad) * along + Math.cos(newRad) * lat;
+    const wz = this._turnFork.z + Math.cos(newRad) * along - Math.sin(newRad) * lat;
+    const dx = wx - this.mapX;
+    const dz = wz - this.mapZ;
     return {
-      x: sideX * (1 - align) + natX * align,
-      dist: ahead * (1 - align) + along * align,
+      x: dx * Math.cos(oldRad) - dz * Math.sin(oldRad),
+      dist: dx * Math.sin(oldRad) + dz * Math.cos(oldRad),
     };
   }
 
@@ -609,10 +667,24 @@ export class CorridorSim {
     this.pendingWaveReport = null;
     this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
+    const dirs = new Set((this.junctionChoices || []).map((c) => c.direction));
     this.emit("junction_chosen", { direction });
     this._beginNextHall({ hold: true });
     this._hallPreloaded = true;
     if (direction === "left" || direction === "right") {
+      const rad = (this.heading * Math.PI) / 180;
+      this._turnOldHeading = this.heading;
+      this._turnOrigin = { x: this.mapX, z: this.mapZ };
+      this._turnFork = {
+        x: this.mapX + Math.sin(rad) * JUNCTION_STOP,
+        z: this.mapZ + Math.cos(rad) * JUNCTION_STOP,
+      };
+      this._turnMouth = {
+        left: dirs.has("left"),
+        right: dirs.has("right"),
+        forward: dirs.has("forward"),
+      };
+      this._cornerHold = null;
       this.turning = true;
       this._forwardCommit = false;
       this.turnFrom = 0;
@@ -620,12 +692,16 @@ export class CorridorSim {
       this.turnTarget = direction === "left" ? -90 : 90;
       this.turnT = 0;
       this.turnU = 0;
+      this._applyTurnPose();
       this.movingForward = false;
     } else {
       this.turning = false;
       this.turnAngle = 0;
       this.turnTarget = 0;
       this.turnU = 0;
+      this._turnMouth = null;
+      this._turnOrigin = null;
+      this._turnFork = null;
       this._forwardCommit = true;
       this._forwardCommitT = 0;
       this.movingForward = false;
@@ -633,14 +709,35 @@ export class CorridorSim {
   }
 
   turnComplete() {
+    this.turnU = 1;
+    this._applyTurnPose();
     if (this._pendingTurnDir === "left") this.heading -= 90;
     else if (this._pendingTurnDir === "right") this.heading += 90;
     this.heading = ((this.heading % 360) + 360) % 360;
     this.pathPts.push({ x: this.mapX, y: this.mapZ });
+    const chosen = this._pendingTurnDir === "left" || this._pendingTurnDir === "right"
+      ? this._pendingTurnDir
+      : (this.turnTarget < 0 ? "left" : "right");
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnU = 0;
     this._pendingTurnDir = null;
+    if (this._turnFork && this._turnOrigin) {
+      this._cornerHold = {
+        forkX: this._turnFork.x,
+        forkZ: this._turnFork.z,
+        originX: this._turnOrigin.x,
+        originZ: this._turnOrigin.z,
+        oldHeading: this._turnOldHeading,
+        left: !!(this._turnMouth && this._turnMouth.left),
+        right: !!(this._turnMouth && this._turnMouth.right),
+        forward: !!(this._turnMouth && this._turnMouth.forward),
+        chosen,
+      };
+    }
+    this._turnMouth = null;
+    this._turnOrigin = null;
+    this._turnFork = null;
     this._forwardCommit = true;
     this._forwardCommitT = 0;
     this.movingForward = false;

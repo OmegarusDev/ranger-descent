@@ -10,7 +10,6 @@ const NEAR = 6;
 const FAR = 760;
 const OPEN_LEN = 280;
 const TORCH_EVERY = 160;
-const STUB_LEN = 160;
 const TILE_Z = CONFIG.CELL_SIZE || 40;
 
 const PAL = {
@@ -305,41 +304,90 @@ export class DungeonView {
     list.push(this._makeHall(x0, z0, x1, z1, tags));
   }
 
+  _pushCrossing(corner) {
+    if (!corner) return;
+    const walkDeg = Number.isFinite(corner.oldHeading)
+      ? corner.oldHeading
+      : ((this.walkYaw || 0) * 180) / Math.PI;
+    const fwd = this._dir(walkDeg);
+    const left = this._dir(walkDeg - 90);
+    const right = this._dir(walkDeg + 90);
+    const forkX = corner.forkX;
+    const forkZ = corner.forkZ;
+    const backPad = this.cell * 3;
+    const ox = Number.isFinite(corner.originX) ? corner.originX : forkX - fwd.x * 120;
+    const oz = Number.isFinite(corner.originZ) ? corner.originZ : forkZ - fwd.z * 120;
+    const keepLeft = !!corner.left;
+    const keepRight = !!corner.right;
+    const keepFwd = !!corner.forward;
+    const chosen = corner.chosen === "left" || corner.chosen === "right" ? corner.chosen : null;
+    const far = keepFwd ? this.hallLen : Math.max(this.half, 80);
+    this._pushHall(
+      this._worldHalls,
+      ox - fwd.x * backPad,
+      oz - fwd.z * backPad,
+      forkX + fwd.x * far,
+      forkZ + fwd.z * far,
+      { current: true },
+    );
+    const weld = Math.max(this.cell, this.half - this.cell);
+    const addSide = (dir, on, which) => {
+      if (!on) return;
+      const start = which === chosen ? this.cell * 0.25 : weld;
+      this._pushHall(
+        this._worldHalls,
+        forkX + dir.x * start,
+        forkZ + dir.z * start,
+        forkX + dir.x * this.hallLen,
+        forkZ + dir.z * this.hallLen,
+        { branch: true },
+      );
+    };
+    addSide(left, keepLeft, "left");
+    addSide(right, keepRight, "right");
+    this._forks.push({
+      x: forkX,
+      z: forkZ,
+      left: keepLeft,
+      right: keepRight,
+      forward: keepFwd,
+      back: false,
+    });
+  }
+
   _layoutHalls(j, motion) {
     const hallLen = this.hallLen;
+    const turning = !!(motion && motion.turning);
+    const corner = motion && motion.corner;
     const walkDeg = ((this.walkYaw || 0) * 180) / Math.PI;
     const fwd = this._dir(walkDeg);
     const left = this._dir(walkDeg - 90);
     const right = this._dir(walkDeg + 90);
-    const back = { x: -fwd.x, z: -fwd.z };
-    const turning = !!(motion && motion.turning);
-    const pull = turning ? Math.max(0, Math.min(1, motion.turnPull || 0)) : 0;
     const along0 = Math.max(0, this.along || 0);
-    const stop = CONFIG.JUNCTION_STOP || 120;
-    // Next hall is already loaded, so along/ahead jump. Hold a T on the old
-    // heading and pull it onto the camera as the look yaws into the mouth.
     const remaining = (j && Number.isFinite(j.dist)) ? j.dist : (this.ahead || hallLen);
-    const ahead0 = turning
-      ? Math.max(6, stop * (1 - pull))
-      : Math.max(0, remaining);
-    const along = along0;
-    const forkX = this.camX + fwd.x * ahead0;
-    const forkZ = this.camZ + fwd.z * ahead0;
     const halls = [];
     this._forks = [];
+    this._worldHalls = halls;
+
+    if (turning && corner) {
+      this._pushCrossing(corner);
+      this._fork = { x: corner.forkX, z: corner.forkZ, r: this.half + 10 };
+      return halls;
+    }
+
     const shaft = !!(j && j.elevator);
-    const sign = turning ? (motion.turnSign || 0) : 0;
-    const keepLeft = !shaft && !!(j && j.left) && (!turning || (sign < 0 && pull < 0.62));
-    const keepRight = !shaft && !!(j && j.right) && (!turning || (sign > 0 && pull < 0.62));
-    const keepFwd = !shaft && (!j || j.forward) && (!turning || pull < 0.38);
-    // Continue the same corridor through the crossing; side halls weld at the
-    // walls so the middle stays a tube, not a square room.
+    const keepLeft = !shaft && !!(j && j.left);
+    const keepRight = !shaft && !!(j && j.right);
+    const keepFwd = !shaft && (!j || j.forward);
+    const ahead0 = Math.max(0, remaining);
+    const forkX = this.camX + fwd.x * ahead0;
+    const forkZ = this.camZ + fwd.z * ahead0;
     const farAlong = ahead0 + (keepFwd ? hallLen : Math.max(this.half, 80));
     const backPad = this.cell * 3;
     this._pushHall(
       halls,
-      this.camX - fwd.x * (along + backPad),
-      this.camZ - fwd.z * (along + backPad),
+      this.camX - fwd.x * (along0 + backPad),
+      this.camZ - fwd.z * (along0 + backPad),
       this.camX + fwd.x * farAlong,
       this.camZ + fwd.z * farAlong,
       { current: true },
@@ -361,14 +409,13 @@ export class DungeonView {
       left: keepLeft,
       right: keepRight,
       forward: keepFwd,
-      back: turning && pull < 0.55,
+      back: false,
     });
     addSide(left, keepLeft, hallLen);
     addSide(right, keepRight, hallLen);
-    addSide(back, turning && pull < 0.55, STUB_LEN);
+    if (corner) this._pushCrossing(corner);
 
     this._fork = { x: forkX, z: forkZ, r: this.half + 10 };
-    this._worldHalls = halls;
     return halls;
   }
 
@@ -651,7 +698,7 @@ export class DungeonView {
     this.time = time;
     const walking = !!(motion && motion.walking);
     const turning = !!(motion && motion.turning);
-    const walkTgt = walking ? 1 : turning ? 0.22 : 0.28;
+    const walkTgt = walking ? 1 : turning ? 0.16 : 0.28;
     if (dt > 0) {
       const k = 1 - Math.exp(-10 * dt);
       this._walkAmt = (this._walkAmt || 0) + (walkTgt - (this._walkAmt || 0)) * k;
@@ -660,7 +707,8 @@ export class DungeonView {
     }
     const walk = this._walkAmt || 0;
     this.bob = Math.sin(this._walkPhase) * (0.5 + 2.35 * walk) + Math.sin(this._walkPhase * 0.18) * (0.22 + 0.18 * walk);
-    this.sway = Math.cos(this._walkPhase * 0.5) * (0.16 + 1.22 * walk);
+    this.sway = Math.cos(this._walkPhase * 0.5) * (0.16 + 1.22 * walk)
+      + (turning ? Math.sin((motion.turnU || 0) * Math.PI) * 0.8 * (motion.turnSign || 1) : 0);
     this.roll = 0;
     let j = junction || null;
     if (j && turning) {

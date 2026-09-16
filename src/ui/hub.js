@@ -76,6 +76,21 @@ function packLockIcon() {
   return `<svg class="pack-lock-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.2" y="7.1" width="9.6" height="7.1" rx="1.15" fill="#1a1008" stroke="#c9a227" stroke-width="1.2"/><path d="M5.2 7.1V5.15C5.2 3.55 6.45 2.2 8 2.2s2.8 1.35 2.8 2.95V7.1" fill="none" stroke="#c9a227" stroke-width="1.35" stroke-linecap="round"/></svg>`;
 }
 
+/** Slot labels must never wrap or spill. Prefer a short word; else abbreviate. */
+function fitSlotText(text, max = 8) {
+  const s = String(text || "").trim();
+  if (!s) return "";
+  if (s.length <= max) return s;
+  const parts = s.split(/[\s-]+/).filter(Boolean);
+  if (parts.length > 1) {
+    const last = parts[parts.length - 1];
+    if (last.length >= 3 && last.length <= max) return last;
+    const initials = parts.map((w) => w[0]).join("").toUpperCase();
+    if (initials.length >= 2 && initials.length <= max) return initials;
+  }
+  return `${s.slice(0, Math.max(2, max - 1))}.`;
+}
+
 const TIP_PAD = 8;
 
 function ensureUiTip() {
@@ -763,8 +778,11 @@ function populatePack(state) {
     const id = bag[i];
     const item = findItem(id);
     const bound = isBagSlotPouchBound(state, i);
-    bagCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}${bound ? " pack-cell-pouchbound" : ""}" data-bag="${i}"${bound ? ` aria-label="${item.name} bound to pouch"` : ""}>
-      ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-pouch-pip" title="In the pouch">${pouchPipSvg()}</span>` : ""}` : ""}
+    const bagLabel = item
+      ? `${item.name}${bound ? " bound to pouch" : ""}`
+      : `Empty bag slot ${i + 1}`;
+    bagCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}${bound ? " pack-cell-pouchbound" : ""}" data-bag="${i}" aria-label="${bagLabel}">
+      ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span>${bound ? `<span class="pack-pouch-pip" title="In the pouch">${pouchPipSvg()}</span>` : ""}` : ""}
     </button>`);
   }
   bagEl.style.gridTemplateColumns = `repeat(${bagMax}, minmax(0, 1fr))`;
@@ -781,9 +799,9 @@ function populatePack(state) {
       }
       const bagIndex = pouchBindings[i];
       const item = bagIndex != null ? findItem(bag[bagIndex]) : null;
-      pouchCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
+      pouchCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}" aria-label="${item ? item.name : `Empty pouch slot ${i + 1}`}">
         <span class="pack-pouch-num">${i + 1}</span>
-        ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : ""}
+        ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${fitSlotText(item.short || item.name, 9)}</span>` : ""}
       </button>`);
     }
     pouchEl.style.gridTemplateColumns = `repeat(${pouchMax}, minmax(0, 1fr))`;
@@ -807,9 +825,9 @@ function populatePack(state) {
           <span class="pack-cell-sub">Lv${c.arrow.level}</span>
         </button>`;
       }
-      return `<button type="button" class="pack-cell filled" data-chest-g="${c.ownedIndex}">
+      return `<button type="button" class="pack-cell filled" data-chest-g="${c.ownedIndex}" aria-label="${c.item.name}">
         <span class="pack-cell-icon">${itemIconSvg(c.item)}</span>
-        <span class="pack-cell-sub">${c.item.name}</span>
+        <span class="pack-cell-sub">${fitSlotText(c.item.short || c.item.name, 8)}</span>
       </button>`;
     }).join("")
     : `<div class="pack-chest-empty">Chest is empty. Buy shafts in the shop.</div>`;

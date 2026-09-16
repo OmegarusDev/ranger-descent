@@ -401,21 +401,62 @@ test("entity depth can follow an interpolated camera Z", () => {
   assert.equal(foe.entity.dist, 36);
 });
 
+test("turning walks the camera into a frozen fork then commits heading", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.running = true;
+  sim.mapX = 0;
+  sim.mapZ = 0;
+  sim.heading = 0;
+  sim.playerWorldZ = 0;
+  sim.junctionChoices = [
+    { direction: "left", groups: [["slime"]], coinBonus: 0 },
+    { direction: "right", groups: [["slime"]], coinBonus: 0 },
+    { direction: "forward", groups: [["slime"]], coinBonus: 0 },
+  ];
+  sim.junctionPending = true;
+  sim.chooseJunction("right");
+  assert.equal(sim.turning, true);
+  assert.equal(sim._turnMouth.right, true);
+  assert.equal(sim._turnMouth.left, true);
+  assert.ok(Math.abs(sim._turnFork.z - 120) < 0.01);
+  const startYaw = sim._yawDeg();
+  for (let i = 0; i < 30; i++) sim.tick();
+  assert.equal(sim.turning, true);
+  assert.equal(sim.heading, 0);
+  assert.ok(sim.mapZ > 40);
+  assert.ok(sim._yawDeg() > startYaw);
+  let n = 0;
+  while (sim.turning && n++ < 200) sim.tick();
+  assert.equal(sim.turning, false);
+  assert.equal(sim.heading, 90);
+  assert.ok(Math.abs(sim._yawDeg() - 90) < 0.01);
+  assert.ok(sim.mapX > 20);
+  assert.ok(sim._cornerHold);
+});
+
 test("turning poses next-hall packs in the chosen mouth", () => {
   const sim = new CorridorSim();
   sim.state.startRun();
+  sim.mapX = 0;
+  sim.mapZ = 0;
+  sim.heading = 0;
+  sim.playerWorldZ = 0;
   sim.junctionChoices = [{ direction: "right", groups: [["slime"]], coinBonus: 0 }];
   sim.junctionPending = true;
   sim.chooseJunction("right");
-  const z = sim.playerWorldZ;
+  const z = sim.segmentStartZ;
   const posed = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
   assert.ok(posed);
   assert.ok(posed.x > 150);
-  assert.ok(posed.dist <= 120);
+  assert.ok(posed.dist <= 130);
   assert.ok(posed.dist >= 12);
   sim.turnU = 0.9;
+  sim.turnT = sim.turnDur * 0.9;
+  sim._applyTurnPose();
   const late = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
   assert.ok(late);
-  assert.ok(late.dist > posed.dist);
-  assert.ok(Math.abs(late.x - 8) < Math.abs(posed.x - 8));
+  assert.ok(sim.mapZ > 80);
+  assert.ok(sim.mapX > 10);
+  assert.ok(late.x > 0);
 });
