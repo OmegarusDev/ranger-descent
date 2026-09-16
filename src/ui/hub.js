@@ -264,6 +264,27 @@ function togglePackFold(title) {
   title.setAttribute("aria-expanded", collapse ? "false" : "true");
 }
 
+let hubDoorTimer = 0;
+
+function hubStage() {
+  return document.querySelector("#phase-hub .hub-stage");
+}
+
+function fitHubStage() {
+  const stage = hubStage();
+  if (!stage) return;
+  stage.style.fontSize = `${Math.max(11, stage.clientWidth / 22)}px`;
+}
+
+export function resetHubDoor() {
+  const stage = hubStage();
+  if (hubDoorTimer) {
+    clearTimeout(hubDoorTimer);
+    hubDoorTimer = 0;
+  }
+  stage?.classList.remove("is-opening", "is-open");
+}
+
 export function initHub(d) {
   deps = d;
   sim = d.sim;
@@ -272,6 +293,13 @@ export function initHub(d) {
   COIN = d.COIN;
   saveGame = d.saveGame;
   SAVE_KEY = d.SAVE_KEY;
+
+  fitHubStage();
+  const stage = hubStage();
+  if (stage && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(fitHubStage).observe(stage);
+  }
+  window.addEventListener("resize", fitHubStage);
 
   $("#btn-hub-train").addEventListener("click", () => openHubSheet("sheet-training"));
   $("#btn-hub-shop").addEventListener("click", () => openHubSheet("sheet-shop"));
@@ -388,14 +416,29 @@ export function initHub(d) {
     document.querySelectorAll("[data-enter-dungeon]").forEach((btn) => {
       btn.addEventListener("click", enterDungeon);
     });
+    $("#btn-hub-door")?.addEventListener("click", () => {
+      const st = hubStage();
+      if (!st || st.classList.contains("is-opening") || st.classList.contains("is-open")) return;
+      st.classList.add("is-opening");
+      hubDoorTimer = window.setTimeout(() => {
+        hubDoorTimer = 0;
+        st.classList.remove("is-opening");
+        st.classList.add("is-open");
+        enterDungeon();
+      }, 850);
+    });
     $("#btn-elev-cancel").addEventListener("click", () => {
       closeElevatorModal();
+      resetHubDoor();
     });
     $("#btn-elev-go").addEventListener("click", () => {
       d.startDungeonRun();
     });
     $("#elev-modal").addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) closeElevatorModal();
+      if (e.target === e.currentTarget) {
+        closeElevatorModal();
+        resetHubDoor();
+      }
     });
   }
 }

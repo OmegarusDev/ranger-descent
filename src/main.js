@@ -16,6 +16,7 @@ import {
   closeElevatorModal,
   refillQuiverEmptySlots,
   syncArmorRating,
+  resetHubDoor,
 } from "./ui/hub.js";
 // Cache-bust only at the HTML entry (main.js?v=N). Nested imports stay unversioned
 // so each module has one identity — mixed ?v= was splitting CONFIG across the graph.
@@ -480,6 +481,7 @@ sim.state.onPhaseChange = (phase) => {
   phaseDeath.style.display = (phase === "death" || phase === "victory") ? "flex" : "none";
 
   if (phase === "hub") {
+    resetHubDoor();
     closeHubSheets();
     sim.quiver.packForHub();
     saveGame();
