@@ -30,7 +30,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=155" />
+  <link rel="stylesheet" href="styles.css?v=161" />
   <style>
     .hub-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
   </style>
@@ -140,7 +140,7 @@
     <div id="phase-hub" class="phase" style="display:flex">
       <div class="hub-yard">
         <div class="hub-stage">
-          <svg class="hub-scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 -88 800 784" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+          <svg class="hub-scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 -88 800 816" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
             <defs>
               <linearGradient id="hub-sky" x1="0" y1="-120" x2="0" y2="280" gradientUnits="userSpaceOnUse">
                 <stop offset="0" stop-color="#0a0614"/>
@@ -217,7 +217,7 @@
               </clipPath>
             </defs>
 
-            <rect x="0" y="-140" width="800" height="860" fill="url(#hub-sky)"/>
+            <rect x="0" y="-140" width="800" height="880" fill="url(#hub-sky)"/>
             <rect x="0" y="-140" width="800" height="420" fill="url(#hub-moonGlow)"/>
             <circle cx="508" cy="8" r="26" fill="#f0e6c8" opacity="0.92"/>
             <circle cx="518" cy="2" r="26" fill="#1a1024"/>
@@ -456,10 +456,10 @@
               <rect x="534" y="224" width="36" height="6" fill="#c9a227"/>
             </g>
 
-            <rect x="0" y="598" width="800" height="122" fill="url(#hub-earth)"/>
-            <rect x="0" y="598" width="800" height="122" fill="#080604" opacity="0.22"/>
-            <path d="M268 588 L532 588 L610 720 L190 720 Z" fill="url(#hub-cobble)"/>
-            <path d="M268 588 L532 588 L610 720 L190 720 Z" fill="#1a1008" opacity="0.18"/>
+            <rect x="0" y="598" width="800" height="138" fill="url(#hub-earth)"/>
+            <rect x="0" y="598" width="800" height="138" fill="#080604" opacity="0.22"/>
+            <path d="M268 588 L532 588 L618 736 L182 736 Z" fill="url(#hub-cobble)"/>
+            <path d="M268 588 L532 588 L618 736 L182 736 Z" fill="#1a1008" opacity="0.18"/>
             <ellipse cx="400" cy="608" rx="70" ry="12" fill="#0e0a06" opacity="0.45"/>
 
             <g>
@@ -478,7 +478,7 @@
             </g>
 
             <ellipse cx="400" cy="710" rx="430" ry="86" fill="#000" opacity="0.5"/>
-            <rect x="0" y="0" width="800" height="720" fill="#000" opacity="0.1"/>
+            <rect x="0" y="0" width="800" height="736" fill="#000" opacity="0.1"/>
             </svg>
           <div class="hub-vignette" aria-hidden="true"></div>
           <div class="hub-play">
@@ -528,7 +528,7 @@
               <path d="M50 2 C50 2 42 10 42 18" fill="none" stroke="#3a3428" stroke-width="3"/>
               <circle cx="50" cy="2" r="4" fill="none" stroke="#6a5a40" stroke-width="2.2"/>
               <circle cx="42" cy="18" r="3" fill="#1a1410" stroke="#6a5a40" stroke-width="1.4"/>
-              <path d="M8 26 L92 20 L96 122 L6 126 Z" fill="#1c120c" stroke="#c9a227" stroke-width="2.8" filter="url(#ink-edge)"/>
+              <path d="M8 26 L92 20 L96 122 L6 126 Z" fill="#1c120c" stroke="#c9a227" stroke-width="2.8"/>
               <path d="M12 32 L88 27 L91 116 L10 119 Z" fill="#2a1810"/>
               <path d="M12 32 L88 27 L84 48 L16 52 Z" fill="#3a2214" opacity="0.45"/>
               <rect x="8" y="26" width="10" height="10" fill="#3a3428"/>
@@ -552,7 +552,7 @@
               <path d="M50 2 C50 2 58 10 58 18" fill="none" stroke="#3a3428" stroke-width="3"/>
               <circle cx="50" cy="2" r="4" fill="none" stroke="#6a5a40" stroke-width="2.2"/>
               <circle cx="58" cy="18" r="3" fill="#1a1410" stroke="#6a5a40" stroke-width="1.4"/>
-              <path d="M6 22 L94 28 L90 126 L8 118 Z" fill="#1c120c" stroke="#c9a227" stroke-width="2.8" filter="url(#ink-edge)"/>
+              <path d="M6 22 L94 28 L90 126 L8 118 Z" fill="#1c120c" stroke="#c9a227" stroke-width="2.8"/>
               <path d="M11 28 L89 33 L86 118 L13 111 Z" fill="#2a1810"/>
               <path d="M11 28 L89 33 L86 52 L14 48 Z" fill="#3a2214" opacity="0.45"/>
               <rect x="6" y="22" width="10" height="10" fill="#3a3428"/>
@@ -901,7 +901,7 @@
     <div id="ui-tip" class="ui-tip ink-frame" role="tooltip" hidden></div>
   </div>
 
-  <script type="module" src="src/main.js?v=155"></script>
+  <script type="module" src="src/main.js?v=161"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=4";
     registerPwa();

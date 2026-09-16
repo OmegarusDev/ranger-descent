@@ -268,6 +268,8 @@ body {
   max-width: none;
   max-height: none;
   pointer-events: none;
+  transform: scale(1.05);
+  transform-origin: 50% 100%;
 }
 .hub-vignette {
   position: absolute;
@@ -311,7 +313,7 @@ body {
   z-index: 3;
   left: 4%;
   right: 4%;
-  top: clamp(5%, 8.5vh, 12%);
+  top: clamp(7.5%, 11.5vh, 15.5%);
   text-align: center;
   pointer-events: none;
 }
@@ -344,9 +346,9 @@ body {
   display: block;
   margin-top: 4px;
   font-family: var(--font-ornate);
-  font-size: clamp(1.62em, 7.8vw, 2.82em);
+  font-size: clamp(1.82em, 8.4vw, 3.05em);
   color: #f6e6b8;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
   line-height: 1.05;
@@ -464,18 +466,31 @@ body {
   aspect-ratio: 0.74;
   padding: 0;
   border: none;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
   cursor: pointer;
   text-transform: none;
   letter-spacing: 0;
   filter: drop-shadow(0 10px 14px rgba(0,0,0,0.65)) drop-shadow(0 0 10px rgba(201, 162, 39, 0.18));
 }
 .hub-sign:hover,
-.hub-sign:active { background: transparent; }
+.hub-sign:active,
+.hub-sign:focus,
+.hub-sign:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  outline: none;
+}
 .hub-sign:hover { transform: rotate(-1deg) scale(1.05); }
 .hub-sign:active { transform: scale(0.97); }
-.hub-sign-train { left: 1%; top: 40%; }
-.hub-sign-shop { right: 1%; top: 40%; }
+.hub-sign-train { left: 1%; top: 47%; }
+.hub-sign-shop { right: 1%; top: 47%; }
 .hub-sign svg { display: block; width: 100%; height: 100%; }
 @keyframes hub-ember {
   0%, 100% {
@@ -498,7 +513,7 @@ body {
   z-index: 3;
   left: 8%;
   right: 8%;
-  bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
   min-height: 76px;
   padding: 20px 14px;
   border: 2px solid #c9a227;
@@ -534,17 +549,17 @@ body {
 }
 @media (max-height: 700px) {
   html { font-size: 16px; }
-  .hub-brand { top: clamp(3%, 5vh, 8%); }
-  .hub-title { font-size: clamp(1.28em, 6.6vw, 2.15em); }
+  .hub-brand { top: clamp(5.4%, 7.4vh, 10.9%); }
+  .hub-title { font-size: clamp(1.5em, 7.6vw, 2.42em); }
   .hub-sign { width: 26%; max-width: 104px; min-width: 72px; }
   .hub-sign-train,
-  .hub-sign-shop { top: 36%; }
+  .hub-sign-shop { top: 43%; }
   .hub-pack { min-height: 58px; padding: 12px 12px; font-size: clamp(1.02em, 4.6vw, 1.32em); }
   .hub-icon-btn { width: 42px; height: 42px; min-height: 42px; }
 }
 @media (max-width: 360px) {
   html { font-size: 16px; }
-  .hub-title { letter-spacing: 0.08em; }
+  .hub-title { letter-spacing: 0.06em; }
   .hub-pack { letter-spacing: 0.12em; left: 5%; right: 5%; }
 }
 @media (orientation: landscape) and (min-aspect-ratio: 5/4) {
@@ -752,7 +767,7 @@ button.pack-enter,
 .shop-chest-btn {
   width: 100%;
   height: 100%;
-  min-height: 56px;
+  min-height: 64px;
   margin: 0;
   padding: 0 10px;
   display: flex;
@@ -761,7 +776,7 @@ button.pack-enter,
   align-items: center;
   justify-content: center;
   gap: 0.42em;
-  font-size: clamp(0.84em, 3.4vw, 0.98em);
+  font-size: clamp(0.9em, 3.5vw, 1.04em);
   font-weight: 700;
   letter-spacing: 0.06em;
   line-height: 1;
@@ -774,7 +789,7 @@ button.pack-enter,
 button.pack-nav-side {
   flex-direction: column;
   gap: 0.22em;
-  padding: 6px 4px 5px;
+  padding: 8px 4px 7px;
   letter-spacing: 0.05em;
   color: #f7efd4;
   background: #241610;
@@ -803,8 +818,8 @@ button.pack-enter {
 .pack-enter svg,
 .pack-nav-side svg,
 .shop-chest-btn svg {
-  width: 1.22em;
-  height: 1.22em;
+  width: 1.28em;
+  height: 1.28em;
   display: block;
   flex: 0 0 auto;
   overflow: visible;
@@ -1023,13 +1038,13 @@ button.elev-chip.selected {
   button.pack-enter,
   button.pack-nav-side,
   .shop-chest-btn {
-    min-height: 54px;
+    min-height: 60px;
     letter-spacing: 0.04em;
     padding-left: 8px;
     padding-right: 8px;
   }
   button.pack-nav-side {
-    padding: 6px 3px 5px;
+    padding: 7px 3px 6px;
   }
 }
 .pack-body { padding: 10px 14px 10px !important; }
