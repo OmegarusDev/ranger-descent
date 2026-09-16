@@ -1476,7 +1476,8 @@ export class CorridorSim {
           if (!p._hitIds) p._hitIds = [];
           p._hitIds.push(e.id);
           const armored = e.armor === "heavy" || e.armor === "insulated";
-          const raw = this._calcDamage(p, e, { punchArmour: !!(p.punchArmour && armored) });
+          const hit = this._calcDamage(p, e, { punchArmour: !!(p.punchArmour && armored) });
+          const raw = hit.damage;
           if (this.state.phase !== "run") {
             this.projectiles.splice(i, 1);
             return;
@@ -1494,7 +1495,7 @@ export class CorridorSim {
           e.worldZ += 18;
           e.x += Math.sign(e.x - p.x || 1) * 3;
           this.hitStop = Math.max(this.hitStop, 0.045);
-          this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: raw });
+          this.emit("projectile_hit", { projectile: p, enemy: e, x: p.x, dist: relDist, damage: raw, crit: hit.crit });
           this._applyStatus(p, e);
           // Piercing: through unarmoured (continue) OR punch armour and stop.
           if (p.punchArmour && armored) {
@@ -1538,6 +1539,7 @@ export class CorridorSim {
       if (proj.ownerId === "player") this.state.damagePlayer(Math.floor(proj.damage * 0.25));
     }
     if (enemy.shredT > 0) phys = Math.max(phys, proj.damage);
+    let crit = false;
     if (proj.ownerId === "player") {
       const str = this.state.getStrengthBonus();
       phys += str;
@@ -1548,13 +1550,14 @@ export class CorridorSim {
       fire *= mult;
       frost *= mult;
       if (Math.random() < this.state.getCritChance()) {
-        const crit = this.state.getCritMultiplier();
-        phys *= crit;
-        fire *= crit;
-        frost *= crit;
+        crit = true;
+        const critMul = this.state.getCritMultiplier();
+        phys *= critMul;
+        fire *= critMul;
+        frost *= critMul;
       }
     }
-    return Math.max(1, Math.floor(phys + fire + frost));
+    return { damage: Math.max(1, Math.floor(phys + fire + frost)), crit };
   }
 
   _applyStatus(proj, e) {
@@ -1706,7 +1709,12 @@ export class CorridorSim {
     const best = bestHit || (bestNear && bestNearDist <= 42 ? bestNear : null);
     if (!best) return false;
 
-    const raw = this.state.getDaggerDamage();
+    let raw = this.state.getDaggerDamage();
+    let crit = false;
+    if (Math.random() < this.state.getCritChance()) {
+      crit = true;
+      raw = Math.max(1, Math.floor(raw * this.state.getCritMultiplier()));
+    }
     let dmg = raw;
     if (best.shieldHp > 0) {
       const absorbed = Math.min(best.shieldHp, dmg);
@@ -1722,7 +1730,7 @@ export class CorridorSim {
     this.hitStop = Math.max(this.hitStop, 0.055);
     this.state.daggerCooldown = this.state.getDaggerCooldown();
     const relDist = best.worldZ - this.playerWorldZ;
-    this.emit("dagger_hit", { enemy: best, x: best.x, dist: relDist, damage: raw });
+    this.emit("dagger_hit", { enemy: best, x: best.x, dist: relDist, damage: raw, crit });
     if (best.hp <= 0) {
       const idx = this.enemies.indexOf(best);
       if (idx >= 0) this._killEnemy(best, idx, ENEMY_DEFS[best.type], relDist);

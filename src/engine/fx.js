@@ -65,13 +65,13 @@ export class FxSystem {
     }
   }
 
-  damageNumber(x, y, amount, type = "kinetic") {
+  damageNumber(x, y, amount, type = "kinetic", crit = false) {
     if (!(amount > 0)) return;
     this._pushFloat({
       x: x + (Math.random() - 0.5) * 0.25,
       y: y - 0.15,
-      text: amount >= 10 ? String(Math.round(amount)) : amount.toFixed(1),
-      life: 0.7, max: 0.7, type, vy: -0.9,
+      text: String(Math.max(1, Math.round(amount))),
+      life: 0.9, max: 0.9, type, vy: -1.2, crit: !!crit,
     });
   }
 
@@ -333,22 +333,43 @@ export class FxSystem {
       }
     }
 
-    for (const f of this.floats) {
-      const a = Math.max(0, f.life / f.max);
-      const p = cam.project(f.x * cell, f.y * cell);
-      const col = colorFn(f.type);
-      ctx.globalAlpha = a;
-      ctx.font = `700 ${Math.max(10, 13 * p.s)}px "Cinzel", "IM Fell English", serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.strokeStyle = "rgba(10,12,16,0.75)";
-      ctx.lineWidth = 3;
-      ctx.strokeText(f.text, p.x, p.y);
-      ctx.fillStyle = col;
-      ctx.fillText(f.text, p.x, p.y);
-    }
-
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
+  }
+
+  /** JRPG damage pops — screen-space, drawn above vignette. */
+  drawFloats(ctx, cam) {
+    if (!this.floats.length) return;
+    const cell = cam.cell || 40;
+    ctx.save();
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.shadowColor = "rgba(40, 0, 0, 0.45)";
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetY = 1;
+    for (const f of this.floats) {
+      const a = Math.max(0, f.life / f.max);
+      const p = cam.project(f.x * cell, f.y * cell, 28);
+      if (!p || p.behind) continue;
+      const born = 1 - a;
+      const punch = 1 + Math.max(0, 1 - born / 0.14) * 0.38;
+      const px = (f.crit ? 24 : 18) * punch;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(f.crit ? -0.16 : -0.1);
+      ctx.globalAlpha = Math.min(1, a * 1.25);
+      ctx.font = `italic 900 ${px}px "Arial Black", "Helvetica Neue", "Gill Sans", sans-serif`;
+      ctx.lineWidth = f.crit ? 3 : 2.4;
+      ctx.strokeStyle = "#fff6e8";
+      ctx.strokeText(f.text, 0, 0);
+      ctx.fillStyle = f.crit ? "#ffd24a" : "#ff1e18";
+      ctx.fillText(f.text, 0, 0);
+      ctx.fillText(f.text, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
   }
 }

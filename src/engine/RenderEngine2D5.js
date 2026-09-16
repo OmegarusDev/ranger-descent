@@ -192,6 +192,10 @@ export class RenderEngine2D5 {
         this._drawAtmosphere(cssW, cssH);
       }
     } catch (_) { /* overlay is optional */ }
+
+    try {
+      this.fx.drawFloats(ctx, this.fxCam || this.cam);
+    } catch (_) { /* floats must never kill the frame */ }
   }
 
   _drawDungeonVignette(cssW, cssH) {

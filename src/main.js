@@ -422,7 +422,7 @@ sim.state.onPhaseChange = (phase) => {
         ? `<div class="end-coin banked">+${coinLabel(earned)} banked</div>`
         : `<div class="end-coin">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<span class="end-safe">Vault coin is safe.</span></div>`;
       deathStats.innerHTML = `
-        <div class="end-story ${phase === "victory" ? "victory" : "defeat"}">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall. Most of the delve's coin scatters into the dark."}</div>
+        <div class="end-story ${phase === "victory" ? "victory" : "defeat"}">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall.<br>Your coin scatters into the dark, as you scramble back to safety."}</div>
         <div class="end-stat">Reached: <b>${sim.getProgressLabel()}</b></div>
         <div class="end-stat">Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
         <div class="end-stat">Kills: <b>${stats.enemiesKilled}</b></div>
@@ -486,14 +486,14 @@ const FX_TYPE = {
 };
 sim.on("dagger_hit", (e) => {
   engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, "kinetic");
-  engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage));
+  engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage), "kinetic", e.crit);
   engine.punch(4.2);
 });
 
 sim.on("projectile_hit", (e) => {
   const fxType = FX_TYPE[e.projectile.element] || e.projectile.element;
   engine.fx.hit(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, fxType);
-  engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage));
+  engine.fx.damageNumber(e.x / CONFIG.CELL_SIZE, e.dist / CONFIG.CELL_SIZE, Math.round(e.damage), fxType, e.crit);
   engine.punch(e.damage > 10 ? 5.5 : 3.6);
 });
 

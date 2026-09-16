@@ -203,6 +203,32 @@ function bindStickyTip(el, html, source) {
   });
 }
 
+function bindPressableButtons() {
+  const SEL = ".pack-nav-side, .pack-enter, .shop-chest-btn";
+  const setPressed = (btn, on) => {
+    if (!btn || btn.disabled) return;
+    btn.classList.toggle("is-pressed", on);
+  };
+  document.addEventListener("pointerdown", (e) => {
+    setPressed(e.target.closest(SEL), true);
+  });
+  document.addEventListener("pointerover", (e) => {
+    if (!e.buttons) return;
+    setPressed(e.target.closest(SEL), true);
+  });
+  document.addEventListener("pointerout", (e) => {
+    const btn = e.target.closest?.(SEL);
+    if (!btn) return;
+    if (e.relatedTarget && btn.contains(e.relatedTarget)) return;
+    setPressed(btn, false);
+  });
+  const clearAll = () => {
+    document.querySelectorAll(`${SEL}.is-pressed`).forEach((btn) => btn.classList.remove("is-pressed"));
+  };
+  document.addEventListener("pointerup", clearAll);
+  document.addEventListener("pointercancel", clearAll);
+}
+
 function togglePackFold(title) {
   const id = title?.dataset?.toggle;
   const body = document.getElementById(PACK_FOLD_BODY[id]);
@@ -305,14 +331,19 @@ export function initHub(d) {
     btn.addEventListener("click", (e) => e.preventDefault());
   })();
 
+  bindPressableButtons();
+
   if (typeof d.startDungeonRun === "function") {
-    $("#btn-start").addEventListener("click", () => {
+    const enterDungeon = () => {
       // New players skip the elevator popup until E1 (floor 11) is unlocked.
       if (sim.state.getMaxElevatorUnlocked() < 1) {
         d.startDungeonRun();
         return;
       }
       openElevatorModal();
+    };
+    document.querySelectorAll("[data-enter-dungeon]").forEach((btn) => {
+      btn.addEventListener("click", enterDungeon);
     });
     $("#btn-elev-cancel").addEventListener("click", () => {
       closeElevatorModal();
