@@ -13,6 +13,8 @@ import {
   isBowItem,
 } from "../data/gear.js";
 import { shopConsumables } from "../data/consumables.js";
+import { itemIconSvg, arrowIconSvg } from "./itemIcons.js";
+import { bindFullscreenCheckbox } from "../engine/immersive.js";
 import {
   canSellBagItem,
   canSellOwnedItem,
@@ -28,7 +30,11 @@ import {
   normalizeBag,
   normalizePouchBindings,
   bagCapacityStart,
+  bagCapacityMax,
+  bagUpgradeCost,
   pouchCapacityStart,
+  pouchCapacityMax,
+  pouchUpgradeCost,
 } from "../game/inventory.js";
 import { rollShopArrows, getArrowDef, getArrowStats, isWoodType } from "../game/QuiverDeckManager.js";
 import { ENEMY_DEFS } from "../game/CorridorSim.js";
@@ -73,7 +79,7 @@ function ensureUiTip() {
   if (tip) return tip;
   tip = document.createElement("div");
   tip.id = "ui-tip";
-  tip.className = "ui-tip";
+  tip.className = "ui-tip ink-frame";
   tip.hidden = true;
   tip.setAttribute("role", "tooltip");
   (document.getElementById("ui") || document.body).appendChild(tip);
@@ -283,7 +289,7 @@ export function initHub(d) {
     const tip = document.getElementById("ui-tip");
     if (!tip || tip.hidden) return;
     if (e.target.closest("#ui-tip")) return;
-    if (e.target.closest("[data-tip-source], .shop-item, .train-stat, .train-hint")) return;
+    if (e.target.closest("[data-tip-source], .shop-item, .train-stat, .train-name")) return;
     hideUiTip();
   }, true);
   window.addEventListener("resize", () => {
@@ -292,9 +298,28 @@ export function initHub(d) {
     placeInView(tip, tip._place || {});
   });
 
-  (function bindHoldReset() {
+  (function bindResetDialog() {
+    const modal = document.getElementById("reset-modal");
+    const openBtn = $("#btn-open-reset");
+    const cancelBtn = $("#btn-reset-cancel");
     const btn = $("#btn-reset-save");
     const fill = $("#btn-reset-fill");
+    const open = () => {
+      if (!modal) return;
+      hideUiTip();
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    };
+    const close = () => {
+      if (!modal) return;
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+    };
+    openBtn?.addEventListener("click", open);
+    cancelBtn?.addEventListener("click", close);
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) close();
+    });
     if (!btn || !fill) return;
     const HOLD_MS = 1400;
     let timer = null;
@@ -332,6 +357,7 @@ export function initHub(d) {
   })();
 
   bindPressableButtons();
+  bindFullscreenCheckbox($("#opt-fullscreen"));
 
   if (typeof d.startDungeonRun === "function") {
     const enterDungeon = () => {
@@ -359,6 +385,11 @@ export function initHub(d) {
 
 export function closeHubSheets() {
   document.querySelectorAll(".hub-sheet").forEach((el) => el.classList.remove("open"));
+  const resetModal = document.getElementById("reset-modal");
+  if (resetModal) {
+    resetModal.classList.remove("open");
+    resetModal.setAttribute("aria-hidden", "true");
+  }
   hidePackOverlays();
   hideUiTip();
 }
@@ -420,34 +451,49 @@ function getShopQuivers(state) {
 }
 
 function getShopKit(state) {
+  const bagCur = state.bagCapacity || bagCapacityStart();
+  const pouchCur = state.pouchCapacity || pouchCapacityStart();
+  const bagCapMax = bagCapacityMax();
+  const pouchCapMax = pouchCapacityMax();
   const items = [];
-  const bagNext = nextBagUpgrade(state);
-  if (bagNext.ok) {
+  for (let cap = bagCur + 1; cap <= bagCapMax; cap++) {
     items.push({
-      id: `bag_slot_${bagNext.next}`,
-      name: `Bag Slot ${bagNext.next}`,
-      cost: bagNext.cost,
-      desc: `Carry ${bagNext.next} items into the dungeon. Cheaper than a pouch slot.`,
-      stats: `${state.bagCapacity} → ${bagNext.next} bag slots`,
+      id: `bag_slot_${cap}`,
+      name: `Bag Slot ${cap}`,
+      cost: bagUpgradeCost(cap),
+      next: cap,
+      desc: cap === bagCur + 1
+        ? `Carry ${cap} items into the dungeon. Cheaper than a pouch slot.`
+        : `Buy Bag Slot ${bagCur + 1} first.`,
+      stats: `${bagCur} → ${cap} bag slots`,
       icon: "🎒",
       section: "kit",
       kind: "bag_upgrade",
+      locked: cap !== bagCur + 1,
     });
   }
-  const pouchNext = nextPouchUpgrade(state);
-  if (pouchNext.ok) {
+  for (let cap = pouchCur + 1; cap <= pouchCapMax; cap++) {
+    const needBag = cap > bagCur;
+    const isNext = cap === pouchCur + 1;
     items.push({
-      id: `pouch_slot_${pouchNext.next}`,
-      name: `Pouch Slot ${pouchNext.next}`,
-      cost: pouchNext.cost,
-      desc: "Tap this slot in combat without opening the bag.",
-      stats: `${state.pouchCapacity} → ${pouchNext.next} pouch slots`,
+      id: `pouch_slot_${cap}`,
+      name: `Pouch Slot ${cap}`,
+      cost: pouchUpgradeCost(cap),
+      next: cap,
+      desc: !isNext
+        ? `Buy Pouch Slot ${pouchCur + 1} first.`
+        : needBag
+          ? `Needs a bag of ${cap} first.`
+          : "Tap this slot in combat without opening the bag.",
+      stats: `${pouchCur} → ${cap} pouch slots`,
       icon: "✚",
       section: "kit",
       kind: "pouch_upgrade",
+      locked: !isNext || needBag,
     });
   }
-  return items;
+  items.sort((a, b) => a.cost - b.cost || (a.kind === b.kind ? a.next - b.next : a.kind === "bag_upgrade" ? -1 : 1));
+  return items.slice(0, 3);
 }
 
 const DOLL_SLOTS = [
@@ -681,7 +727,7 @@ function populatePack(state) {
     if (a) {
       const def = getArrowDef(a.type);
       cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}">
-        <span class="pack-cell-mark">${arrowPackLabel(a.type)}</span>
+        <span class="pack-cell-icon">${arrowIconSvg(a.type, def.color)}</span>
         <span class="pack-cell-sub">Lv${a.level}</span>
       </button>`);
     } else {
@@ -706,7 +752,7 @@ function populatePack(state) {
     const item = findItem(id);
     const bound = isBagSlotPouchBound(state, i);
     return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-bag="${i}">
-      ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-cell-sub">pouch</span>` : ""}` : `<span class="pack-cell-sub">empty</span>`}
+      ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-cell-sub">pouch</span>` : ""}` : `<span class="pack-cell-sub">empty</span>`}
     </button>`;
   }).join("");
 
@@ -716,9 +762,12 @@ function populatePack(state) {
       const item = bagIndex != null ? findItem(bag[bagIndex]) : null;
       return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
         <span class="pack-pouch-num">${i + 1}</span>
-        ${item ? `<span class="pack-cell-mark">${item.icon || "✚"}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
+        ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
       </button>`;
     }).join("");
+    pouchEl.style.gridTemplateColumns = pouchCap <= 3
+      ? `repeat(${Math.max(1, pouchCap)}, minmax(0, 1fr))`
+      : "repeat(3, minmax(0, 1fr))";
   }
 
   const chestItems = [];
@@ -734,12 +783,12 @@ function populatePack(state) {
       if (c.kind === "arrow") {
         const def = getArrowDef(c.arrow.type);
         return `<button type="button" class="pack-cell pack-cell-arrow" data-chest-a="${c.i}" style="border-color:${def.color}">
-          <span class="pack-cell-mark">${arrowPackLabel(c.arrow.type)}</span>
+          <span class="pack-cell-icon">${arrowIconSvg(c.arrow.type, def.color)}</span>
           <span class="pack-cell-sub">Lv${c.arrow.level}</span>
         </button>`;
       }
       return `<button type="button" class="pack-cell filled" data-chest-g="${c.ownedIndex}">
-        <span class="pack-cell-mark">${c.item.icon || "•"}</span>
+        <span class="pack-cell-icon">${itemIconSvg(c.item)}</span>
         <span class="pack-cell-sub">${c.item.name}</span>
       </button>`;
     }).join("")
@@ -1180,21 +1229,21 @@ export function populateHub() {
     const allMaxed = STAT_INFO.every((u) => state.isUpgradeMaxed(u.id));
     const equipLoad = state.equipLoad || 0;
     const metrics = [
-      { id: "hp", value: state.playerMaxHp, label: "HP", tip: `${TRAINING_METRIC_INFO.hp} Currently ${state.playerMaxHp} HP.` },
-      { id: "dmg", value: `+${state.getStrengthBonus()}`, label: "DMG", tip: TRAINING_METRIC_INFO.dmg },
-      { id: "rof", value: `${rof.toFixed(2)}/s`, label: "ROF", tip: TRAINING_METRIC_INFO.rof },
-      { id: "crit", value: `${critX}x / ${crit}%`, label: "Crit dmg / %", tip: TRAINING_METRIC_INFO.crit },
-      { id: "recovery", value: `${recovery}%`, label: "Arrow rec.", tip: TRAINING_METRIC_INFO.recovery },
-      { id: "weight", value: `${equipLoad} / ${equipMax}`, label: "Weight", tip: `${TRAINING_METRIC_INFO.weight} Now ${equipLoad} / ${equipMax}.` },
+      { id: "hp", value: state.playerMaxHp, label: "HP", name: "Hit Points", tip: `${TRAINING_METRIC_INFO.hp} Currently ${state.playerMaxHp} HP.` },
+      { id: "dmg", value: `+${state.getStrengthBonus()}`, label: "DMG", name: "Damage", tip: TRAINING_METRIC_INFO.dmg },
+      { id: "rof", value: `${rof.toFixed(2)}/s`, label: "ROF", name: "Rate of Fire", tip: TRAINING_METRIC_INFO.rof },
+      { id: "crit", value: `${critX}x${crit}%`, label: "CRIT", name: "Critical Hit", tip: TRAINING_METRIC_INFO.crit },
+      { id: "recovery", value: `${recovery}%`, label: "Arw Rec", name: "Arrow Recovery", tip: TRAINING_METRIC_INFO.recovery },
+      { id: "weight", value: `${equipLoad} / ${equipMax}`, label: "Weight", name: "Carry Weight", tip: `${TRAINING_METRIC_INFO.weight} Now ${equipLoad} / ${equipMax}.` },
     ];
     trainingList.innerHTML = `
       <div class="train-summary">
         <span>Lvl ${charLevel}</span><span class="train-divider">/</span>
-        <span>Coins: ${coinLabel(state.coins)}</span><span class="train-divider">/</span>
+        <span>Coins: ${coinLabel(state.coins)}</span>
         <span class="train-summary-next">Next lvlup: ${allMaxed ? "MAX" : coinLabel(cost)}</span>
       </div>
       <div class="train-stats" aria-label="Current ranger stats">
-        ${metrics.map((metric) => `<button type="button" class="train-stat train-metric" data-tip-source="train-${metric.id}" aria-label="${metric.label} information"><strong>${metric.value}</strong><span>${metric.label}</span></button>`).join("")}
+        ${metrics.map((metric) => `<button type="button" class="train-stat train-metric" data-tip-source="train-${metric.id}" aria-label="${metric.name} information"><strong>${metric.value}</strong><span>${metric.label}</span></button>`).join("")}
       </div>
       <div class="train-upgrades">
     ` + STAT_INFO.map((u) => {
@@ -1202,22 +1251,17 @@ export function populateHub() {
       const maxed = state.isUpgradeMaxed(u.id);
       const afford = state.coins >= cost;
       return `<div class="train-row">
-        <div class="train-info">
-          <div class="train-name-line">
-            <div class="train-name">${u.name}</div>
-            <button type="button" class="train-hint" data-tip-source="stat-${u.id}" aria-label="${u.name} information">i</button>
-          </div>
-        </div>
+        <button type="button" class="train-name" data-tip-source="stat-${u.id}">${u.name}</button>
         <div class="train-right">
           <span class="train-level">${lvl}</span>
-          <button class="train-buy ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
+          <button class="train-buy ink-frame ${maxed ? "maxed" : ""}" ${maxed || !afford ? "disabled" : ""} data-upgrade="${u.id}">${maxed ? "MAX" : "Train"}</button>
         </div>
       </div>`;
     }).join("") + `</div>`;
     trainingList.querySelectorAll(".train-stat").forEach((el, i) => {
-      bindStickyTip(el, `<b>${metrics[i].label}</b><p>${metrics[i].tip}</p>`, `train-${metrics[i].id}`);
+      bindStickyTip(el, `<b>${metrics[i].name}</b><p>${metrics[i].tip}</p>`, `train-${metrics[i].id}`);
     });
-    trainingList.querySelectorAll(".train-hint").forEach((el) => {
+    trainingList.querySelectorAll(".train-name").forEach((el) => {
       const id = el.dataset.tipSource.replace("stat-", "");
       const stat = STAT_INFO.find((u) => u.id === id);
       if (stat) bindStickyTip(el, `<b>${stat.name}</b><p>${stat.desc}</p>`, el.dataset.tipSource);
@@ -1270,12 +1314,12 @@ export function populateHub() {
             const costLabel = isOwned ? "Owned" : coinLabel(item.cost);
             const buyLabel = locked ? "Locked" : (isOwned ? "Owned" : "Buy");
             return `<div class="shop-item" data-item-id="${item.id}" data-tip-source="shop-${item.id}">
-              <div class="shop-icon">${item.icon}</div>
-              <div class="shop-name" style="color:${qualColor}">${item.name}</div>
-              <div class="shop-bottom">
+              <div class="shop-top">
+                <div class="shop-icon">${itemIconSvg(item)}</div>
+                <div class="shop-name" style="color:${qualColor}">${item.name}</div>
                 <span class="shop-cost">${costLabel}</span>
-                <button class="shop-buy ${isOwned ? 'owned' : ''}${locked ? ' locked' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${buyLabel}</button>
               </div>
+              <button class="shop-buy ink-frame ${isOwned ? 'owned' : ''}${locked ? ' locked' : ''}" ${isOwned || !afford ? 'disabled' : ''} data-item="${item.id}">${buyLabel}</button>
             </div>`;
           }).join("")}
         </div>
@@ -1323,8 +1367,12 @@ export function populateHub() {
           || findItem(id);
         if (!item) return;
         if (item.kind === "bag_upgrade") {
+          const nxt = nextBagUpgrade(state);
+          if (!nxt.ok || nxt.next !== item.next) return;
           if (!state.buyBagSlot()) return;
         } else if (item.kind === "pouch_upgrade") {
+          const nxt = nextPouchUpgrade(state);
+          if (!nxt.ok || nxt.next !== item.next) return;
           if (!state.buyPouchSlot()) return;
         } else {
           if (!state.spendCoins(item.cost)) return;

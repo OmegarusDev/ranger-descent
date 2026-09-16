@@ -2,13 +2,13 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
-import { DungeonView } from "./engine/DungeonView.js?v=126";
+import { DungeonView } from "./engine/DungeonView.js?v=128";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
 import { CorridorSim } from "./game/CorridorSim.js";
 import { InputHandler } from "./game/InputHandler.js";
-import { lockMobileAppPortrait } from "./engine/immersive.js";
+import { initImmersive } from "./engine/immersive.js";
 import {
   initHub,
   populateHub,
@@ -36,7 +36,7 @@ const engine = new RenderEngine2D5(canvas);
 const dungeon = new DungeonView();
 const sim = new CorridorSim();
 const input = new InputHandler(canvas);
-lockMobileAppPortrait();
+initImmersive();
 if (typeof location !== "undefined" && location.search.includes("debug=1")) {
   globalThis.sim = sim;
   globalThis.dungeon = dungeon;
@@ -440,6 +440,7 @@ sim.on("enemy_death", (e) => {
 });
 
 sim.on("arrow_fire", (e) => {
+  dungeon.bowJoltUntil = 0;
   const ang = e.projectile ? Math.atan2(e.projectile.vdist, -e.projectile.vx) : -Math.PI / 2;
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
@@ -458,7 +459,10 @@ sim.on("quiver_empty", () => {
 let lastNotReadyAt = 0;
 sim.on("arrow_not_ready", () => {
   const now = performance.now();
-  if (now - lastNotReadyAt < 320) return;
+  if (!dungeon.bowJoltUntil || now >= dungeon.bowJoltUntil) {
+    dungeon.bowJoltUntil = now + 280;
+  }
+  if (now - lastNotReadyAt < 900) return;
   lastNotReadyAt = now;
   showAmmoAlert("Hold — string recovering", "wait");
   if (nockMeter) {
@@ -466,7 +470,6 @@ sim.on("arrow_not_ready", () => {
     void nockMeter.offsetWidth;
     nockMeter.classList.add("blocked");
   }
-  dungeon.bowJoltUntil = (sim.runTime || 0) + 0.32;
 });
 
 sim.on("consumable_used", (e) => {
@@ -674,6 +677,7 @@ function startDungeonRun() {
     closeElevatorModal();
     closeHubSheets();
     sim.initRun();
+    dungeon.bowJoltUntil = 0;
   } catch (err) {
     console.error("Init error:", err);
   }

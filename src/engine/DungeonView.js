@@ -4,7 +4,7 @@
  */
 import { CONFIG } from "../data/config.js";
 import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
-import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=126";
+import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=127";
 
 const NEAR = 6;
 const FAR = 760;
@@ -1471,9 +1471,22 @@ export class DungeonView {
       ctx.fill();
       return;
     }
+    const speed = Math.hypot(p.vx || 0, p.vz || 0) || 1;
+    const ux = (p.vx || 0) / speed;
+    const uz = (p.vz || 0) / speed;
+    const shaft = 16;
     const tip = this.project(p.x, dist, py);
     if (tip.behind || tip.occluded) return;
-    const tail = this.project(p.x, dist + 16, py);
+    const tail = this.project(p.x - ux * shaft, dist - uz * shaft, py);
+    const dx = tip.x - tail.x;
+    const dy = tip.y - tail.y;
+    const slen = Math.hypot(dx, dy) || 1;
+    const nx = dx / slen;
+    const ny = dy / slen;
+    const px = -ny;
+    const pyx = nx;
+    const head = Math.max(5.5, Math.min(11, 7.2 * Math.max(0.55, tip.s * 0.07)));
+    const fletch = Math.max(3.2, head * 0.55);
     ctx.save();
     ctx.strokeStyle = "#e8d8b0";
     ctx.lineWidth = Math.max(1.6, 2.4 * tip.s * 0.08);
@@ -1484,17 +1497,17 @@ export class DungeonView {
     ctx.stroke();
     ctx.fillStyle = "#c9a227";
     ctx.beginPath();
-    ctx.moveTo(tip.x, tip.y);
-    ctx.lineTo(tip.x + 3.2, tip.y + 7);
-    ctx.lineTo(tip.x - 3.2, tip.y + 7);
+    ctx.moveTo(tip.x + nx * 1.2, tip.y + ny * 1.2);
+    ctx.lineTo(tip.x - nx * head + px * (head * 0.42), tip.y - ny * head + pyx * (head * 0.42));
+    ctx.lineTo(tip.x - nx * head - px * (head * 0.42), tip.y - ny * head - pyx * (head * 0.42));
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = "#8a4a28";
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(tail.x - 3, tail.y);
-    ctx.lineTo(tail.x, tail.y + 1);
-    ctx.lineTo(tail.x + 3, tail.y);
+    ctx.moveTo(tail.x + px * fletch, tail.y + pyx * fletch);
+    ctx.lineTo(tail.x + nx * 1.4, tail.y + ny * 1.4);
+    ctx.lineTo(tail.x - px * fletch, tail.y - pyx * fletch);
     ctx.stroke();
     const trail = p._trail || [];
     for (let i = 0; i < trail.length; i++) {
@@ -1661,10 +1674,10 @@ export class DungeonView {
     const pull = pulling ? Math.min(1, input.power / 24) : 0;
     let tilt = 0;
     if (pulling) {
-      tilt = Math.max(-0.55, Math.min(0.55, (input.angle || 0) + Math.PI / 2));
+      tilt = Math.max(-0.68, Math.min(0.68, (input.angle || 0) + Math.PI / 2));
     }
-    if (this.bowJoltUntil && this.time < this.bowJoltUntil) {
-      tilt += Math.sin(this.time * 64) * 0.045;
+    if (this.bowJoltUntil && performance.now() < this.bowJoltUntil) {
+      tilt += Math.sin(performance.now() * 0.064) * 0.045;
     }
     const nocked = this.nockedArrow || null;
     blitBow(ctx, this.cssW, this.cssH, pull, {

@@ -1,0 +1,17 @@
+---
+description: Ragged ink chrome must never blur live text.
+alwaysApply: true
+---
+
+# Ink chrome
+
+Two filters, two jobs:
+
+- `#ink-edge` — ragged, slightly pixelated **frames**. Put it on an empty layer only: `.ink-frame::after`, a divider bar, or an SVG stroke. Never on the element that holds copy.
+- `#ink-type` — visible ink speckle **inside** live type. Glyph edges stay sharp (no displacement; grain is kept off the rim). Do not use `#ink-paint` / `#ink-paper` / `#ink-edge` on readable copy.
+- `#sign-paint` / `#sign-paint-b` — patchy faded paint on hub sign **logos** only (flakes and bleach, not blur). Not for live UI copy.
+
+Add class `ink-frame` to new boxes and buttons. Add class `ink-type` (or the shared type selector in `styles.css`) to new labels.
+
+Wrong: `button { filter: url(#ink-edge); }` — letters warp.
+Right: `button.ink-frame` plus `span { filter: url(#ink-type); }`.

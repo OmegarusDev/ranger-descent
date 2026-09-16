@@ -100,7 +100,7 @@ export const SHOP_QUIVERS = (() => {
       icon: "🏹",
       section: "quivers",
     });
-    if (step >= 1) cost = Math.round(cost * 1.15);
+    if (step >= 1) cost = Math.round(cost * 1.5);
   }
   return list;
 })();

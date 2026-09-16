@@ -372,7 +372,8 @@ function bowLine(x0, y0, x1, y1, col) {
 }
 
 function paintNockedArrow(ax, nockY, pal, type) {
-  const headY = 3;
+  const len = 32;
+  const headY = Math.round(nockY - len);
   for (let y = headY + 4; y <= nockY; y++) {
     bowDot(ax, y, pal.shaft);
     bowDot(ax + 1, y, pal.shaftD);
@@ -499,8 +500,8 @@ export function blitBow(ctx, cssW, cssH, pull, opts = {}) {
   const dw = img.width * scale;
   const dh = img.height * scale;
   const tilt = (opts.tilt || 0) + (opts.jolt || 0);
-  const pivot = 0.31;
-  const lift = Math.max(22, cssH * 0.052);
+  const pivot = 0.78;
+  const lift = Math.max(16, cssH * 0.038);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (ctx.webkitImageSmoothingEnabled != null) ctx.webkitImageSmoothingEnabled = false;

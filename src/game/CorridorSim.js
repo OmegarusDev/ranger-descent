@@ -1759,7 +1759,7 @@ export class CorridorSim {
 
     const aim = trajectory && trajectory.vector ? trajectory.vector : { x: 0, y: -1 };
     const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
-    const vx = aim.x * spd * 0.35;
+    const vx = aim.x * spd * 0.42;
     const vz = spd * 0.75;
 
     const dmg = getArrowDamage(arrow.type, arrow.level);
