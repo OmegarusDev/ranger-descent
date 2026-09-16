@@ -220,6 +220,41 @@ test("an in-your-face tap stabs even if the sprite hit-test misses", () => {
   assert.ok(sim.enemies[0].hp < 8);
 });
 
+test("side aim sends the arrow along the same yaw as the bow", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  const yaw = 0.9;
+  sim.fireArrow({
+    angle: yaw,
+    vector: { x: Math.sin(yaw), y: -Math.cos(yaw) },
+    speed: 400,
+  });
+  const p = sim.projectiles[0];
+  assert.ok(p);
+  assert.ok(Math.abs(p.vx / p.vz - Math.tan(yaw)) < 0.02);
+  assert.ok(p.vz > 0);
+});
+
+test("aim yaw is clamped so shots cannot wrap behind the ranger", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  sim.fireArrow({ angle: 2.4, vector: { x: 1, y: 0 }, speed: 400 });
+  const p = sim.projectiles[0];
+  assert.ok(p);
+  const fired = Math.atan2(p.vx, p.vz);
+  assert.ok(fired > 1.2);
+  assert.ok(fired <= 1.28001);
+});
+
+test("spawn lanes spread across most of the hall", () => {
+  const sim = new CorridorSim();
+  const lanes = sim._pickSpawnLanes(3);
+  const span = Math.max(...lanes) - Math.min(...lanes);
+  assert.ok(span > 80);
+});
+
 test("firing during arrow cooldown emits not-ready feedback", () => {
   const sim = new CorridorSim();
   sim.state.startRun();
@@ -243,4 +278,144 @@ test("clearing a wave starts the walk to the fork without a loot pause", () => {
   assert.equal(sim.lootPending, false);
   assert.ok(sim._approachingJunction || sim.junctionPending);
   assert.ok(sim.pendingWaveReport);
+});
+
+test("combat hold keeps the map camera on the ranger", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.waveActive = true;
+  sim.waveQueue = ["hold"];
+  sim.enemies = [{
+    id: 99, type: "slime", x: 0, worldZ: 900, hp: 99, maxHp: 99,
+    speed: 0, size: 1, behavior: "advance",
+    slowT: 0, _hitStun: 0, _squash: 0, _contactCd: 0,
+  }];
+  const hold = sim.segmentEndZ - 280;
+  let n = 0;
+  while (sim.playerWorldZ < hold - 0.01 && n++ < 20000) sim.tick();
+  for (let i = 0; i < 90; i++) sim.tick();
+  assert.ok(Math.abs(sim.playerWorldZ - hold) < 1e-9);
+  assert.ok(Math.abs(sim.mapZ - sim.playerWorldZ) < 1e-9);
+  assert.equal(sim.mapX, 0);
+});
+
+test("post-clear approach never slams past a short stride", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.enemies = [];
+  sim.waveQueue = [];
+  sim.waveActive = false;
+  sim._beginApproachToJunction();
+  let maxStep = 0;
+  for (let i = 0; i < 2500 && (sim._approachingJunction || sim.playerWorldZ < sim.segmentEndZ - 120); i++) {
+    const z = sim.playerWorldZ;
+    sim.tick();
+    maxStep = Math.max(maxStep, sim.playerWorldZ - z);
+  }
+  assert.ok(maxStep > 0);
+  assert.ok(maxStep <= 0.2 * 2.4 + 1e-6);
+});
+
+test("spoils are offered while walking to the fork", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  let shown = 0;
+  sim.on("junction_show", () => { shown += 1; });
+  sim._beginApproachToJunction();
+  assert.equal(shown, 1);
+  assert.equal(sim.junctionPending, true);
+  assert.equal(sim._approachingJunction, true);
+  assert.equal(sim.isWalkingView(), true);
+});
+
+test("choosing a path during the approach waits until the fork", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim._beginApproachToJunction();
+  const dir = sim.junctionChoices[0].direction;
+  const z = sim.playerWorldZ;
+  sim.chooseJunction(dir);
+  assert.equal(sim.junctionPending, false);
+  assert.equal(sim._queuedJunctionDir, dir);
+  assert.equal(sim.turning, false);
+  assert.equal(sim._approachingJunction, true);
+  sim.tick();
+  assert.ok(sim.playerWorldZ > z);
+});
+
+test("snapping to the fork keeps the map with world Z", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  const stopAt = sim.segmentEndZ - 120;
+  sim.playerWorldZ = stopAt - 0.4;
+  sim.mapZ = sim.playerWorldZ;
+  sim.mapX = 0;
+  sim._beginApproachToJunction();
+  assert.equal(sim.playerWorldZ, stopAt);
+  assert.equal(sim.mapZ, stopAt);
+  assert.equal(sim.junctionPending, true);
+});
+
+test("paused elevator ticks do not interpolate the last stride", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.tick();
+  sim.elevatorCheckpointPending = true;
+  const z = sim.playerWorldZ;
+  const mapZ = sim.mapZ;
+  sim.tick();
+  const cam = sim.renderCam(0.5);
+  assert.equal(cam.playerWorldZ, z);
+  assert.equal(cam.mapZ, mapZ);
+});
+
+test("combat hold stops walk-bob once the ranger is parked", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.waveActive = true;
+  sim.waveQueue = ["hold"];
+  sim.enemies = [{
+    id: 99, type: "slime", x: 0, worldZ: 900, hp: 99, maxHp: 99,
+    speed: 0, size: 1, behavior: "advance",
+    slowT: 0, _hitStun: 0, _squash: 0, _contactCd: 0,
+  }];
+  assert.equal(sim.isWalkingView(), true);
+  const hold = sim.segmentEndZ - 280;
+  let n = 0;
+  while (sim.playerWorldZ < hold - 0.01 && n++ < 20000) sim.tick();
+  assert.equal(sim.isWalkingView(), false);
+});
+
+test("entity depth can follow an interpolated camera Z", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.enemies = [{
+    id: 1, type: "slime", x: 0, worldZ: sim.playerWorldZ + 40, hp: 5, maxHp: 5,
+    speed: 0, size: 1, behavior: "advance",
+    slowT: 0, _hitStun: 0, _squash: 0, _contactCd: 0,
+  }];
+  const mid = sim.playerWorldZ + 4;
+  const list = sim.getAllEntities(mid);
+  const foe = list.find((e) => e.type === "enemy");
+  assert.ok(foe);
+  assert.equal(foe.entity.dist, 36);
+});
+
+test("turning poses next-hall packs in the chosen mouth", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.junctionChoices = [{ direction: "right", groups: [["slime"]], coinBonus: 0 }];
+  sim.junctionPending = true;
+  sim.chooseJunction("right");
+  const z = sim.playerWorldZ;
+  const posed = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
+  assert.ok(posed);
+  assert.ok(posed.x > 150);
+  assert.ok(posed.dist <= 120);
+  assert.ok(posed.dist >= 12);
+  sim.turnU = 0.9;
+  const late = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
+  assert.ok(late);
+  assert.ok(late.dist > posed.dist);
+  assert.ok(Math.abs(late.x - 8) < Math.abs(posed.x - 8));
 });

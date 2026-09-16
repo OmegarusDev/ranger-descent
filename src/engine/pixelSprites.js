@@ -282,11 +282,15 @@ const TORCH_1 = makeTorch(1);
 let bowBuf = null;
 let bowCtx = null;
 const BOW_W = 128;
-const BOW_H = 84;
+const BOW_H = 108;
 const BOW_CX = 64;
-const REST_SPAN = 54;
-const BELLY_Y = 11;
-const TIP_DROP = 24;
+const REST_SPAN = 52;
+const BELLY_Y = 54;
+const TIP_DROP = 10;
+const DRAW_IN = 8;
+const TIP_DRAW = 3;
+const GRIP_H = 8;
+const ARROW_LEN = 50;
 
 function ensureBow() {
   if (bowBuf && bowBuf.width === BOW_W && bowBuf.height === BOW_H) return;
@@ -340,9 +344,17 @@ function arrowPal(type, color) {
   return pal;
 }
 
-function flexedLimbY(x, span, p) {
+function limbY(x, span, tipDrop) {
   const s = Math.min(1, Math.abs(x - BOW_CX) / Math.max(1, span));
-  return BELLY_Y + s * s * (TIP_DROP + p * 10) + p * s * 4;
+  const belly = s * s * tipDrop;
+  const kick = s > 0.8 ? ((s - 0.8) / 0.2) * -3 : 0;
+  return BELLY_Y + belly + kick;
+}
+
+function restHalfString() {
+  const yTip = limbY(BOW_CX - REST_SPAN, REST_SPAN, TIP_DROP);
+  const nock = Math.max(yTip, BELLY_Y + GRIP_H);
+  return Math.hypot(REST_SPAN, nock - yTip);
 }
 
 function bowDot(x, y, col) {
@@ -372,56 +384,68 @@ function bowLine(x0, y0, x1, y1, col) {
 }
 
 function paintNockedArrow(ax, nockY, pal, type) {
-  const len = 32;
-  const headY = Math.round(nockY - len);
-  for (let y = headY + 4; y <= nockY; y++) {
+  const headY = Math.round(nockY - ARROW_LEN);
+  const nock = Math.round(nockY);
+  for (let y = headY + 5; y <= nock; y++) {
+    const t = (y - headY) / Math.max(1, nock - headY);
     bowDot(ax, y, pal.shaft);
-    bowDot(ax + 1, y, pal.shaftD);
+    if (t > 0.18) bowDot(ax + 1, y, pal.shaftD);
+    if (t > 0.55) bowDot(ax - 1, y, pal.shaft);
   }
   bowDot(ax, headY, pal.head);
   bowDot(ax, headY + 1, pal.head);
   bowDot(ax - 1, headY + 1, pal.head);
   bowDot(ax + 1, headY + 1, pal.head);
-  bowDot(ax - 1, headY + 2, pal.head);
   bowDot(ax, headY + 2, pal.head);
+  bowDot(ax - 1, headY + 2, pal.head);
   bowDot(ax + 1, headY + 2, pal.head);
   bowDot(ax - 2, headY + 3, pal.headD);
   bowDot(ax + 2, headY + 3, pal.headD);
-  bowDot(ax, headY + 3, pal.headD);
+  bowDot(ax, headY + 3, pal.head);
+  bowDot(ax - 1, headY + 3, pal.headD);
+  bowDot(ax + 1, headY + 3, pal.headD);
+  bowDot(ax, headY + 4, pal.headD);
   if (type === "barbed" || type === "piercing") {
-    bowDot(ax - 2, headY + 4, pal.headD);
-    bowDot(ax + 2, headY + 4, pal.headD);
+    bowDot(ax - 3, headY + 4, pal.headD);
+    bowDot(ax + 3, headY + 4, pal.headD);
   }
   if (type === "flint") {
     bowDot(ax, headY, pal.headD);
     bowDot(ax - 1, headY + 2, pal.headD);
     bowDot(ax + 1, headY + 2, pal.headD);
   }
-  bowDot(ax - 2, nockY - 2, pal.fletch);
-  bowDot(ax - 1, nockY - 1, pal.fletch);
-  bowDot(ax + 2, nockY - 2, pal.fletch);
-  bowDot(ax + 1, nockY - 1, pal.fletch);
-  bowDot(ax - 2, nockY, pal.fletchD);
-  bowDot(ax + 2, nockY, pal.fletchD);
+  bowDot(ax - 3, nock - 3, pal.fletch);
+  bowDot(ax - 2, nock - 2, pal.fletch);
+  bowDot(ax - 1, nock - 1, pal.fletch);
+  bowDot(ax + 3, nock - 3, pal.fletch);
+  bowDot(ax + 2, nock - 2, pal.fletch);
+  bowDot(ax + 1, nock - 1, pal.fletch);
+  bowDot(ax - 3, nock - 1, pal.fletchD);
+  bowDot(ax + 3, nock - 1, pal.fletchD);
+  bowDot(ax - 2, nock, pal.fletchD);
+  bowDot(ax + 2, nock, pal.fletchD);
 }
 
-/** First-person hunting bow, pixel-snapped. pull is 0..1. */
+/** First-person hunting bow aimed down the hall. pull is 0..1. */
 export function getBowSprite(pull, type, color) {
   ensureBow();
   bowCtx.clearRect(0, 0, BOW_W, BOW_H);
   const p = Math.max(0, Math.min(1, pull || 0));
-  const span = REST_SPAN - p * 9;
+  const halfStr = restHalfString();
+  const span = REST_SPAN - DRAW_IN * p;
+  const tipDrop = TIP_DROP + TIP_DRAW * p;
   const xL = Math.round(BOW_CX - span);
   const xR = Math.round(BOW_CX + span);
-  const yL = Math.round(flexedLimbY(xL, span, p));
-  const yR = Math.round(flexedLimbY(xR, span, p));
-  const vert = Math.sqrt(Math.max(0, REST_SPAN * REST_SPAN - span * span));
-  const nockY = Math.min(BOW_H - 3, Math.round(Math.max(yL, yR) + vert));
+  const yL = Math.round(limbY(xL, span, tipDrop));
+  const yR = Math.round(limbY(xR, span, tipDrop));
+  const depth = Math.sqrt(Math.max(0, halfStr * halfStr - span * span));
+  const nockCap = BELLY_Y + ARROW_LEN - 4;
+  const nockY = Math.round(Math.min(nockCap, Math.max(yL, yR) + depth));
 
   for (let x = xL; x <= xR; x++) {
     const s = Math.abs(x - BOW_CX) / Math.max(1, span);
-    const y0 = Math.round(flexedLimbY(x, span, p));
-    const thick = s > 0.88 ? 3 : s > 0.55 ? 4 : 5;
+    const y0 = Math.round(limbY(x, span, tipDrop));
+    const thick = s > 0.88 ? 3 : s > 0.52 ? 4 : 6;
     for (let k = 0; k < thick; k++) {
       let col = C.wood;
       if (k === 0) col = C.woodL;
@@ -433,34 +457,33 @@ export function getBowSprite(pull, type, color) {
   bowDot(xL - 1, yL, C.gold);
   bowDot(xL, yL, C.gold);
   bowDot(xL - 1, yL + 1, C.goldD);
-  bowDot(xL, yL + 1, C.goldD);
   bowDot(xR, yR, C.gold);
   bowDot(xR + 1, yR, C.gold);
   bowDot(xR, yR + 1, C.goldD);
-  bowDot(xR + 1, yR + 1, C.goldD);
 
-  // Leather wrap on the stave belly — not a hanging tiller / crossbow stock.
-  for (let x = BOW_CX - 4; x <= BOW_CX + 4; x++) {
-    const y0 = Math.round(flexedLimbY(x, span, p));
-    for (let k = 0; k < 6; k++) {
+  for (let x = BOW_CX - 3; x <= BOW_CX + 3; x++) {
+    const y0 = Math.round(limbY(x, span, tipDrop));
+    for (let k = 0; k < GRIP_H; k++) {
       let col = C.wrap;
-      if (x === BOW_CX - 4 || x === BOW_CX + 4 || k === 0 || k === 5) col = C.out;
+      if (x === BOW_CX - 3 || x === BOW_CX + 3 || k === 0 || k === GRIP_H - 1) col = C.out;
       else if (k === 1) col = C.woodL;
       else if ((x + k) % 3 === 0) col = C.grip;
       bowDot(x, y0 + k, col);
     }
   }
 
+  bowLine(xL, yL, BOW_CX, nockY, C.string);
+  bowLine(xR, yR, BOW_CX, nockY, C.string);
   bowLine(xL, yL + 1, BOW_CX, nockY, C.string);
   bowLine(xR, yR + 1, BOW_CX, nockY, C.string);
 
   if (type) {
     const pal = arrowPal(type, color);
     if (type === "double") {
-      paintNockedArrow(61, nockY, pal, type);
-      paintNockedArrow(66, nockY, pal, type);
+      paintNockedArrow(BOW_CX - 3, nockY, pal, type);
+      paintNockedArrow(BOW_CX + 2, nockY, pal, type);
     } else {
-      paintNockedArrow(63, nockY, pal, type);
+      paintNockedArrow(BOW_CX, nockY, pal, type);
     }
   }
 
@@ -495,19 +518,20 @@ export function blitSprite(ctx, img, x, y, destH, { alpha = 1, flip = false, anc
 
 export function blitBow(ctx, cssW, cssH, pull, opts = {}) {
   const img = getBowSprite(pull, opts.type, opts.color);
-  const hud = Math.max(14, cssH * 0.022);
-  const scale = Math.max(4, Math.floor(Math.min(cssW * 1.08 / img.width, cssH * 0.74 / img.height)));
+  const hud = Math.max(6, cssH * 0.01);
+  const scale = Math.max(4, Math.floor(Math.min(cssW * 0.94 / img.width, cssH * 0.58 / img.height)));
   const dw = img.width * scale;
   const dh = img.height * scale;
   const tilt = (opts.tilt || 0) + (opts.jolt || 0);
-  const pivot = 0.78;
-  const lift = Math.max(16, cssH * 0.038);
+  // Grip / arrow rest — higher than the nock so the bow turns in the hands.
+  const pivot = 0.52;
+  const nockFrac = 0.90;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (ctx.webkitImageSmoothingEnabled != null) ctx.webkitImageSmoothingEnabled = false;
-  ctx.translate(cssW * 0.5, cssH - hud - dh * pivot - lift);
+  ctx.translate(cssW * 0.5, cssH - hud + 8 - dh * (nockFrac - pivot));
   if (tilt) ctx.rotate(tilt);
-  ctx.drawImage(img, -dw / 2, -dh * (1 - pivot), dw, dh);
+  ctx.drawImage(img, -dw / 2, -dh * pivot, dw, dh);
   ctx.restore();
 }
 

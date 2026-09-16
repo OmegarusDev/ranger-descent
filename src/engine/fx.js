@@ -347,26 +347,23 @@ export class FxSystem {
     ctx.textBaseline = "middle";
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
-    ctx.shadowColor = "rgba(40, 0, 0, 0.45)";
-    ctx.shadowBlur = 2;
-    ctx.shadowOffsetY = 1;
     for (const f of this.floats) {
       const a = Math.max(0, f.life / f.max);
-      const p = cam.project(f.x * cell, f.y * cell, 28);
-      if (!p || p.behind) continue;
+      const p = cam.project(f.x * cell, f.y * cell, 22);
+      if (!p || p.behind || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      const h = cam.cssH || 720;
+      if (p.y < -20 || p.y > h + 40) continue;
       const born = 1 - a;
-      const punch = 1 + Math.max(0, 1 - born / 0.14) * 0.38;
-      const px = (f.crit ? 24 : 18) * punch;
+      const punch = 1 + Math.max(0, 1 - born / 0.12) * 0.1;
+      const px = Math.min(18, (f.crit ? 17 : 15) * punch);
       ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(f.crit ? -0.16 : -0.1);
-      ctx.globalAlpha = Math.min(1, a * 1.25);
-      ctx.font = `italic 900 ${px}px "Arial Black", "Helvetica Neue", "Gill Sans", sans-serif`;
-      ctx.lineWidth = f.crit ? 3 : 2.4;
-      ctx.strokeStyle = "#fff6e8";
+      ctx.translate(p.x, p.y - (1 - a) * 10);
+      ctx.globalAlpha = Math.min(1, a * 1.15);
+      ctx.font = `700 ${px}px "Cinzel", Palatino, serif`;
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = "#2a0606";
       ctx.strokeText(f.text, 0, 0);
-      ctx.fillStyle = f.crit ? "#ffd24a" : "#ff1e18";
-      ctx.fillText(f.text, 0, 0);
+      ctx.fillStyle = f.crit ? "#ff5a2c" : "#dc1c14";
       ctx.fillText(f.text, 0, 0);
       ctx.restore();
     }

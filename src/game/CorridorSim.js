@@ -86,9 +86,9 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
 
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
-const FIGHT_LANE = HALF_CORRIDOR * 0.22;
+const FIGHT_LANE = HALF_CORRIDOR * 0.68;
 const SEGMENT_LENGTH = CONFIG.HALL_LENGTH || 560;
-const JUNCTION_STOP = CONFIG.JUNCTION_STOP || 52;
+const JUNCTION_STOP = CONFIG.JUNCTION_STOP || 120;
 /** Hold the ranger short of the T during a fight so the far mouths stay in view. */
 const COMBAT_HOLD = 280;
 /** First pack sits down-hall so a turn already looks into the wave. */
@@ -124,17 +124,20 @@ export class CorridorSim {
     this.movingForward = true;
     this.junctionChoices = null;
     this.junctionPending = false;
+    this._queuedJunctionDir = null;
     this.turnAngle = 0;
     this.turnTarget = 0;
     this.turnFrom = 0;
     this.turnT = 0;
-    this.turnDur = 0.7;
+    this.turnDur = 0.82;
     this.turnU = 0;
     this.turning = false;
     this._forwardCommit = false;
     this._forwardCommitT = 0;
     this._approachingJunction = false;
     this._approachingElevator = false;
+    this._approachStartZ = null;
+    this._prevCam = null;
     this.elevatorCheckpointPending = false;
     this._pendingElevatorTarget = null;
     this._finalBoss = false;
@@ -185,6 +188,7 @@ export class CorridorSim {
     this.movingForward = true;
     this.junctionChoices = null;
     this.junctionPending = false;
+    this._queuedJunctionDir = null;
     this._pendingEncounter = null;
     this._waveCoinBonus = 0;
     this.turnAngle = 0;
@@ -197,6 +201,8 @@ export class CorridorSim {
     this._forwardCommitT = 0;
     this._approachingJunction = false;
     this._approachingElevator = false;
+    this._approachStartZ = null;
+    this._prevCam = null;
     this.elevatorCheckpointPending = false;
     this._pendingElevatorTarget = null;
     this._finalBoss = false;
@@ -230,20 +236,113 @@ export class CorridorSim {
     this.emit("run_start");
   }
 
+  _moveAlong(step) {
+    if (!step) return 0;
+    this.playerWorldZ += step;
+    const rad = (this.heading * Math.PI) / 180;
+    this.mapX += Math.sin(rad) * step;
+    this.mapZ += Math.cos(rad) * step;
+    this.state.playerZ = this.playerWorldZ;
+    this.state.runDistance = this.playerWorldZ;
+    return step;
+  }
+
+  _yawDeg() {
+    return (this.heading || 0) + (this.turnAngle || 0);
+  }
+
+  _camSnapshot() {
+    return {
+      mapX: this.mapX,
+      mapZ: this.mapZ,
+      playerWorldZ: this.playerWorldZ,
+      yawDeg: this._yawDeg(),
+    };
+  }
+
+  _captureCam() {
+    this._prevCam = this._camSnapshot();
+  }
+
+  /** Identity interpolation so a paused tick cannot ping-pong the last step. */
+  _holdCam() {
+    this._prevCam = this._camSnapshot();
+  }
+
+  renderCam(alpha = 1) {
+    const p = this._prevCam;
+    const a = Math.max(0, Math.min(1, alpha));
+    const yawNow = this._yawDeg();
+    if (!p || a >= 1) {
+      return { mapX: this.mapX, mapZ: this.mapZ, playerWorldZ: this.playerWorldZ, yawDeg: yawNow };
+    }
+    let dyaw = yawNow - p.yawDeg;
+    while (dyaw > 180) dyaw -= 360;
+    while (dyaw < -180) dyaw += 360;
+    return {
+      mapX: p.mapX + (this.mapX - p.mapX) * a,
+      mapZ: p.mapZ + (this.mapZ - p.mapZ) * a,
+      playerWorldZ: p.playerWorldZ + (this.playerWorldZ - p.playerWorldZ) * a,
+      yawDeg: p.yawDeg + dyaw * a,
+    };
+  }
+
+  _tickApproach() {
+    const stopAt = this.segmentEndZ - JUNCTION_STOP;
+    if (this._approachStartZ == null) this._approachStartZ = this.playerWorldZ;
+    const distLeft = stopAt - this.playerWorldZ;
+    if (distLeft <= 0.01) {
+      if (distLeft !== 0) this._moveAlong(distLeft);
+      this.movingForward = false;
+      this._approachStartZ = null;
+      if (this._approachingElevator) {
+        this._approachingElevator = false;
+        this._rideElevator();
+      } else {
+        this._approachingJunction = false;
+        this._arriveAtFork();
+      }
+      return;
+    }
+    const gone = this.playerWorldZ - this._approachStartZ;
+    const walk = CONFIG.PLAYER_SPEED;
+    const cruise = walk * 2.35;
+    const accelDist = 28;
+    const brakeDist = 22;
+    let step = cruise;
+    if (gone < accelDist) {
+      const t = Math.max(0, gone / accelDist);
+      const s = t * t * (3 - 2 * t);
+      step = walk + (cruise - walk) * s;
+    }
+    if (distLeft < brakeDist) {
+      const t = Math.max(0, distLeft / brakeDist);
+      const s = t * t * (3 - 2 * t);
+      step = Math.min(step, walk * 0.72 + (cruise - walk * 0.72) * s);
+    }
+    this._moveAlong(Math.min(step, distLeft));
+  }
+
   tick() {
     if (!this.running) return;
     if (this.state.phase !== "run") {
       this.running = false;
+      this._holdCam();
       return;
     }
-    if (this.elevatorCheckpointPending) return;
-    this.tickIndex = (this.tickIndex || 0) + 1;
     this.dt = 1 / 60;
-    this.runTime += this.dt;
+    if (this.elevatorCheckpointPending) {
+      this._holdCam();
+      return;
+    }
     if (this.hitStop > 0) {
+      this._holdCam();
       this.hitStop = Math.max(0, this.hitStop - this.dt);
       return;
     }
+    this.tickIndex = (this.tickIndex || 0) + 1;
+    this.runTime += this.dt;
+    this._captureCam();
 
     if (this.lootPending || this._lootDelayT > 0) {
       if (this._lootDelayT > 0) {
@@ -262,8 +361,7 @@ export class CorridorSim {
     if (this.turning) {
       this.turnT += this.dt;
       this.turnU = Math.min(1, this.turnT / this.turnDur);
-      const u = this.turnU;
-      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      const e = this.turnEase(this.turnU);
       this.turnAngle = this.turnFrom + (this.turnTarget - this.turnFrom) * e;
       if (this.turnU >= 1) {
         this.turnAngle = this.turnTarget;
@@ -272,55 +370,25 @@ export class CorridorSim {
       }
     } else if (this._forwardCommit) {
       this._forwardCommitT += this.dt;
-      const u = Math.min(1, this._forwardCommitT / 0.38);
-      const step = CONFIG.PLAYER_SPEED * (1.4 + (1 - u) * 0.8);
-      this.playerWorldZ += step;
-      const rad = (this.heading * Math.PI) / 180;
-      this.mapX += Math.sin(rad) * step;
-      this.mapZ += Math.cos(rad) * step;
-      this.state.playerZ = this.playerWorldZ;
-      this.state.runDistance = this.playerWorldZ;
+      const u = Math.min(1, this._forwardCommitT / 0.32);
+      const ease = (1 - u) * (1 - u);
+      this._moveAlong(CONFIG.PLAYER_SPEED * (1 + 0.18 * ease));
       if (u >= 1) {
         this._forwardCommit = false;
         this._forwardCommitT = 0;
         this._finishHallEntry();
       }
     } else if (this._approachingJunction || this._approachingElevator) {
-      // Sprint to the fork / elevator shaft after a clear — never choose from mid-hall.
-      const stopAt = this.segmentEndZ - JUNCTION_STOP;
-      const step = CONFIG.PLAYER_SPEED * 8.5;
-      const nextZ = Math.min(stopAt, this.playerWorldZ + step);
-      const moved = nextZ - this.playerWorldZ;
-      this.playerWorldZ = nextZ;
-      const rad = (this.heading * Math.PI) / 180;
-      this.mapX += Math.sin(rad) * moved;
-      this.mapZ += Math.cos(rad) * moved;
-      this.state.playerZ = this.playerWorldZ;
-      this.state.runDistance = this.playerWorldZ;
-      if (this.playerWorldZ >= stopAt - 0.01) {
-        this.playerWorldZ = stopAt;
-        this.movingForward = false;
-        if (this._approachingElevator) {
-          this._approachingElevator = false;
-          this._rideElevator();
-        } else {
-          this._approachingJunction = false;
-          this._showJunction();
-        }
-      }
+      this._tickApproach();
     }
 
     if (this.movingForward && !this.junctionPending && !this.turning && !this._forwardCommit && !this._approachingJunction && !this._approachingElevator) {
-      this.playerWorldZ += CONFIG.PLAYER_SPEED;
-      const rad = (this.heading * Math.PI) / 180;
-      this.mapX += Math.sin(rad) * CONFIG.PLAYER_SPEED;
-      this.mapZ += Math.cos(rad) * CONFIG.PLAYER_SPEED;
-      this.state.playerZ = this.playerWorldZ;
-      this.state.runDistance = this.playerWorldZ;
-
-      if (!this._waveCleared() && this.playerWorldZ > this.segmentEndZ - COMBAT_HOLD) {
-        this.playerWorldZ = this.segmentEndZ - COMBAT_HOLD;
+      let step = CONFIG.PLAYER_SPEED;
+      if (!this._waveCleared()) {
+        const hold = this.segmentEndZ - COMBAT_HOLD;
+        step = Math.min(step, Math.max(0, hold - this.playerWorldZ));
       }
+      this._moveAlong(step);
     }
 
     this._tickSpawning();
@@ -386,6 +454,18 @@ export class CorridorSim {
     return !this.waveActive
       && (!this.waveQueue || this.waveQueue.length === 0)
       && this.enemies.length === 0;
+  }
+
+  /** True while the camera should bob as if the ranger is stepping. Standing still keeps a breath bob in the view. */
+  isWalkingView() {
+    if (this.hitStop > 0 || this.turning) return false;
+    if (this.junctionPending && !this._approachingJunction) return false;
+    if (this._forwardCommit || this._approachingJunction || this._approachingElevator) return true;
+    if (!this.movingForward) return false;
+    if (!this._waveCleared()) {
+      return this.playerWorldZ < this.segmentEndZ - COMBAT_HOLD - 0.05;
+    }
+    return true;
   }
 
   // ─── Segment / Junction ──────────────────────────────────
@@ -457,11 +537,60 @@ export class CorridorSim {
     };
   }
 
-  _showJunction() {
+  turnEase(u = this.turnU) {
+    const t = Math.max(0, Math.min(1, u || 0));
+    const cubic = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    return cubic * 0.86 + t * 0.14;
+  }
+
+  /** 0 while looking into the old T, 1 when the camera has yawed onto the chosen hall. */
+  turnAlign(u = this.turnU) {
+    const pull = this.turnEase(u);
+    return Math.max(0, Math.min(1, (pull - 0.42) / 0.58));
+  }
+
+  /** Corridor-local sprite pose while the camera looks into a chosen fork. */
+  poseForTurnView(entity, camZ) {
+    if (!this.turning || !entity) return null;
+    const along = (entity.worldZ != null ? entity.worldZ : camZ + (entity.dist || 0)) - camZ;
+    if (!Number.isFinite(along) || along < 4) return null;
+    const align = this.turnAlign();
+    if (align >= 0.995) return null;
+    const pull = this.turnEase();
+    const stop = CONFIG.JUNCTION_STOP || 120;
+    const ahead = Math.max(6, stop * (1 - pull));
+    const sign = Math.sign(this.turnTarget) || 1;
+    const sideX = sign * along + (entity.x || 0) * 0.2;
+    const natX = entity.x || 0;
+    return {
+      x: sideX * (1 - align) + natX * align,
+      dist: ahead * (1 - align) + along * align,
+    };
+  }
+
+  _offerJunction() {
     if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
+    if (!this.junctionChoices || !this.junctionChoices.length) return;
     this.junctionPending = true;
-    this.movingForward = false;
     this.emit("junction_show", { choices: this.junctionChoices });
+  }
+
+  _arriveAtFork() {
+    this.movingForward = false;
+    this._approachingJunction = false;
+    this._approachStartZ = null;
+    if (this._queuedJunctionDir) {
+      const dir = this._queuedJunctionDir;
+      this._queuedJunctionDir = null;
+      this.junctionPending = true;
+      this.chooseJunction(dir);
+      return;
+    }
+    if (!this.junctionPending) this._offerJunction();
+  }
+
+  _showJunction() {
+    this._arriveAtFork();
   }
 
   chooseJunction(direction) {
@@ -469,7 +598,14 @@ export class CorridorSim {
     const choice = this.junctionChoices.find((c) => c.direction === direction);
     if (!choice) return;
     direction = choice.direction;
+    if (this._approachingJunction) {
+      this._queuedJunctionDir = direction;
+      this.junctionPending = false;
+      this.emit("junction_chosen", { direction, deferred: true });
+      return;
+    }
     this.junctionPending = false;
+    this._queuedJunctionDir = null;
     this.pendingWaveReport = null;
     this._pendingEncounter = choice;
     this._pendingTurnDir = direction;
@@ -505,7 +641,9 @@ export class CorridorSim {
     this.turnTarget = 0;
     this.turnU = 0;
     this._pendingTurnDir = null;
-    this._finishHallEntry();
+    this._forwardCommit = true;
+    this._forwardCommitT = 0;
+    this.movingForward = false;
   }
 
   /** Hidden-load the next hall (wave + first pack) before the camera eases into it. */
@@ -651,12 +789,12 @@ export class CorridorSim {
   _pickSpawnLanes(n) {
     if (n <= 1) {
       const side = Math.random() < 0.5 ? -1 : 1;
-      return [side * FIGHT_LANE * (0.4 + Math.random() * 0.5)];
+      return [side * FIGHT_LANE * (0.52 + Math.random() * 0.46)];
     }
     const lanes = [];
     for (let i = 0; i < n; i++) {
-      const t = (i + 0.5) / n;
-      lanes.push((t - 0.5) * 2 * FIGHT_LANE * 0.92);
+      const t = n === 1 ? 0.5 : i / Math.max(1, n - 1);
+      lanes.push((t - 0.5) * 2 * FIGHT_LANE * 0.96);
     }
     for (let i = lanes.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -709,20 +847,29 @@ export class CorridorSim {
   }
 
   /** After the fight, run to the real fork — never choose from mid-corridor. */
+  _snapToApproachStop() {
+    const stopAt = this.segmentEndZ - JUNCTION_STOP;
+    const pad = stopAt - this.playerWorldZ;
+    if (pad !== 0) this._moveAlong(pad);
+    this.movingForward = false;
+    this._approachingJunction = false;
+    this._approachingElevator = false;
+    this._approachStartZ = null;
+  }
+
   _beginApproachToJunction() {
     const stopAt = this.segmentEndZ - JUNCTION_STOP;
+    this._queuedJunctionDir = null;
+    this._approachingElevator = false;
+    this._offerJunction();
     if (this.playerWorldZ >= stopAt - 1) {
-      this.playerWorldZ = stopAt;
-      this.movingForward = false;
-      this._approachingJunction = false;
-      this._approachingElevator = false;
-      this._showJunction();
+      this._snapToApproachStop();
+      this._arriveAtFork();
       return;
     }
-    this._approachingElevator = false;
     this._approachingJunction = true;
     this.movingForward = true;
-    this.junctionPending = false;
+    this._approachStartZ = this.playerWorldZ;
   }
 
   /** After floor 10, sprint to the shaft — no left/right/ahead choice. */
@@ -732,14 +879,13 @@ export class CorridorSim {
     this._approachingJunction = false;
     const stopAt = this.segmentEndZ - JUNCTION_STOP;
     if (this.playerWorldZ >= stopAt - 1) {
-      this.playerWorldZ = stopAt;
-      this.movingForward = false;
-      this._approachingElevator = false;
+      this._snapToApproachStop();
       this._rideElevator();
       return;
     }
     this._approachingElevator = true;
     this.movingForward = true;
+    this._approachStartZ = this.playerWorldZ;
   }
 
   /**
@@ -973,7 +1119,7 @@ export class CorridorSim {
           else if (e.worldZ < ideal - 50) e.worldZ += spd * 0.3;
           e._lateralTimer -= dt;
           if (e._lateralTimer <= 0) {
-            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * FIGHT_LANE * 1.5;
+            e._lateralTarget = this.playerWorldX + (Math.random() - 0.5) * 2 * FIGHT_LANE * 0.95;
             e._lateralTimer = 1.5 + Math.random();
           }
           const dx = e._lateralTarget - e.x;
@@ -993,7 +1139,7 @@ export class CorridorSim {
         case "zigzag":
           e.worldZ -= spd * 0.8;
           e._zigzagPhase += dt * 5;
-          e.x = (e._laneX || 0) + Math.sin(e._zigzagPhase) * FIGHT_LANE * 0.45;
+          e.x = (e._laneX || 0) + Math.sin(e._zigzagPhase) * FIGHT_LANE * 0.28;
           break;
         case "weave":
           e.worldZ -= spd * 0.7;
@@ -1273,7 +1419,6 @@ export class CorridorSim {
     this._afterLootAction = nextAction;
     this._lootDelayT = -1;
     this.lootPending = false;
-    this.movingForward = false;
     this.emit("wave_end", { wave: this.waveIndex });
     this.emit("wave_loot", { report: this.pendingWaveReport });
     const next = this._afterLootAction;
@@ -1410,13 +1555,14 @@ export class CorridorSim {
   _clampToFightLane(e, relDist, dt) {
     const px = this.playerWorldX;
     const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 280));
-    const maxOff = FIGHT_LANE * (1.15 - close * 0.35) + 4;
+    const maxOff = FIGHT_LANE * (1.12 - close * 0.12) + 4;
     const dx = e.x - px;
     if (Math.abs(dx) > maxOff) {
       const pull = Math.abs(dx) - maxOff;
       e.x -= Math.sign(dx) * Math.min(pull, (10 + close * 40) * dt);
     }
-    e.x = Math.max(-FIGHT_LANE * 1.15, Math.min(FIGHT_LANE * 1.15, e.x));
+    const wall = Math.min(FIGHT_LANE * 1.12, HALF_CORRIDOR - 14);
+    e.x = Math.max(-wall, Math.min(wall, e.x));
 
     if (e.flying) return;
 
@@ -1759,8 +1905,13 @@ export class CorridorSim {
 
     const aim = trajectory && trajectory.vector ? trajectory.vector : { x: 0, y: -1 };
     const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
-    const vx = aim.x * spd * 0.42;
-    const vz = spd * 0.75;
+    const maxAim = CONFIG.AIM_MAX || 1.28;
+    let yaw = trajectory && Number.isFinite(trajectory.angle)
+      ? trajectory.angle
+      : Math.atan2(aim.x || 0, Math.max(-(aim.y || 0), 1e-3));
+    yaw = Math.max(-maxAim, Math.min(maxAim, yaw));
+    const vx = Math.sin(yaw) * spd;
+    const vz = Math.cos(yaw) * spd;
 
     const dmg = getArrowDamage(arrow.type, arrow.level);
     const proj = createProjectile(
@@ -1774,9 +1925,11 @@ export class CorridorSim {
     this.emit("arrow_fire", { arrow, projectile: proj, remaining });
     if (remaining === 0) this.emit("last_arrow", { arrow });
     if (arrow.type === "double") {
+      const spread = 0.09;
       this.projectiles.push(createProjectile(
         this.playerWorldX, this.playerWorldZ + 18,
-        vx * 1.08 + 18, vz * 0.96,
+        Math.sin(yaw + spread) * spd,
+        Math.cos(yaw + spread) * spd,
         Math.max(1, Math.floor(dmg * 0.9)), "wood", "player",
         arrow.level
       ));
@@ -1790,9 +1943,9 @@ export class CorridorSim {
 
   // ─── Depth Sort ──────────────────────────────────────────
 
-  getAllEntities() {
+  getAllEntities(playerZ = this.playerWorldZ) {
     const px = this.playerWorldX;
-    const pz = this.playerWorldZ;
+    const pz = playerZ;
     const list = [
       { depth: 0, type: "player", x: px, dist: 0 },
     ];

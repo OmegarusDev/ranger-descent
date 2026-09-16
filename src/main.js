@@ -1,8 +1,8 @@
 /**
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
-import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js";
-import { DungeonView } from "./engine/DungeonView.js?v=128";
+import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
+import { DungeonView } from "./engine/DungeonView.js?v=138";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -144,7 +144,7 @@ function setPathChoice(on) {
     delete pathChoice.dataset.sig;
     return;
   }
-  input.choiceMode = true;
+  input.choiceMode = !overlayBlocksSim();
   const report = sim.pendingWaveReport;
   const lootSig = report
     ? `${(report.kills || []).length}:${report.ground?.kind || ""}:${(report.discarded || []).length}`
@@ -189,8 +189,61 @@ function setPathChoice(on) {
   }
 }
 
-function escapeToSurface() {
-  if (sim.state.phase !== "run" || !sim.junctionPending) return;
+function overlayBlocksSim() {
+  return !!(
+    document.getElementById("run-bag")?.classList.contains("active")
+    || document.getElementById("run-pause")?.classList.contains("active")
+  );
+}
+
+function isPauseOpen() {
+  return !!document.getElementById("run-pause")?.classList.contains("active");
+}
+
+function syncRunInputLock() {
+  const locked = overlayBlocksSim() || !!sim.elevatorCheckpointPending;
+  input.paused = locked;
+  if (locked) {
+    input.reset();
+    input.paused = true;
+    input.choiceMode = false;
+  } else if (sim.junctionPending && sim.state.phase === "run") {
+    input.choiceMode = true;
+  }
+}
+
+function closePauseMenu() {
+  const panel = document.getElementById("run-pause");
+  if (panel) {
+    panel.classList.remove("active");
+    panel.setAttribute("aria-hidden", "true");
+  }
+  syncRunInputLock();
+}
+
+function openPauseMenu() {
+  if (sim.state.phase !== "run") return;
+  closeRunBag();
+  const panel = document.getElementById("run-pause");
+  if (!panel) return;
+  panel.classList.add("active");
+  panel.setAttribute("aria-hidden", "false");
+  input.reset();
+  input.paused = true;
+  input.choiceMode = false;
+}
+
+function abandonRunToSurface() {
+  if (sim.state.phase !== "run") return;
+  closePauseMenu();
+  closeRunBag();
+  if (sim.elevatorCheckpointPending) {
+    closeElevatorCheckpoint();
+    sim.leaveAtElevator();
+    const hubCoins = document.getElementById("hub-coins");
+    if (hubCoins) hubCoins.textContent = sim.state.coins;
+    return;
+  }
   sim.junctionPending = false;
   setPathChoice(false);
   input.choiceMode = false;
@@ -202,6 +255,11 @@ function escapeToSurface() {
   sim.state.enterHub();
   const hubCoins = document.getElementById("hub-coins");
   if (hubCoins) hubCoins.textContent = sim.state.coins;
+}
+
+function escapeToSurface() {
+  if (sim.state.phase !== "run" || !sim.junctionPending) return;
+  abandonRunToSurface();
 }
 
 function showWaveLoot() {
@@ -239,6 +297,7 @@ function closeRunBag() {
   const conf = document.getElementById("run-bag-confirm");
   if (conf) conf.classList.remove("active");
   _runBagPending = null;
+  syncRunInputLock();
 }
 
 function closeElevatorCheckpoint() {
@@ -247,6 +306,7 @@ function closeElevatorCheckpoint() {
     panel.classList.remove("active");
     panel.setAttribute("aria-hidden", "true");
   }
+  syncRunInputLock();
 }
 
 function showElevatorCheckpoint(e) {
@@ -263,11 +323,13 @@ function showElevatorCheckpoint(e) {
   if (continueBtn) continueBtn.textContent = e?.final ? "Face the final boss" : "Continue descent";
   panel.classList.add("active");
   panel.setAttribute("aria-hidden", "false");
+  syncRunInputLock();
 }
 
 function openRunBag() {
   if (sim.state.phase !== "run") return;
   if (sim.lootPending || sim._lootDelayT > 0 || sim.elevatorCheckpointPending) return;
+  closePauseMenu();
   populateRunBag();
   const panel = document.getElementById("run-bag");
   if (panel) {
@@ -275,6 +337,7 @@ function openRunBag() {
     panel.setAttribute("aria-hidden", "false");
   }
   _bagOpenedAt = performance.now();
+  syncRunInputLock();
 }
 
 function populateRunBag() {
@@ -350,7 +413,12 @@ input.onDragEnd = (angle, power, vector) => {
   const pwr = power || input.power;
   const vec = vector || (input.vector && input.vector.x ? input.vector : { x: 0, y: -1 });
   const spd = CONFIG.ARROW_SPEED * (0.4 + 0.6 * Math.min(1, (pwr || 8) / CONFIG.SLINGSHOT_MAX_POWER));
-  sim.fireArrow({ angle: angle || 0, power: pwr, vector: vec, speed: spd });
+  sim.fireArrow({
+    angle: Number.isFinite(angle) ? angle : 0,
+    power: pwr,
+    vector: vec,
+    speed: spd,
+  });
 };
 
 input.onTap = (x, y) => {
@@ -372,6 +440,20 @@ window.addEventListener("keydown", (e) => {
   const tag = e.target?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   if (sim.state.phase !== "run") return;
+  if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+    e.preventDefault();
+    if (isPauseOpen()) {
+      closePauseMenu();
+      return;
+    }
+    if (document.getElementById("run-bag")?.classList.contains("active")) {
+      closeRunBag();
+      return;
+    }
+    openPauseMenu();
+    return;
+  }
+  if (overlayBlocksSim()) return;
   if (sim.junctionPending) {
     const dir = e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? "left"
       : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? "right"
@@ -406,6 +488,8 @@ sim.state.onPhaseChange = (phase) => {
 
   if (phase !== "run") setPathChoice(false);
   if (phase !== "run") closeElevatorCheckpoint();
+  if (phase !== "run") closePauseMenu();
+  if (phase !== "run") closeRunBag();
 
   if (phase === "death" || phase === "victory") {
     const stats = sim.state.getRunStats();
@@ -422,7 +506,7 @@ sim.state.onPhaseChange = (phase) => {
         ? `<div class="end-coin banked">+${coinLabel(earned)} banked</div>`
         : `<div class="end-coin">Kept ${coinLabel(deathCoin.kept)} · lost ${coinLabel(deathCoin.lost)}<span class="end-safe">Vault coin is safe.</span></div>`;
       deathStats.innerHTML = `
-        <div class="end-story ${phase === "victory" ? "victory" : "defeat"}">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "You fall.<br>Your coin scatters into the dark, as you scramble back to safety."}</div>
+        <div class="end-story ${phase === "victory" ? "victory" : "defeat"}">${phase === "victory" ? "The final boss falls. You ride the last elevator to daylight." : "<span class=\"end-fall\">You fall.</span>Your coin scatters into the dark as you scramble back to&nbsp;safety…"}</div>
         <div class="end-stat">Reached: <b>${sim.getProgressLabel()}</b></div>
         <div class="end-stat">Halls cleared: <b>${Math.max(0, sim.waveIndex - (phase === "victory" ? 0 : 1))}</b></div>
         <div class="end-stat">Kills: <b>${stats.enemiesKilled}</b></div>
@@ -441,7 +525,12 @@ sim.on("enemy_death", (e) => {
 
 sim.on("arrow_fire", (e) => {
   dungeon.bowJoltUntil = 0;
-  const ang = e.projectile ? Math.atan2(e.projectile.vdist, -e.projectile.vx) : -Math.PI / 2;
+  const ang = e.projectile
+    ? Math.atan2(e.projectile.vx || 0, e.projectile.vz || 1)
+    : 0;
+  dungeon._bowHold = ang;
+  dungeon._bowHoldUntil = performance.now() + 240;
+  dungeon._bowTilt = ang;
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
 
@@ -510,7 +599,7 @@ sim.on("wave_start", () => {
 
 sim.on("junction_show", () => {
   setPathChoice(true);
-  input.choiceMode = true;
+  syncRunInputLock();
   input.blockUntil = 0;
   input.isDragging = false;
 });
@@ -560,6 +649,7 @@ sim.on("run_start", () => {
   hideWaveLoot();
   closeElevatorCheckpoint();
   closeRunBag();
+  closePauseMenu();
   if (ammoAlert) ammoAlert.className = "";
   lastEmptyAlertAt = 0;
   input.reset();
@@ -594,6 +684,28 @@ document.getElementById("btn-run-elevator-return")?.addEventListener("click", ()
   sim.leaveAtElevator();
 });
 
+document.getElementById("btn-run-pause")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (isPauseOpen()) closePauseMenu();
+  else openPauseMenu();
+});
+document.getElementById("btn-run-resume")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  closePauseMenu();
+});
+document.getElementById("btn-pause-surface")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  abandonRunToSurface();
+});
+document.getElementById("run-pause")?.addEventListener("click", (e) => {
+  if (e.target.id === "run-pause") closePauseMenu();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && sim.state.phase === "run" && sim.running && !overlayBlocksSim()) {
+    openPauseMenu();
+  }
+});
 document.querySelectorAll("[data-open-run-bag]").forEach((btn) => {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
@@ -731,7 +843,7 @@ function updateUI() {
       nockMeter.classList.toggle("ready", ready);
       nockMeter.classList.toggle("charging", !ready);
       if (ready) nockMeter.classList.remove("blocked");
-      nockMeter.style.visibility = sim.junctionPending ? "hidden" : "visible";
+      nockMeter.style.visibility = (sim.junctionPending || overlayBlocksSim()) ? "hidden" : "visible";
     }
   }
 
@@ -853,16 +965,16 @@ function drawMinimap() {
   mctx.stroke();
 }
 
-function getJunctionView() {
+function getJunctionView(playerZ) {
   if (sim.state.phase !== "run") return null;
-  const dist = Math.max(6, (sim.segmentEndZ || 0) - (sim.playerWorldZ || 0));
+  const dist = Math.max(0, (sim.segmentEndZ || 0) - (playerZ ?? sim.playerWorldZ ?? 0));
   const dirs = new Set((sim.junctionChoices || []).map((c) => c.direction));
-  const elevator = !!sim._approachingElevator || !dirs.size;
+  const elevator = !!sim._approachingElevator;
   return {
     dist,
     left: dirs.has("left"),
     right: dirs.has("right"),
-    forward: elevator || dirs.has("forward"),
+    forward: elevator || dirs.has("forward") || !dirs.size,
     pending: !!sim.junctionPending,
     choices: sim.junctionChoices || [],
     elevator,
@@ -870,38 +982,63 @@ function getJunctionView() {
 }
 
 // ─── Rendering ────────────────────────────────────────────────
-function drawCorridor(ctx) {
+function drawCorridor(ctx, dt = 1 / 60) {
   dungeon.resize(canvas.clientWidth, canvas.clientHeight);
   const t = Number.isFinite(sim.runTime) ? sim.runTime : 0;
+  const cam = typeof sim.renderCam === "function" ? sim.renderCam(sim._renderAlpha ?? 1) : {
+    mapX: sim.mapX || 0,
+    mapZ: sim.mapZ || 0,
+    playerWorldZ: sim.playerWorldZ || 0,
+    yawDeg: (sim.heading || 0) + (sim.turnAngle || 0),
+  };
+  const lookYaw = (cam.yawDeg * Math.PI) / 180;
+  const headingRad = ((sim.heading || 0) * Math.PI) / 180;
+  const align = sim.turning && typeof sim.turnAlign === "function" ? sim.turnAlign() : 0;
   dungeon.setPose({
-    x: sim.mapX || 0,
-    z: sim.mapZ || 0,
-    lookYaw: ((sim.heading + (sim.turnAngle || 0)) * Math.PI) / 180,
-    walkYaw: ((sim.heading || 0) * Math.PI) / 180,
-    along: (sim.playerWorldZ || 0) - (sim.segmentStartZ || 0),
-    ahead: (sim.segmentEndZ || 0) - (sim.playerWorldZ || 0),
+    x: cam.mapX,
+    z: cam.mapZ,
+    lookYaw,
+    walkYaw: headingRad + (lookYaw - headingRad) * align,
+    along: cam.playerWorldZ - (sim.segmentStartZ || 0),
+    ahead: (sim.segmentEndZ || 0) - cam.playerWorldZ,
     segmentIndex: sim.segmentIndex || 0,
   });
-  dungeon.combatYaw = sim.turning
-    ? ((sim.heading + (sim.turnTarget || 0)) * Math.PI) / 180
-    : null;
+  dungeon.combatYaw = null;
   const nocked = sim.quiver?.peekQueue?.()?.[0];
   const nockDef = getArrowDef(nocked ? nocked.type : "wood");
   dungeon.nockedArrow = nocked ? { type: nockDef.type, color: nockDef.color } : null;
-  dungeon.drawHall(ctx, sim.playerWorldZ, t, getJunctionView(), {
-    walking: (sim.movingForward || sim._forwardCommit || sim._approachingJunction || sim._approachingElevator) && !sim.junctionPending && !sim.turning,
+  const viewDt = (sim.hitStop > 0 || overlayBlocksSim()) ? 0 : dt;
+  dungeon.drawHall(ctx, cam.playerWorldZ, t, getJunctionView(cam.playerWorldZ), {
+    walking: typeof sim.isWalkingView === "function" ? sim.isWalkingView() : !!sim.movingForward,
     turning: !!sim.turning,
     turnU: sim.turnU || 0,
+    turnPull: typeof sim.turnEase === "function" ? sim.turnEase() : (sim.turnU || 0),
     turnSign: Math.sign(sim.turnTarget || 0) || 1,
-  });
+  }, viewDt);
 
   ctx.save();
-  const entities = sim.getAllEntities();
+  const entities = sim.getAllEntities(cam.playerWorldZ);
   for (let i = entities.length - 1; i >= 0; i--) {
     const ent = entities[i];
-    if (ent.type === "enemy") dungeon.drawEnemy(ent.entity);
-    else if (ent.type === "projectile") dungeon.drawProjectile(ent.entity);
-    else if (ent.type === "enemy_projectile") dungeon.drawProjectile(ent.entity, true);
+    const body = ent.entity;
+    const saved = body ? { x: body.x, dist: body.dist } : null;
+    const posed = body && typeof sim.poseForTurnView === "function"
+      ? sim.poseForTurnView(body, cam.playerWorldZ)
+      : null;
+    if (posed) {
+      body.x = posed.x;
+      body.dist = posed.dist;
+    }
+    try {
+      if (ent.type === "enemy") dungeon.drawEnemy(body);
+      else if (ent.type === "projectile") dungeon.drawProjectile(body);
+      else if (ent.type === "enemy_projectile") dungeon.drawProjectile(body, true);
+    } finally {
+      if (body && saved) {
+        body.x = saved.x;
+        body.dist = saved.dist;
+      }
+    }
   }
   ctx.restore();
 
@@ -925,21 +1062,24 @@ function gameLoop(now) {
     while (accum >= step && guard++ < 8) {
       accum -= step;
       try {
-        const bagOpen = document.getElementById("run-bag")?.classList.contains("active");
-        if (!bagOpen) sim.tick();
+        const paused = overlayBlocksSim();
+        if (!paused) sim.tick();
       } catch(err) {
         console.error("Tick error:", err);
         sim.running = false;
         if (debugPanel) debugPanel.textContent = "TICK ERROR: " + err.message;
       }
     }
-    if (sim.running) engine.fx.tick(dt);
+    sim._renderAlpha = accum / step;
+    if (sim.running && !overlayBlocksSim()) engine.fx.tick(dt);
+  } else {
+    sim._renderAlpha = 1;
   }
 
   try {
     engine.draw(dt, (ctx) => {
       if (sim.state.phase === "hub") return;
-      try { drawCorridor(ctx); }
+      try { drawCorridor(ctx, dt); }
       catch(err) {
         console.error("Draw error:", err);
         /* keep the loop alive */

@@ -30,7 +30,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=162" />
+  <link rel="stylesheet" href="styles.css?v=186" />
   <style>
     .hub-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
   </style>
@@ -747,47 +747,48 @@
     </div>
 
     <div id="reset-modal" aria-hidden="true">
-      <div class="elev-modal-card reset-modal-card" role="dialog" aria-labelledby="reset-modal-title">
+      <div class="elev-modal-card reset-modal-card run-parchment ink-frame" role="dialog" aria-labelledby="reset-modal-title">
         <h3 id="reset-modal-title">Reset Save</h3>
         <p class="reset-warn">This will erase all progress completely — coins, gear, training, and delves. This cannot be undone.</p>
         <button type="button" class="hold-btn" id="btn-reset-save">
           <span class="hold-btn-fill" id="btn-reset-fill"></span>
           <span class="hold-btn-label">Hold to reset everything</span>
         </button>
-        <button type="button" class="btn-secondary" id="btn-reset-cancel">Cancel</button>
+        <button type="button" class="btn-secondary" id="btn-reset-cancel"><span>Cancel</span></button>
       </div>
     </div>
 
     <div id="elev-modal" aria-hidden="true">
-      <div class="elev-modal-card" role="dialog" aria-labelledby="elev-modal-title">
+      <div class="elev-modal-card run-parchment ink-frame" role="dialog" aria-labelledby="elev-modal-title">
         <h3 id="elev-modal-title">Elevator</h3>
         <div class="elev-pick" id="elev-pick" aria-label="Choose elevator"></div>
         <div class="elev-modal-actions">
-          <button type="button" class="btn-secondary" id="btn-elev-cancel">Back</button>
-          <button type="button" id="btn-elev-go">Descend</button>
+          <button type="button" class="btn-secondary" id="btn-elev-cancel"><span>Back</span></button>
+          <button type="button" id="btn-elev-go"><span>Descend</span></button>
         </div>
       </div>
     </div>
 
     <!-- Run HUD -->
     <div id="phase-run" class="phase">
-      <div class="hud-top">
-        <div class="hud-top-row">
-          <div class="hp-row" id="hp-row">
-            <span class="hp-label">HP</span>
-            <div class="hp-bar-bg"><div id="hp-fill" style="width:100%"></div></div>
-            <span id="hp-text">10 / 10</span>
-          </div>
-          <div class="hud-progress">
-            <div class="hud-primary hud-floor" id="floor-display">Floor 1</div>
-            <div class="hud-primary hud-wave" id="wave-display">Wave 1</div>
-          </div>
+      <div class="hud-top run-leather ink-frame">
+        <div class="hp-row" id="hp-row">
+          <span class="hp-label">HP</span>
+          <div class="hp-bar-bg"><div id="hp-fill" style="width:100%"></div></div>
+          <span id="hp-text">10 / 10</span>
+        </div>
+        <div class="hud-place">
+          <span class="hud-primary" id="floor-display">Floor 1</span>
+          <span class="hud-dot" aria-hidden="true">·</span>
+          <span class="hud-primary" id="wave-display">Wave 1</span>
         </div>
         <div class="hud-meta">
           <span class="coins"><span class="coin-mark" aria-hidden="true">₡</span> <span id="coins-display">0</span></span>
-          <span class="dist" id="distance-display">0 ahead</span>
           <span class="timer" id="timer-display">0:00</span>
         </div>
+        <button type="button" class="run-pause-btn ink-frame" id="btn-run-pause" aria-label="Pause menu">
+          <span>Menu</span>
+        </button>
       </div>
 
       <div id="ammo-alert" aria-live="polite"></div>
@@ -814,7 +815,7 @@
       </div>
 
       <div class="run-left-rail">
-        <button type="button" class="run-bag-btn" id="btn-run-bag" data-open-run-bag aria-label="Bag">Bag</button>
+        <button type="button" class="run-bag-btn ink-frame" id="btn-run-bag" data-open-run-bag aria-label="Bag"><span>Bag</span></button>
         <div id="run-pouch" class="run-pouch" aria-label="Quick Pouch"></div>
       </div>
       <div class="run-quiver-dock">
@@ -827,10 +828,10 @@
 
     <div id="run-bag" aria-hidden="true">
       <div class="run-bag-stack">
-        <div class="run-bag-sheet">
+        <div class="run-bag-sheet run-parchment ink-frame">
           <header>
             <h3>Field bag</h3>
-            <button type="button" class="run-bag-close" id="btn-run-bag-close" aria-label="Close bag">×</button>
+            <button type="button" class="run-bag-close ink-frame" id="btn-run-bag-close" aria-label="Close bag"><span>×</span></button>
           </header>
           <p class="run-bag-note">Only the quiver and bag travel with you. Stashed finds are recovered if you escape — lost if you fall.</p>
           <h4 class="wave-loot-section">Quiver</h4>
@@ -840,56 +841,71 @@
           <h4 class="wave-loot-section">Run stash</h4>
           <div class="run-bag-grid" id="run-bag-stash"></div>
         </div>
-        <div class="run-bag-confirm" id="run-bag-confirm" role="dialog" aria-labelledby="run-bag-confirm-text">
+        <div class="run-bag-confirm run-parchment ink-frame" id="run-bag-confirm" role="dialog" aria-labelledby="run-bag-confirm-text">
           <p id="run-bag-confirm-text">Send to stash?</p>
           <div class="btn-row">
-            <button type="button" class="btn-secondary" id="btn-run-bag-cancel">Cancel</button>
-            <button type="button" id="btn-run-bag-use" hidden>Use</button>
-            <button type="button" id="btn-run-bag-confirm">Stash</button>
+            <button type="button" class="btn-secondary" id="btn-run-bag-cancel"><span>Cancel</span></button>
+            <button type="button" id="btn-run-bag-use" hidden><span>Use</span></button>
+            <button type="button" id="btn-run-bag-confirm"><span>Stash</span></button>
           </div>
         </div>
       </div>
     </div>
 
     <div id="run-elevator-checkpoint" aria-hidden="true">
-      <div class="elev-modal-card" role="dialog" aria-labelledby="run-elevator-checkpoint-title">
+      <div class="elev-modal-card run-parchment ink-frame" role="dialog" aria-labelledby="run-elevator-checkpoint-title">
         <h3 id="run-elevator-checkpoint-title">Elevator checkpoint</h3>
         <p id="run-elevator-checkpoint-text" class="run-elevator-checkpoint-text">Your purse is banked.</p>
         <div class="elev-modal-actions">
-          <button type="button" class="btn-secondary" id="btn-run-elevator-return">Return to surface</button>
-          <button type="button" id="btn-run-elevator-continue">Continue descent</button>
+          <button type="button" class="btn-secondary" id="btn-run-elevator-return"><span>Return to surface</span></button>
+          <button type="button" id="btn-run-elevator-continue"><span>Continue descent</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="run-pause" aria-hidden="true">
+      <div class="run-pause-card run-parchment ink-frame" role="dialog" aria-modal="true" aria-labelledby="run-pause-title">
+        <span class="path-kicker">Delve held</span>
+        <h2 id="run-pause-title">Paused</h2>
+        <p class="run-pause-note">The hall waits. Resume, check the field bag, or bank this delve and return to the surface.</p>
+        <div class="run-pause-actions">
+          <button type="button" id="btn-run-resume"><span>Resume</span></button>
+          <button type="button" class="btn-secondary" id="btn-pause-bag" data-open-run-bag><span>Field bag</span></button>
+          <button type="button" class="btn-secondary" id="btn-pause-surface"><span>Return to surface</span></button>
         </div>
       </div>
     </div>
 
     <!-- Death / Victory -->
     <div id="phase-death" class="phase">
-      <div id="death-stats"></div>
-      <div class="btn-group">
-        <button id="btn-hub">To the surface</button>
+      <div class="death-card run-parchment ink-frame">
+        <div id="death-stats"></div>
+        <div class="btn-group">
+          <button type="button" class="ink-frame" id="btn-hub"><span>To the surface</span></button>
+        </div>
       </div>
     </div>
 
     <div id="path-choice">
-      <div class="path-choice-card">
+      <div class="path-choice-card run-parchment ink-frame">
         <div class="path-choice-head">
           <div>
             <span class="path-kicker">Hall clear</span>
-            <h2>Spoils &amp; path</h2>
+            <h2>Spoils and path</h2>
           </div>
-          <button type="button" class="path-bag" id="btn-run-bag-nav" data-open-run-bag aria-label="Open field bag">Bag</button>
+          <button type="button" class="path-bag ink-frame" id="btn-run-bag-nav" data-open-run-bag aria-label="Open field bag"><span>Bag</span></button>
         </div>
         <div class="path-spoils" id="path-spoils"></div>
         <div class="path-nav">
           <p class="path-nav-hint">Tap a corridor to continue</p>
           <div class="path-dirs">
-            <button type="button" data-dir="left">‹ Left</button>
-            <button type="button" data-dir="forward">Ahead</button>
-            <button type="button" data-dir="right">Right ›</button>
+            <button type="button" class="ink-frame" data-dir="left"><span>‹ Left</span></button>
+            <button type="button" class="ink-frame" data-dir="forward"><span>Ahead</span></button>
+            <button type="button" class="ink-frame" data-dir="right"><span>Right ›</span></button>
           </div>
           <div class="path-choice-foot">
-            <button type="button" class="path-escape" id="btn-escape">
-              Escape to surface
+            <button type="button" class="path-escape ink-frame" id="btn-escape">
+              <span>Escape to surface</span>
               <small id="escape-coins">Bank this delve's coin</small>
             </button>
           </div>
@@ -899,7 +915,7 @@
     <div id="ui-tip" class="ui-tip ink-frame" role="tooltip" hidden></div>
   </div>
 
-  <script type="module" src="src/main.js?v=162"></script>
+  <script type="module" src="src/main.js?v=186"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=4";
     registerPwa();

@@ -13,7 +13,7 @@ import {
   isBowItem,
 } from "../data/gear.js";
 import { shopConsumables } from "../data/consumables.js";
-import { itemIconSvg, arrowIconSvg } from "./itemIcons.js";
+import { itemIconSvg, arrowIconSvg, slotIconSvg, pouchPipSvg } from "./itemIcons.js";
 import { bindFullscreenCheckbox } from "../engine/immersive.js";
 import {
   canSellBagItem,
@@ -71,6 +71,10 @@ const PACK_FOLD_BODY = {
   pouch: "pack-pouch-slots",
   chest: "pack-chest-grid",
 };
+
+function packLockIcon() {
+  return `<svg class="pack-lock-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.2" y="7.1" width="9.6" height="7.1" rx="1.15" fill="#1a1008" stroke="#c9a227" stroke-width="1.2"/><path d="M5.2 7.1V5.15C5.2 3.55 6.45 2.2 8 2.2s2.8 1.35 2.8 2.95V7.1" fill="none" stroke="#c9a227" stroke-width="1.35" stroke-linecap="round"/></svg>`;
+}
 
 const TIP_PAD = 8;
 
@@ -243,8 +247,6 @@ function togglePackFold(title) {
   body.style.display = collapse ? "none" : "";
   title.classList.toggle("collapsed", collapse);
   title.setAttribute("aria-expanded", collapse ? "false" : "true");
-  const mark = title.querySelector(".pack-fold-mark");
-  if (mark) mark.textContent = collapse ? "▸" : "▾";
 }
 
 export function initHub(d) {
@@ -713,11 +715,14 @@ function populatePack(state) {
   const bag = state.bag || [null, null];
   const pouchBindings = state.pouchBindings || [null];
   const pouchCap = state.pouchCapacity || 1;
+  const bagCap = state.bagCapacity || bag.length;
+  const bagMax = bagCapacityMax();
+  const pouchMax = pouchCapacityMax();
 
   const bagCountEl = document.getElementById("pack-bag-count");
   const pouchCountEl = document.getElementById("pack-pouch-count");
-  if (bagCountEl) bagCountEl.textContent = String(state.bagCapacity || bag.length);
-  if (pouchCountEl) pouchCountEl.textContent = String(pouchCap);
+  if (bagCountEl) bagCountEl.textContent = `${bagCap} / ${bagMax}`;
+  if (pouchCountEl) pouchCountEl.textContent = `${pouchCap} / ${pouchMax}`;
 
   if (quiverCount) quiverCount.textContent = `${loaded.length} / ${cap}`;
 
@@ -740,34 +745,49 @@ function populatePack(state) {
 
   dollEl.innerHTML = DOLL_SLOTS.map((slot) => {
     const item = findItem(state.equipped?.[slot.id]);
-    const rare = slot.id === "cape" || slot.id === "amulet";
-    return `<button type="button" class="pack-slot pack-slot-${slot.id}${item ? " filled" : ""}${rare && !item ? " rare" : ""}" data-slot="${slot.id}">
+    const icon = item ? itemIconSvg(item) : slotIconSvg(slot.id);
+    return `<button type="button" class="pack-slot pack-slot-${slot.id}${item ? " filled" : ""}" data-slot="${slot.id}" aria-label="${item ? `${slot.name}: ${item.name}` : `Empty ${slot.name} slot`}">
       <span class="pack-slot-lab">${slot.name}</span>
-      <span class="pack-slot-name">${item ? item.name : rare ? "—" : "Empty"}</span>
+      <span class="pack-slot-icon">${icon}</span>
     </button>`;
   }).join("");
 
-  bagEl.style.gridTemplateColumns = `repeat(${Math.min(2, Math.max(1, bag.length))}, minmax(0, 1fr))`;
-  bagEl.innerHTML = bag.map((id, i) => {
+  const bagCells = [];
+  for (let i = 0; i < bagMax; i++) {
+    if (i >= bagCap) {
+      bagCells.push(`<button type="button" class="pack-cell pack-cell-locked" data-bag-locked aria-label="Locked bag slot ${i + 1}">
+        <span class="pack-cell-icon">${packLockIcon()}</span>
+      </button>`);
+      continue;
+    }
+    const id = bag[i];
     const item = findItem(id);
     const bound = isBagSlotPouchBound(state, i);
-    return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-bag="${i}">
-      ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-cell-sub">pouch</span>` : ""}` : `<span class="pack-cell-sub">empty</span>`}
-    </button>`;
-  }).join("");
+    bagCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}${bound ? " pack-cell-pouchbound" : ""}" data-bag="${i}"${bound ? ` aria-label="${item.name} bound to pouch"` : ""}>
+      ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>${bound ? `<span class="pack-pouch-pip" title="In the pouch">${pouchPipSvg()}</span>` : ""}` : ""}
+    </button>`);
+  }
+  bagEl.style.gridTemplateColumns = `repeat(${bagMax}, minmax(0, 1fr))`;
+  bagEl.innerHTML = bagCells.join("");
 
   if (pouchEl) {
-    pouchEl.innerHTML = Array.from({ length: pouchCap }, (_, i) => {
+    const pouchCells = [];
+    for (let i = 0; i < pouchMax; i++) {
+      if (i >= pouchCap) {
+        pouchCells.push(`<button type="button" class="pack-cell pack-cell-locked" data-pouch-locked aria-label="Locked pouch slot ${i + 1}">
+          <span class="pack-cell-icon">${packLockIcon()}</span>
+        </button>`);
+        continue;
+      }
       const bagIndex = pouchBindings[i];
       const item = bagIndex != null ? findItem(bag[bagIndex]) : null;
-      return `<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
+      pouchCells.push(`<button type="button" class="pack-cell ${item ? "filled" : "pack-cell-empty"}" data-pouch="${i}">
         <span class="pack-pouch-num">${i + 1}</span>
-        ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : `<span class="pack-cell-sub">empty</span>`}
-      </button>`;
-    }).join("");
-    pouchEl.style.gridTemplateColumns = pouchCap <= 3
-      ? `repeat(${Math.max(1, pouchCap)}, minmax(0, 1fr))`
-      : "repeat(3, minmax(0, 1fr))";
+        ${item ? `<span class="pack-cell-icon">${itemIconSvg(item)}</span><span class="pack-cell-sub">${item.short || item.name}</span>` : ""}
+      </button>`);
+    }
+    pouchEl.style.gridTemplateColumns = `repeat(${pouchMax}, minmax(0, 1fr))`;
+    pouchEl.innerHTML = pouchCells.join("");
   }
 
   const chestItems = [];
@@ -979,7 +999,11 @@ function populatePack(state) {
   dollEl.querySelectorAll("[data-slot]").forEach((el) => {
     const slot = el.dataset.slot;
     const current = findItem(state.equipped?.[slot]);
-    if (current) bindHoverTip(el, current);
+    const slotMeta = DOLL_SLOTS.find((s) => s.id === slot);
+    bindHoverTip(el, current || {
+      name: slotMeta?.name || slot,
+      desc: "Nothing equipped. Tap to choose from the chest.",
+    });
     el.addEventListener("click", (evt) => {
       const options = [];
       if (current) {
@@ -1153,6 +1177,13 @@ function populatePack(state) {
       }
       openPackPicker("Quick Pouch", options, el, evt);
     });
+  });
+
+  bagEl.querySelectorAll("[data-bag-locked]").forEach((el) => {
+    el.addEventListener("click", () => inspectItem(null, "Buy another bag slot in the Shop."));
+  });
+  pouchEl?.querySelectorAll("[data-pouch-locked]").forEach((el) => {
+    el.addEventListener("click", () => inspectItem(null, "Buy another pouch slot in the Shop."));
   });
 }
 

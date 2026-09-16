@@ -4,7 +4,7 @@
  */
 import { CONFIG } from "../data/config.js";
 import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
-import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=127";
+import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=131";
 
 const NEAR = 6;
 const FAR = 760;
@@ -45,6 +45,9 @@ export class DungeonView {
     this.bob = 0;
     this.sway = 0;
     this.roll = 0;
+    this._walkAmt = 0;
+    this._walkPhase = 0;
+    this._bowTilt = 0;
     this.combatYaw = null;
     this.junction = null;
     this._worldHalls = [];
@@ -186,13 +189,30 @@ export class DungeonView {
     return t * t * 0.82;
   }
 
+  _torchAlong(n) {
+    return n * TORCH_EVERY + TORCH_EVERY * 0.5;
+  }
+
+  _torchSlots(minDist, maxDist) {
+    const offset = TORCH_EVERY * 0.5;
+    const n0 = Math.floor((this.playerZ - offset) / TORCH_EVERY) - 1;
+    const slots = [];
+    for (let n = n0; n <= n0 + 10; n++) {
+      const worldZ = this._torchAlong(n);
+      const dist = worldZ - this.playerZ;
+      if (dist < minDist || dist > maxDist) continue;
+      slots.push({ n, worldZ, dist });
+    }
+    return slots;
+  }
+
   _torchWarm(dist, worldZ = null) {
     const z = worldZ != null ? worldZ : this.playerZ + dist;
     const period = TORCH_EVERY;
-    const n0 = Math.floor(z / period);
+    const n0 = Math.floor((z - period * 0.5) / period);
     let acc = 0;
     for (let n = n0 - 1; n <= n0 + 1; n++) {
-      const d = Math.abs(z - n * period);
+      const d = Math.abs(z - this._torchAlong(n));
       acc += Math.max(0, 1 - d / 88);
     }
     const flicker = 0.7 + Math.sin(this.time * 6.8 + z * 0.02) * 0.2;
@@ -293,84 +313,61 @@ export class DungeonView {
     const right = this._dir(walkDeg + 90);
     const back = { x: -fwd.x, z: -fwd.z };
     const turning = !!(motion && motion.turning);
-    const atFork = turning || !!(j && j.pending && (j.dist == null || j.dist < 88));
-    const along = atFork ? 0 : Math.max(0, this.along || 0);
-    const ahead = atFork ? 8 : Math.max(24, (j && j.dist) || this.ahead || hallLen);
-    const nearX = this.camX - fwd.x * along;
-    const nearZ = this.camZ - fwd.z * along;
-    const farX = this.camX + fwd.x * ahead;
-    const farZ = this.camZ + fwd.z * ahead;
+    const pull = turning ? Math.max(0, Math.min(1, motion.turnPull || 0)) : 0;
+    const along0 = Math.max(0, this.along || 0);
+    const stop = CONFIG.JUNCTION_STOP || 120;
+    // Next hall is already loaded, so along/ahead jump. Hold a T on the old
+    // heading and pull it onto the camera as the look yaws into the mouth.
+    const remaining = (j && Number.isFinite(j.dist)) ? j.dist : (this.ahead || hallLen);
+    const ahead0 = turning
+      ? Math.max(6, stop * (1 - pull))
+      : Math.max(0, remaining);
+    const along = along0;
+    const forkX = this.camX + fwd.x * ahead0;
+    const forkZ = this.camZ + fwd.z * ahead0;
     const halls = [];
-    // Keep carved tunnel behind the camera so the near cap never sits in view.
-    const backPad = atFork ? 0 : this.cell * 3;
+    this._forks = [];
+    const shaft = !!(j && j.elevator);
+    const sign = turning ? (motion.turnSign || 0) : 0;
+    const keepLeft = !shaft && !!(j && j.left) && (!turning || (sign < 0 && pull < 0.62));
+    const keepRight = !shaft && !!(j && j.right) && (!turning || (sign > 0 && pull < 0.62));
+    const keepFwd = !shaft && (!j || j.forward) && (!turning || pull < 0.38);
+    // Continue the same corridor through the crossing; side halls weld at the
+    // walls so the middle stays a tube, not a square room.
+    const farAlong = ahead0 + (keepFwd ? hallLen : Math.max(this.half, 80));
+    const backPad = this.cell * 3;
     this._pushHall(
       halls,
-      nearX - fwd.x * backPad,
-      nearZ - fwd.z * backPad,
-      farX,
-      farZ,
+      this.camX - fwd.x * (along + backPad),
+      this.camZ - fwd.z * (along + backPad),
+      this.camX + fwd.x * farAlong,
+      this.camZ + fwd.z * farAlong,
       { current: true },
     );
 
-    const addFork = (ox, oz, opts) => {
-      this._forks.push({
-        x: ox,
-        z: oz,
-        left: !!opts.left,
-        right: !!opts.right,
-        forward: !!opts.forward,
-        back: !!opts.back,
-      });
-      const branches = [
-        { on: opts.forward, dir: fwd, deep: true },
-        { on: opts.left, dir: left, deep: true },
-        { on: opts.right, dir: right, deep: true },
-        { on: opts.back, dir: back, deep: false },
-      ];
-      for (const b of branches) {
-        if (!b.on) continue;
-        // Overlap the main hall so the mouth is a real opening, not a one-cell wall.
-        const start = b.deep ? -this.half * 0.45 : 0;
-        const len = b.deep ? hallLen : STUB_LEN;
-        const x0 = ox + b.dir.x * start;
-        const z0 = oz + b.dir.z * start;
-        const x1 = ox + b.dir.x * len;
-        const z1 = oz + b.dir.z * len;
-        this._pushHall(halls, x0, z0, x1, z1, { branch: true });
-      }
+    const weld = Math.max(this.cell, this.half - this.cell);
+    const addSide = (dir, on, len) => {
+      if (!on) return;
+      const x0 = forkX + dir.x * weld;
+      const z0 = forkZ + dir.z * weld;
+      const x1 = forkX + dir.x * len;
+      const z1 = forkZ + dir.z * len;
+      this._pushHall(halls, x0, z0, x1, z1, { branch: true });
     };
 
-    this._forks = [];
-    const shaft = !!(j && j.elevator);
-    const openSide = !shaft;
-    if (atFork) {
-      addFork(this.camX, this.camZ, {
-        forward: true,
-        left: openSide,
-        right: openSide,
-        back: true,
-      });
-    } else {
-      addFork(farX, farZ, {
-        forward: true,
-        left: openSide,
-        right: openSide,
-        back: false,
-      });
-    }
+    this._forks.push({
+      x: forkX,
+      z: forkZ,
+      left: keepLeft,
+      right: keepRight,
+      forward: keepFwd,
+      back: turning && pull < 0.55,
+    });
+    addSide(left, keepLeft, hallLen);
+    addSide(right, keepRight, hallLen);
+    addSide(back, turning && pull < 0.55, STUB_LEN);
 
-    // Wide plus at the T so forward-facing FOV rays actually enter the side halls.
-    if (openSide) {
-      const fx = atFork ? this.camX : farX;
-      const fz = atFork ? this.camZ : farZ;
-      const span = this.half * 2.2;
-      const step = this.half * 0.9;
-      this._pushHall(halls, fx - span, fz - step, fx + span, fz - step, { branch: true });
-      this._pushHall(halls, fx - span, fz, fx + span, fz, { branch: true });
-      this._pushHall(halls, fx - span, fz + step, fx + span, fz + step, { branch: true });
-    }
-
-    this._fork = { x: farX, z: farZ, r: this.half + 10 };
+    this._fork = { x: forkX, z: forkZ, r: this.half + 10 };
     this._worldHalls = halls;
     return halls;
   }
@@ -648,14 +645,22 @@ export class DungeonView {
     return samples;
   }
 
-  drawHall(ctx, playerZ, time, junction = null, motion = null) {
+  drawHall(ctx, playerZ, time, junction = null, motion = null, dt = 1 / 60) {
     this.ctx = ctx;
     this.playerZ = playerZ;
     this.time = time;
     const walking = !!(motion && motion.walking);
     const turning = !!(motion && motion.turning);
-    this.bob = Math.sin(playerZ * 0.11) * (walking ? 3.2 : 1.1) + Math.sin(time * 1.35) * 0.55;
-    this.sway = Math.sin(playerZ * 0.055) * (walking ? 1.6 : 0.4);
+    const walkTgt = walking ? 1 : turning ? 0.22 : 0.28;
+    if (dt > 0) {
+      const k = 1 - Math.exp(-10 * dt);
+      this._walkAmt = (this._walkAmt || 0) + (walkTgt - (this._walkAmt || 0)) * k;
+      const walk = this._walkAmt;
+      this._walkPhase = (this._walkPhase || 0) + dt * (1.05 + 7.2 * walk);
+    }
+    const walk = this._walkAmt || 0;
+    this.bob = Math.sin(this._walkPhase) * (0.5 + 2.35 * walk) + Math.sin(this._walkPhase * 0.18) * (0.22 + 0.18 * walk);
+    this.sway = Math.cos(this._walkPhase * 0.5) * (0.16 + 1.22 * walk);
     this.roll = 0;
     let j = junction || null;
     if (j && turning) {
@@ -1014,10 +1019,9 @@ export class DungeonView {
 
   _paintTorchPools(ctx) {
     ctx.save();
-    for (let i = 1; i <= 8; i++) {
-      const z = i * TORCH_EVERY - (this.playerZ % TORCH_EVERY);
-      if (z < 24 || z > FAR - 60) continue;
-      const flicker = 0.7 + Math.sin(this.time * 6.2 + i * 1.7) * 0.18;
+    for (const slot of this._torchSlots(24, FAR - 60)) {
+      const z = slot.dist;
+      const flicker = 0.7 + Math.sin(this.time * 6.2 + slot.n * 1.7) * 0.18;
       for (const side of [-1, 1]) {
         const p = this.project(side * (this.half * 0.72), z, 0);
         if (p.behind) continue;
@@ -1125,13 +1129,12 @@ export class DungeonView {
   }
 
   _paintTorches(ctx) {
-    for (let i = 1; i <= 8; i++) {
-      const z = i * TORCH_EVERY - (this.playerZ % TORCH_EVERY);
-      if (z < 36 || z > FAR - 50) continue;
+    for (const slot of this._torchSlots(36, FAR - 50)) {
+      const z = slot.dist;
       for (const side of [-1, 1]) {
         const p = this.project(side * (this.half - 6), z, 36);
         if (p.behind) continue;
-        const frame = Math.sin(this.time * 6.2 + i * 1.7 + side) > 0 ? SPRITES.torch1 : SPRITES.torch0;
+        const frame = Math.sin(this.time * 6.2 + slot.n * 1.7 + side) > 0 ? SPRITES.torch1 : SPRITES.torch0;
         blitSprite(ctx, frame, p.x, p.y + 10 * p.s, 18 * p.s, {
           alpha: 1 - this._fogK(z) * 0.55,
           flip: side > 0,
@@ -1529,18 +1532,10 @@ export class DungeonView {
 
   _drawPathOverlay(ctx) {
     if (!this.hits.length) return;
-    const titleSize = Math.max(22, Math.round(this.cssW / 26));
     const labelSize = Math.max(16, Math.round(this.cssW / 36));
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
-    if (this.junction && this.junction.pending) {
-      ctx.font = `700 ${titleSize}px "Cinzel", "IM Fell English", serif`;
-      ctx.letterSpacing = "0.16em";
-      const titleY = Math.max(64, this.cssH * 0.075);
-      this._strokeFill(ctx, "CHOOSE PATH", this.cssW / 2, titleY, "#e8c56a");
-    }
 
     // While HTML path-choice is up, only draw chevrons — icons/names live on the buttons.
     const pending = !!(this.junction && this.junction.pending);
@@ -1672,12 +1667,20 @@ export class DungeonView {
     if (this.junction && this.junction.pending) return;
     const pulling = input && input.isDragging && input.power > 2;
     const pull = pulling ? Math.min(1, input.power / 24) : 0;
-    let tilt = 0;
+    const maxAim = CONFIG.AIM_MAX || 1.28;
+    const now = performance.now();
+    let target = 0;
     if (pulling) {
-      tilt = Math.max(-0.68, Math.min(0.68, (input.angle || 0) + Math.PI / 2));
+      target = Math.max(-maxAim, Math.min(maxAim, input.angle || 0));
+    } else if (this._bowHoldUntil && now < this._bowHoldUntil) {
+      target = this._bowHold || 0;
     }
-    if (this.bowJoltUntil && performance.now() < this.bowJoltUntil) {
-      tilt += Math.sin(performance.now() * 0.064) * 0.045;
+    if (this._bowTilt == null) this._bowTilt = 0;
+    if (pulling) this._bowTilt = target;
+    else this._bowTilt += (target - this._bowTilt) * 0.22;
+    let tilt = this._bowTilt;
+    if (this.bowJoltUntil && now < this.bowJoltUntil && !pulling) {
+      tilt += Math.sin(now * 0.064) * 0.02;
     }
     const nocked = this.nockedArrow || null;
     blitBow(ctx, this.cssW, this.cssH, pull, {

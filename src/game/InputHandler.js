@@ -22,6 +22,8 @@ export class InputHandler {
     this.isDragging = false;
 
     this.angle = 0;
+    this.aimTarget = 0;
+    this._aimAt = 0;
     this.power = 0;
     this.vector = { x: 0, y: 0 };
 
@@ -36,6 +38,7 @@ export class InputHandler {
     this._suppressClick = false;
     this.blockUntil = 0;
     this.choiceMode = false;
+    this.paused = false;
 
     this._bindEvents();
   }
@@ -46,6 +49,9 @@ export class InputHandler {
     this._pointerId = null;
     this.power = 0;
     this.vector = { x: 0, y: 0 };
+    this.angle = 0;
+    this.aimTarget = 0;
+    this._aimAt = 0;
     this._suppressClick = false;
     this.choiceMode = false;
   }
@@ -60,6 +66,7 @@ export class InputHandler {
         this._suppressClick = false;
         return;
       }
+      if (this.paused) return;
       if (performance.now() < this.blockUntil) return;
       const { x, y } = this._toCanvas(e);
       if (this.onTap) this.onTap(x, y);
@@ -73,6 +80,7 @@ export class InputHandler {
   }
 
   _onDown(e) {
+    if (this.paused) return;
     if (e.pointerType === "mouse" && performance.now() < this._ignoreMouseUntil) return;
     if (!this.choiceMode && performance.now() < this.blockUntil) return;
     const { x, y } = this._toCanvas(e);
@@ -82,6 +90,9 @@ export class InputHandler {
     this.originY = y;
     this.dragX = x;
     this.dragY = y;
+    this.angle = 0;
+    this.aimTarget = 0;
+    this._aimAt = performance.now();
     this.isDragging = true;
     this.active = true;
     if (this.onDragStart) this.onDragStart(x, y);
@@ -131,6 +142,11 @@ export class InputHandler {
         if (isTap) {
           if (this.onTap) this.onTap(x, y);
         } else if (this.onDragEnd) {
+          this.angle = this.aimTarget;
+          this.vector = {
+            x: Math.sin(this.angle),
+            y: -Math.cos(this.angle),
+          };
           this.onDragEnd(this.angle, this.power, { ...this.vector });
         }
       }
@@ -148,6 +164,7 @@ export class InputHandler {
       this.power = 0;
       this.vector = { x: 0, y: 0 };
       this.angle = 0;
+      this.aimTarget = 0;
       return;
     }
 
@@ -157,15 +174,24 @@ export class InputHandler {
     if (dist < 4) {
       this.power = 0;
       this.vector = { x: 0, y: 0 };
-      this.angle = 0;
       return;
     }
 
-    this.angle = Math.atan2(dy, dx);
+    const maxAim = CONFIG.AIM_MAX || 1.28;
+    // 0 = hall-forward (up the screen). Floor the vertical so a tiny
+    // sideways jitter does not whip the bow, while a real side-pull
+    // can still reach the full aim arc.
+    const target = Math.max(-maxAim, Math.min(maxAim, Math.atan2(dx, Math.max(-dy, 14))));
+    this.aimTarget = target;
+    const now = performance.now();
+    const dt = Math.min(0.05, Math.max(0, (now - (this._aimAt || now)) / 1000));
+    this._aimAt = now;
+    const k = dt <= 0 ? 1 : 1 - Math.exp(-13 * dt);
+    this.angle += (target - this.angle) * k;
 
     this.vector = {
-      x: dx / dist,
-      y: dy / dist,
+      x: Math.sin(this.angle),
+      y: -Math.cos(this.angle),
     };
   }
 
@@ -184,44 +210,36 @@ export class InputHandler {
   drawAimLine(ctx) {
     if (this.choiceMode || !this.isDragging || this.power < CONFIG.SLINGSHOT_MIN_POWER) return;
 
-    const fireAngle = Math.atan2(
-      this.originY - this.dragY,
-      this.originX - this.dragX
-    );
-    const fireLen = 30 + this.power * 2.5;
+    const w = this.canvas.clientWidth || this.canvas.width;
+    const h = this.canvas.clientHeight || this.canvas.height;
+    const ax = w * 0.5;
+    const ay = h * 0.9;
+    const fireLen = 36 + this.power * 2.2;
+    const tx = Math.sin(this.angle);
+    const ty = -Math.cos(this.angle);
 
-    // Dashed pull line
-    ctx.strokeStyle = "rgba(232, 197, 106, 0.25)";
+    ctx.strokeStyle = "rgba(232, 197, 106, 0.14)";
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([4, 5]);
     ctx.beginPath();
     ctx.moveTo(this.originX, this.originY);
     ctx.lineTo(this.dragX, this.dragY);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Fire direction line
-    ctx.strokeStyle = "rgba(232, 197, 106, 0.7)";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "rgba(232, 197, 106, 0.78)";
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.moveTo(this.originX, this.originY);
-    ctx.lineTo(
-      this.originX + Math.cos(fireAngle) * fireLen,
-      this.originY + Math.sin(fireAngle) * fireLen
-    );
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + tx * fireLen, ay + ty * fireLen);
     ctx.stroke();
 
-    // Power dots
     const dots = Math.floor(this.power / CONFIG.SLINGSHOT_MAX_POWER * 5) + 1;
     for (let i = 0; i < dots; i++) {
       const t = (i + 1) / (dots + 1);
-      ctx.fillStyle = "rgba(232, 197, 106, 0.8)";
+      ctx.fillStyle = "rgba(232, 197, 106, 0.85)";
       ctx.beginPath();
-      ctx.arc(
-        this.originX + Math.cos(fireAngle) * fireLen * t,
-        this.originY + Math.sin(fireAngle) * fireLen * t,
-        2.5, 0, Math.PI * 2
-      );
+      ctx.arc(ax + tx * fireLen * t, ay + ty * fireLen * t, 2.5, 0, Math.PI * 2);
       ctx.fill();
     }
   }

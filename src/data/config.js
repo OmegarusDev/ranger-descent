@@ -13,8 +13,8 @@ export const CONFIG = {
   CELL_SIZE: 40,
   /** Worldspace hall length. Far junction must stay inside the view far plane. */
   HALL_LENGTH: 560,
-  /** Stop this far short of the fork so the camera stands in the junction. */
-  JUNCTION_STOP: 52,
+  /** Stop at the near lip of the crossing so side halls are corridor mouths, not a room. */
+  JUNCTION_STOP: 120,
 
   // On-rails movement
   PLAYER_SPEED: 0.2,
@@ -33,6 +33,8 @@ export const CONFIG = {
   SLINGSHOT_MIN_POWER: 2,
   ARROW_SPEED: 400,
   ARROW_COOLDOWN_MULTIPLIER: 1.5,
+  /** Radians off hall-forward. Shared by the bow sprite and the shot. */
+  AIM_MAX: 1.28,
 
   // Quiver
   QUEUE_SIZE: 4,

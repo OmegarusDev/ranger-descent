@@ -3,7 +3,7 @@
  * Viewport, DPR, FX, and draw orchestration. No game rules.
  */
 import { CorridorCamera, CAMERA } from "./corridorCamera.js";
-import { FxSystem } from "./fx.js";
+import { FxSystem } from "./fx.js?v=4";
 
 
 export class RenderEngine2D5 {
@@ -28,6 +28,7 @@ export class RenderEngine2D5 {
     // Camera shake
     this._shakeT = 0;
     this._shakeMag = 0;
+    this._shakeAng = 0;
 
     // Static layer cache
     this._staticDirty = true;
@@ -134,6 +135,7 @@ export class RenderEngine2D5 {
   punch(mag = 3) {
     this._shakeT = 0.18;
     this._shakeMag = Math.max(this._shakeMag, mag);
+    this._shakeAng = Math.random() * Math.PI * 2;
   }
 
   invalidateStatic() {
@@ -166,10 +168,14 @@ export class RenderEngine2D5 {
 
     // Apply camera shake
     const shake = this._shakeT > 0
-      ? {
-          x: (Math.random() - 0.5) * this._shakeMag * (this._shakeT / 0.18),
-          y: (Math.random() - 0.5) * this._shakeMag * (this._shakeT / 0.18),
-        }
+      ? (() => {
+          const u = this._shakeT / 0.18;
+          const mag = this._shakeMag * u * u;
+          return {
+            x: Math.cos(this._shakeAng) * mag,
+            y: Math.sin(this._shakeAng) * mag * 0.6,
+          };
+        })()
       : { x: 0, y: 0 };
     ctx.save();
     ctx.translate(shake.x, shake.y);
