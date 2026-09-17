@@ -255,6 +255,34 @@ test("spawn lanes spread across most of the hall", () => {
   assert.ok(span > 80);
 });
 
+test("wide-lane melee foes funnel in and strike instead of walking past", () => {
+  const sim = new CorridorSim();
+  sim.initRun();
+  sim.waveActive = true;
+  sim.waveGroups = [];
+  sim.waveQueue = [];
+  sim.enemies = [];
+  sim.movingForward = false;
+  sim.playerWorldX = 0;
+  sim.playerWorldZ = 400;
+  sim._spawnGroup(["slime"]);
+  const e = sim.enemies[0];
+  e.x = 72;
+  e._laneX = 72;
+  e.worldZ = 455;
+  e.speed = 18;
+  let hits = 0;
+  sim.on("player_hit", () => { hits++; });
+  for (let i = 0; i < 900; i++) {
+    sim.tick();
+    if (sim.state.phase !== "run") break;
+    const foe = sim.enemies[0];
+    if (!foe) break;
+    assert.ok(foe.worldZ >= sim.playerWorldZ + 10, "foe walked past the ranger");
+  }
+  assert.ok(hits > 0, "off-axis foe should close in and attack");
+});
+
 test("firing during arrow cooldown emits not-ready feedback", () => {
   const sim = new CorridorSim();
   sim.state.startRun();

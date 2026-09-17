@@ -4,7 +4,7 @@
  */
 import { CONFIG } from "../data/config.js";
 import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
-import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=131";
+import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=138";
 
 const NEAR = 6;
 const FAR = 760;

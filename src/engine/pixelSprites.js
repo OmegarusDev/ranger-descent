@@ -282,15 +282,18 @@ const TORCH_1 = makeTorch(1);
 let bowBuf = null;
 let bowCtx = null;
 const BOW_W = 128;
-const BOW_H = 108;
+const BOW_H = 102;
 const BOW_CX = 64;
-const REST_SPAN = 52;
-const BELLY_Y = 54;
-const TIP_DROP = 10;
-const DRAW_IN = 8;
-const TIP_DRAW = 3;
-const GRIP_H = 8;
-const ARROW_LEN = 50;
+/** Riser / arrow rest — blit pins this row to the hands. */
+const GRIP_Y = 44;
+const REST_SPAN = 48;
+const DRAW_IN = 12;
+const REST_CURVE = 8;
+const DRAW_CURVE = 9;
+const TIP_KICK = 3;
+const GRIP_H = 9;
+const ARROW_LEN = 40;
+const REST_NOCK = GRIP_Y + REST_CURVE - TIP_KICK + 3;
 
 function ensureBow() {
   if (bowBuf && bowBuf.width === BOW_W && bowBuf.height === BOW_H) return;
@@ -344,17 +347,25 @@ function arrowPal(type, color) {
   return pal;
 }
 
-function limbY(x, span, tipDrop) {
-  const s = Math.min(1, Math.abs(x - BOW_CX) / Math.max(1, span));
-  const belly = s * s * tipDrop;
-  const kick = s > 0.8 ? ((s - 0.8) / 0.2) * -3 : 0;
-  return BELLY_Y + belly + kick;
+/** Recurve from the archer: belly and string toward you, back toward the hall. */
+function limbPoint(s, pull) {
+  const p = Math.max(0, Math.min(1, pull || 0));
+  const span = REST_SPAN - DRAW_IN * p;
+  const curve = REST_CURVE + DRAW_CURVE * p;
+  const x = BOW_CX + s * span;
+  const y = GRIP_Y + curve * (s * s) - TIP_KICK * Math.pow(Math.abs(s), 4);
+  return { x, y, span };
 }
 
 function restHalfString() {
-  const yTip = limbY(BOW_CX - REST_SPAN, REST_SPAN, TIP_DROP);
-  const nock = Math.max(yTip, BELLY_Y + GRIP_H);
-  return Math.hypot(REST_SPAN, nock - yTip);
+  const tip = limbPoint(-1, 0);
+  return Math.hypot(REST_SPAN, REST_NOCK - tip.y);
+}
+
+function nockYFor(pull) {
+  const tip = limbPoint(-1, pull);
+  const depth = Math.sqrt(Math.max(0, restHalfString() ** 2 - tip.span * tip.span));
+  return tip.y + depth;
 }
 
 function bowDot(x, y, col) {
@@ -426,56 +437,77 @@ function paintNockedArrow(ax, nockY, pal, type) {
   bowDot(ax + 2, nock, pal.fletchD);
 }
 
-/** First-person hunting bow aimed down the hall. pull is 0..1. */
-export function getBowSprite(pull, type, color) {
-  ensureBow();
-  bowCtx.clearRect(0, 0, BOW_W, BOW_H);
-  const p = Math.max(0, Math.min(1, pull || 0));
-  const halfStr = restHalfString();
-  const span = REST_SPAN - DRAW_IN * p;
-  const tipDrop = TIP_DROP + TIP_DRAW * p;
-  const xL = Math.round(BOW_CX - span);
-  const xR = Math.round(BOW_CX + span);
-  const yL = Math.round(limbY(xL, span, tipDrop));
-  const yR = Math.round(limbY(xR, span, tipDrop));
-  const depth = Math.sqrt(Math.max(0, halfStr * halfStr - span * span));
-  const nockCap = BELLY_Y + ARROW_LEN - 4;
-  const nockY = Math.round(Math.min(nockCap, Math.max(yL, yR) + depth));
-
-  for (let x = xL; x <= xR; x++) {
-    const s = Math.abs(x - BOW_CX) / Math.max(1, span);
-    const y0 = Math.round(limbY(x, span, tipDrop));
-    const thick = s > 0.88 ? 3 : s > 0.52 ? 4 : 6;
-    for (let k = 0; k < thick; k++) {
+function stampLimb(x, y, radius) {
+  const R = Math.max(1, Math.round(radius));
+  const cx = Math.round(x);
+  const cy = Math.round(y);
+  for (let dy = -R; dy <= R; dy++) {
+    for (let dx = -R; dx <= R; dx++) {
+      if (dx * dx + dy * dy > R * R) continue;
       let col = C.wood;
-      if (k === 0) col = C.woodL;
-      else if (k === thick - 1) col = C.out;
-      bowDot(x, y0 + k, col);
+      if (dy <= -R + 1) col = C.woodL;
+      else if (dy >= R - 1 && Math.abs(dx) <= 1) col = C.out;
+      else if ((dx + dy) % 4 === 0) col = C.woodD;
+      bowDot(cx + dx, cy + dy, col);
     }
   }
+}
 
-  bowDot(xL - 1, yL, C.gold);
-  bowDot(xL, yL, C.gold);
-  bowDot(xL - 1, yL + 1, C.goldD);
-  bowDot(xR, yR, C.gold);
-  bowDot(xR + 1, yR, C.gold);
-  bowDot(xR, yR + 1, C.goldD);
+function paintStave(pull) {
+  const steps = 80;
+  for (let i = 0; i <= steps; i++) {
+    const s = i / steps * 2 - 1;
+    const pt = limbPoint(s, pull);
+    const rad = 2.9 - 1.2 * Math.abs(s);
+    stampLimb(pt.x, pt.y, rad);
+  }
+  const tipL = limbPoint(-1, pull);
+  const tipR = limbPoint(1, pull);
+  for (const tip of [tipL, tipR]) {
+    const tx = Math.round(tip.x);
+    const ty = Math.round(tip.y);
+    bowDot(tx, ty, C.gold);
+    bowDot(tx - 1, ty, C.gold);
+    bowDot(tx + 1, ty, C.gold);
+    bowDot(tx, ty - 1, C.gold);
+    bowDot(tx, ty + 1, C.goldD);
+  }
+}
 
+function paintGrip() {
   for (let x = BOW_CX - 3; x <= BOW_CX + 3; x++) {
-    const y0 = Math.round(limbY(x, span, tipDrop));
     for (let k = 0; k < GRIP_H; k++) {
       let col = C.wrap;
       if (x === BOW_CX - 3 || x === BOW_CX + 3 || k === 0 || k === GRIP_H - 1) col = C.out;
       else if (k === 1) col = C.woodL;
       else if ((x + k) % 3 === 0) col = C.grip;
-      bowDot(x, y0 + k, col);
+      bowDot(x, GRIP_Y + k - 2, col);
     }
   }
+}
 
+/** First-person hunting bow aimed down the hall. pull is 0..1. */
+export function getBowSprite(pull, type, color) {
+  ensureBow();
+  bowCtx.clearRect(0, 0, BOW_W, BOW_H);
+  const p = Math.max(0, Math.min(1, pull || 0));
+  const tipL = limbPoint(-1, p);
+  const tipR = limbPoint(1, p);
+  const nockY = Math.round(nockYFor(p));
+
+  paintStave(p);
+  paintGrip();
+
+  const xL = Math.round(tipL.x);
+  const yL = Math.round(tipL.y);
+  const xR = Math.round(tipR.x);
+  const yR = Math.round(tipR.y);
   bowLine(xL, yL, BOW_CX, nockY, C.string);
   bowLine(xR, yR, BOW_CX, nockY, C.string);
-  bowLine(xL, yL + 1, BOW_CX, nockY, C.string);
-  bowLine(xR, yR + 1, BOW_CX, nockY, C.string);
+  bowLine(xL, yL + 1, BOW_CX, nockY + 1, C.string);
+  bowLine(xR, yR + 1, BOW_CX, nockY + 1, C.string);
+  bowDot(BOW_CX, nockY, C.gold);
+  bowDot(BOW_CX, nockY + 1, C.goldD);
 
   if (type) {
     const pal = arrowPal(type, color);
@@ -516,22 +548,32 @@ export function blitSprite(ctx, img, x, y, destH, { alpha = 1, flip = false, anc
   ctx.restore();
 }
 
+/** Screen Y of the grip — lower hall, above quiver / DRAW chrome. */
+export function bowGripScreenY(cssH, scale = 3) {
+  const hudClear = 108;
+  const below = (BOW_H - GRIP_Y) * Math.max(1, scale);
+  const above = GRIP_Y * Math.max(1, scale);
+  let y = cssH * 0.74;
+  y = Math.min(y, cssH - hudClear);
+  y = Math.min(y, cssH - below - 6);
+  return Math.max(above + 8, y);
+}
+
 export function blitBow(ctx, cssW, cssH, pull, opts = {}) {
   const img = getBowSprite(pull, opts.type, opts.color);
-  const hud = Math.max(6, cssH * 0.01);
-  const scale = Math.max(4, Math.floor(Math.min(cssW * 0.94 / img.width, cssH * 0.58 / img.height)));
+  let scale = Math.min(cssW * 0.95 / img.width, cssH * 0.46 / img.height);
+  scale = Math.max(2, Math.round(scale));
+  while (img.width * scale > cssW && scale > 2) scale -= 1;
   const dw = img.width * scale;
   const dh = img.height * scale;
   const tilt = (opts.tilt || 0) + (opts.jolt || 0);
-  // Grip / arrow rest — higher than the nock so the bow turns in the hands.
-  const pivot = 0.52;
-  const nockFrac = 0.90;
+  const gripScreenY = bowGripScreenY(cssH, scale);
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (ctx.webkitImageSmoothingEnabled != null) ctx.webkitImageSmoothingEnabled = false;
-  ctx.translate(cssW * 0.5, cssH - hud + 8 - dh * (nockFrac - pivot));
+  ctx.translate(cssW * 0.5, gripScreenY);
   if (tilt) ctx.rotate(tilt);
-  ctx.drawImage(img, -dw / 2, -dh * pivot, dw, dh);
+  ctx.drawImage(img, -dw / 2, -GRIP_Y * scale, dw, dh);
   ctx.restore();
 }
 

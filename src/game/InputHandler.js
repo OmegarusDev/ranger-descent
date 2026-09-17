@@ -39,18 +39,40 @@ export class InputHandler {
     this.blockUntil = 0;
     this.choiceMode = false;
     this.paused = false;
+    this._abortedId = null;
 
     this._bindEvents();
   }
 
-  reset() {
+  /** Drop a held draw without firing. The matching pointerup is swallowed. */
+  abortDraw() {
+    if (this._pointerId != null) this._abortedId = this._pointerId;
     this.isDragging = false;
     this.active = false;
-    this._pointerId = null;
     this.power = 0;
     this.vector = { x: 0, y: 0 };
     this.angle = 0;
     this.aimTarget = 0;
+    this._pointerId = null;
+  }
+
+  isAbortedPointer(id) {
+    return this._abortedId != null && id === this._abortedId;
+  }
+
+  /** True if this pointer's release must not fire, tap, or pick a path. */
+  takeSwallowedPointer(id) {
+    if (!this.isAbortedPointer(id)) return false;
+    const token = this._abortedId;
+    queueMicrotask(() => {
+      if (this._abortedId === token) this._abortedId = null;
+    });
+    return true;
+  }
+
+  reset() {
+    this.abortDraw();
+    this.active = false;
     this._aimAt = 0;
     this._suppressClick = false;
     this.choiceMode = false;
@@ -81,6 +103,7 @@ export class InputHandler {
 
   _onDown(e) {
     if (this.paused) return;
+    if (this.isAbortedPointer(e.pointerId)) return;
     if (e.pointerType === "mouse" && performance.now() < this._ignoreMouseUntil) return;
     if (!this.choiceMode && performance.now() < this.blockUntil) return;
     const { x, y } = this._toCanvas(e);
@@ -108,6 +131,18 @@ export class InputHandler {
   }
 
   _onUp(e, cancelled = false) {
+    if (this.takeSwallowedPointer(e.pointerId)) {
+      try { this.canvas.releasePointerCapture(e.pointerId); } catch(_) {}
+      this._suppressClick = true;
+      if (this._pointerId === e.pointerId) {
+        this.isDragging = false;
+        this._pointerId = null;
+        this.power = 0;
+        this.vector = { x: 0, y: 0 };
+        this.active = false;
+      }
+      return;
+    }
     if (this._pointerId != null && e.pointerId !== this._pointerId) return;
     try { this.canvas.releasePointerCapture(e.pointerId); } catch(_) {}
     const { x, y } = this._toCanvas(e);
@@ -213,7 +248,7 @@ export class InputHandler {
     const w = this.canvas.clientWidth || this.canvas.width;
     const h = this.canvas.clientHeight || this.canvas.height;
     const ax = w * 0.5;
-    const ay = h * 0.9;
+    const ay = h * 0.74;
     const fireLen = 36 + this.power * 2.2;
     const tx = Math.sin(this.angle);
     const ty = -Math.cos(this.angle);

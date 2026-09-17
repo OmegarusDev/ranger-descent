@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=140";
+import { DungeonView } from "./engine/DungeonView.js?v=147";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -40,6 +40,7 @@ initImmersive();
 if (typeof location !== "undefined" && location.search.includes("debug=1")) {
   globalThis.sim = sim;
   globalThis.dungeon = dungeon;
+  globalThis.input = input;
 }
 
 function saveGame() {
@@ -598,10 +599,10 @@ sim.on("wave_start", () => {
 });
 
 sim.on("junction_show", () => {
+  input.abortDraw();
   setPathChoice(true);
   syncRunInputLock();
   input.blockUntil = 0;
-  input.isDragging = false;
 });
 
 sim.on("junction_chosen", () => {
@@ -658,6 +659,7 @@ sim.on("run_start", () => {
 
 if (pathChoice) {
   pathChoice.addEventListener("pointerup", (e) => {
+    if (input.takeSwallowedPointer(e.pointerId)) return;
     if (e.target.closest("#btn-escape")) {
       e.preventDefault();
       e.stopPropagation();

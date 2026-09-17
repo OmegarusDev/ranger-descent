@@ -1265,7 +1265,7 @@ export class CorridorSim {
           break;
       }
 
-      if (e._hitStun <= 0) this._clampToFightLane(e, relDist, dt);
+      this._clampToFightLane(e, relDist, dt);
 
       const dist = e.worldZ - this.playerWorldZ;
       e.dist = dist;
@@ -1291,8 +1291,9 @@ export class CorridorSim {
       if (def?.regen && e.hp < e.maxHp) {
         e.hp = Math.min(e.maxHp, e.hp + def.regen * dt);
       }
-      const onAxis = Math.abs(e.x - this.playerWorldX) < 26;
-      if (def?.lifeSteal && dist < CONTACT_DIST && dist > 6 && onAxis) {
+      const reach = this._strikeReach(e);
+      const onAxis = Math.abs(e.x - this.playerWorldX) < reach;
+      if (def?.lifeSteal && dist < CONTACT_DIST && dist > -4 && onAxis) {
         e.hp = Math.min(e.maxHp, e.hp + 2 * dt);
       }
 
@@ -1301,7 +1302,7 @@ export class CorridorSim {
         continue;
       }
 
-      if (dist < CONTACT_DIST && dist > 6 && onAxis && (e._contactCd || 0) <= 0) {
+      if (dist < CONTACT_DIST && dist > -4 && onAxis && (e._contactCd || 0) <= 0) {
         const dmg = (e.behavior === "charge" && e._charging) ? (def?.contactDmg || 4) * 3 : (def?.contactDmg || 4);
         this.state.damagePlayer(dmg);
         const poison = e.contactPoison || def?.poison || 0;
@@ -1645,28 +1646,44 @@ export class CorridorSim {
     return { ok: true, arrow, value };
   }
 
+  _strikeReach(e) {
+    return Math.max(24, enemyHitWidth(e) * 0.42);
+  }
+
   /**
-   * Keep foes in the fight band without collapsing them into a center column.
-   * Off-axis bodies still cannot walk past the player.
+   * Keep packs spread at range, then funnel into strike width so they
+   * hit the ranger instead of walking past on a wide lane.
    */
   _clampToFightLane(e, relDist, dt) {
     const px = this.playerWorldX;
-    const close = Math.max(0, Math.min(1, 1 - (relDist - 28) / 280));
-    const maxOff = FIGHT_LANE * (1.12 - close * 0.12) + 4;
+    const farHalf = FIGHT_LANE * 1.12;
+    const strikeHalf = 18;
+    const u = Math.max(0, Math.min(1, (170 - relDist) / 138));
+    const funnel = u * u;
+    const maxOff = farHalf + (strikeHalf - farHalf) * funnel + 4;
+
+    if (e._hitStun <= 0 && e._laneX != null && funnel > 0.18) {
+      e._laneX += (px - e._laneX) * Math.min(1, funnel * 3.4 * dt);
+    }
+
     const dx = e.x - px;
     if (Math.abs(dx) > maxOff) {
       const pull = Math.abs(dx) - maxOff;
-      e.x -= Math.sign(dx) * Math.min(pull, (10 + close * 40) * dt);
+      const rate = e._hitStun > 0 ? 90 : 14 + funnel * 70;
+      e.x -= Math.sign(dx) * Math.min(pull, rate * dt);
     }
+
+    if (e._hitStun <= 0 && relDist < 78) {
+      const slide = (82 * dt) * (1.1 - Math.max(0, relDist) / 78);
+      e.x += Math.sign(px - e.x) * Math.min(Math.abs(px - e.x), slide);
+    }
+
     const wall = Math.min(FIGHT_LANE * 1.12, HALF_CORRIDOR - 14);
     e.x = Math.max(-wall, Math.min(wall, e.x));
 
-    if (e.flying) return;
-
-    const off = Math.abs(e.x - px);
-    const floor = off > 24 ? 40 : 16;
-    if (e.worldZ < this.playerWorldZ + floor) {
-      e.worldZ = this.playerWorldZ + floor;
+    const minDist = e.flying ? 22 : 18;
+    if (e.worldZ < this.playerWorldZ + minDist) {
+      e.worldZ = this.playerWorldZ + minDist;
     }
   }
 

@@ -1854,9 +1854,10 @@ button.shop-buy {
   flex-direction: column;
   justify-content: flex-start;
   align-items: stretch;
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 8px calc(10px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
   gap: 0;
+  --run-hud-stack: 50px;
 }
 #phase-run,
 #phase-run > * { pointer-events: none !important; }
@@ -2058,11 +2059,12 @@ button.shop-buy {
 
 .hud-top {
   display: grid;
-  grid-template-columns: minmax(132px, 200px) auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(120px, 1.4fr) auto auto auto;
   grid-template-areas: "hp place meta menu";
   align-items: center;
-  column-gap: 8px;
-  padding: 5px 6px 5px 8px;
+  column-gap: 6px;
+  row-gap: 2px;
+  padding: 4px 5px 4px 6px;
   border: 2px solid #c9a227;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.38),
@@ -2070,7 +2072,7 @@ button.shop-buy {
   border-radius: 0;
   font-family: var(--font-body);
   flex: 0 0 auto;
-  z-index: 2;
+  z-index: 5;
 }
 .hud-top .hp-row {
   grid-area: hp;
@@ -2085,7 +2087,8 @@ button.shop-buy {
   grid-area: place;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
   white-space: nowrap;
 }
 .hud-dot {
@@ -2097,7 +2100,7 @@ button.shop-buy {
 .hud-top .run-pause-btn { grid-area: menu; }
 .hud-primary {
   font-family: var(--font-body);
-  font-size: 0.92em;
+  font-size: 0.9em;
   font-weight: 400;
   color: #f3ead4;
   letter-spacing: 0.02em;
@@ -2109,32 +2112,34 @@ button.shop-buy {
   display: flex;
   justify-content: flex-end;
   align-items: baseline;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  font-size: 0.86em;
+  font-size: 0.82em;
   color: #d4c09a;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .hud-meta .coins { color: #e8c56a; font-weight: 700; }
 .hud-meta .timer {
   color: #d4c09a;
   font-variant-numeric: tabular-nums;
-  min-width: 2.6em;
+  min-width: 2.4em;
   text-align: right;
 }
 .run-pause-btn {
   pointer-events: auto !important;
   align-self: center;
-  width: 44px;
-  min-width: 44px;
-  min-height: 36px;
+  width: 42px;
+  min-width: 42px;
+  min-height: 34px;
   margin: 0;
-  padding: 6px 4px;
+  padding: 5px 3px;
   border: 2px solid #c9a227;
   border-radius: 0;
   background: #241610;
   color: #f3ead4;
   font-family: var(--font-display);
-  font-size: 0.58em;
+  font-size: 0.56em;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2146,17 +2151,17 @@ button.shop-buy {
 
 .nock-meter {
   position: absolute;
-  right: 10px;
-  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  right: 8px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   z-index: 3;
   pointer-events: none;
-  width: 78px;
-  height: 78px;
+  width: 72px;
+  height: 72px;
 }
 .nock-bezel {
   position: relative;
-  width: 78px;
-  height: 78px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   background:
     radial-gradient(circle at 50% 42%, rgba(255, 230, 170, 0.16), transparent 42%),
@@ -2168,8 +2173,8 @@ button.shop-buy {
 .nock-bezel svg {
   position: absolute;
   inset: 0;
-  width: 78px;
-  height: 78px;
+  width: 72px;
+  height: 72px;
   display: block;
 }
 .nock-track {
@@ -2194,7 +2199,7 @@ button.shop-buy {
   margin-left: -1px;
   background: #c9a227;
   box-shadow: 0 0 0 0.5px #1a1008;
-  transform-origin: 50% 33px;
+  transform-origin: 50% 30px;
 }
 .nock-ticks span:nth-child(1) { transform: rotate(0deg); height: 10px; }
 .nock-ticks span:nth-child(2) { transform: rotate(30deg); }
@@ -2210,7 +2215,7 @@ button.shop-buy {
 .nock-ticks span:nth-child(12) { transform: rotate(330deg); }
 .nock-gem {
   position: absolute;
-  inset: 22px;
+  inset: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2290,10 +2295,10 @@ button.shop-buy {
 
 .minimap-wrap {
   position: absolute;
-  right: 10px;
-  top: calc(6px + env(safe-area-inset-top, 0px) + 52px);
-  width: 40px;
-  height: 148px;
+  right: 8px;
+  top: calc(6px + env(safe-area-inset-top, 0px) + var(--run-hud-stack, 46px));
+  width: 38px;
+  height: 140px;
   border: 2px solid #c9a227;
   border-radius: 0;
   overflow: hidden;
@@ -2310,8 +2315,8 @@ button.shop-buy {
 .run-left-rail {
   position: absolute;
   left: 8px;
-  top: calc(6px + env(safe-area-inset-top, 0px) + 52px);
-  bottom: 124px;
+  top: calc(6px + env(safe-area-inset-top, 0px) + var(--run-hud-stack, 46px));
+  bottom: 118px;
   width: 52px;
   display: flex;
   flex-direction: column;
@@ -2331,7 +2336,7 @@ button.shop-buy {
   align-items: flex-start;
   gap: 4px;
   z-index: 2;
-  max-width: min(220px, 48vw);
+  max-width: min(260px, 64vw);
 }
 .run-bag-btn {
   pointer-events: auto !important;
@@ -2729,9 +2734,21 @@ html.using-keyboard .run-pouch-num { display: block; }
   font-variant-numeric: tabular-nums;
 }
 
+@media (max-width: 420px) {
+  #phase-run { --run-hud-stack: 80px; }
+  .hud-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "hp menu"
+      "place meta";
+  }
+  .hud-place { gap: 4px; }
+  .hud-meta { justify-content: flex-end; gap: 8px; }
+}
+
 @media (max-aspect-ratio: 3/4) {
-  .minimap-wrap { width: 36px; height: 128px; right: 8px; top: calc(6px + env(safe-area-inset-top, 0px) + 48px); }
-  .run-left-rail { top: calc(6px + env(safe-area-inset-top, 0px) + 48px); width: 52px; }
+  .minimap-wrap { width: 34px; height: 120px; }
+  .run-left-rail { width: 50px; }
 }
 @media (min-aspect-ratio: 1/1) {
   html { font-size: 16px; }
