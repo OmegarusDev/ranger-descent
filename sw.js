@@ -2,21 +2,14 @@
  * Ranger Descent service worker — network-first, update on every open.
  * Online: always prefer the live site. Offline: last successful response if any.
  */
-const CACHE = "ranger-descent-shell-v9";
+const CACHE = "ranger-descent-shell-v10";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
       try {
-        await cache.addAll([
-          "./",
-          "./index.html",
-          "./styles.css",
-          "./manifest.webmanifest",
-          "./art/hub/chamber-shut.jpg",
-          "./art/hub/chamber-open.jpg",
-        ]);
+        await cache.addAll(["./", "./index.html", "./styles.css", "./manifest.webmanifest"]);
       } catch (_) {
         /* optional precache — install still succeeds */
       }

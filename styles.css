@@ -374,7 +374,7 @@ body {
   height: min(100%, calc(100vw * 16 / 9));
   transform: translate(-50%, -50%);
   overflow: hidden;
-  background: #080604 url("art/hub/chamber-shut.jpg") center / cover no-repeat;
+  background: #080604;
   font-size: 16px;
 }
 .hub-scene {
@@ -385,21 +385,32 @@ body {
   height: 100%;
   max-width: none;
   max-height: none;
-  object-fit: cover;
-  object-position: 50% 50%;
   pointer-events: none;
-  transform: none;
 }
-.hub-scene-shut { z-index: 0; }
-.hub-scene-open {
-  z-index: 1;
-  opacity: 0;
+.hub-door-left,
+.hub-door-right {
+  transform-box: fill-box;
+  transition: transform 0.85s cubic-bezier(0.45, 0.05, 0.2, 1);
+}
+.hub-door-left { transform-origin: 0% 50%; }
+.hub-door-right { transform-origin: 100% 50%; }
+.hub-stage.is-opening .hub-door-left,
+.hub-stage.is-open .hub-door-left,
+.hub-stage.is-opening .hub-door-right,
+.hub-stage.is-open .hub-door-right {
+  transform: scaleX(0.08);
+}
+.hub-door-glow {
+  opacity: 0.42;
   transition: opacity 0.85s ease;
 }
-.hub-stage.is-opening .hub-scene-open,
-.hub-stage.is-open .hub-scene-open {
+.hub-stage.is-opening .hub-door-glow,
+.hub-stage.is-open .hub-door-glow {
   opacity: 1;
 }
+.hub-door-seam { transition: opacity 0.4s ease; }
+.hub-stage.is-opening .hub-door-seam,
+.hub-stage.is-open .hub-door-seam { opacity: 0; }
 .hub-vignette {
   position: absolute;
   inset: 0;
@@ -581,8 +592,8 @@ body {
 .hub-hotspot::after { opacity: 0; }
 .hub-hotspot:hover::after,
 .hub-hotspot:focus-visible::after { opacity: 0.95; }
-.hub-hotspot-train { left: 2%; top: 24.5%; width: 32%; height: 16.5%; }
-.hub-hotspot-shop { right: 2%; top: 25%; width: 32%; height: 16.5%; }
+.hub-hotspot-train { left: 1%; top: 27%; width: 28%; height: 17%; }
+.hub-hotspot-shop { right: 1%; top: 27.5%; width: 28%; height: 17%; }
 .hub-hotspot-door { left: 32%; top: 34%; width: 36%; height: 28%; }
 .hub-hotspot-bag { left: 22%; top: 64%; width: 24%; height: 18%; z-index: 6; }
 .hub-hotspot-tip {

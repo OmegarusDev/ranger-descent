@@ -1,0 +1,10 @@
+---
+description: Gameplay art is SVG, CSS, and canvas — never raster
+alwaysApply: true
+---
+
+# Zero raster game art
+
+Hub and dungeon art is inline SVG, CSS, or canvas. Do not add JPEG/PNG/WebP scenes, backgrounds, or sprites.
+
+PWA chrome in `icons/` is the only raster allowed.

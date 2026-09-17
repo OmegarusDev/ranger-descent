@@ -30,7 +30,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=191" />
+  <link rel="stylesheet" href="styles.css?v=194" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cinzel+Decorative:wght@700&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
@@ -137,8 +137,198 @@
     <div id="phase-hub" class="phase" style="display:flex">
       <div class="hub-yard">
         <div class="hub-stage">
-          <img class="hub-scene hub-scene-shut" src="art/hub/chamber-shut.jpg" alt="" width="720" height="1280" decoding="async">
-          <img class="hub-scene hub-scene-open" src="art/hub/chamber-open.jpg" alt="" width="720" height="1280" decoding="async">
+          <svg class="hub-scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1280" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <defs>
+              <linearGradient id="hub-plankL" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#1a0e08"/>
+                <stop offset="0.35" stop-color="#3a2212"/>
+                <stop offset="0.7" stop-color="#2a160c"/>
+                <stop offset="1" stop-color="#140a06"/>
+              </linearGradient>
+              <linearGradient id="hub-plankR" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#140a06"/>
+                <stop offset="0.3" stop-color="#4a2a14"/>
+                <stop offset="0.75" stop-color="#2a160c"/>
+                <stop offset="1" stop-color="#1a0e08"/>
+              </linearGradient>
+              <radialGradient id="hub-ember" cx="0.5" cy="0.62" r="0.58">
+                <stop offset="0" stop-color="#ffb45a" stop-opacity="0.9"/>
+                <stop offset="0.28" stop-color="#e05018" stop-opacity="0.5"/>
+                <stop offset="1" stop-color="#4a1008" stop-opacity="0"/>
+              </radialGradient>
+              <radialGradient id="hub-torchGlow" cx="0.5" cy="0.45" r="0.55">
+                <stop offset="0" stop-color="#ffc070" stop-opacity="0.9"/>
+                <stop offset="0.4" stop-color="#e06020" stop-opacity="0.35"/>
+                <stop offset="1" stop-color="#e06020" stop-opacity="0"/>
+              </radialGradient>
+              <pattern id="hub-ashlar" width="56" height="36" patternUnits="userSpaceOnUse">
+                <rect width="56" height="36" fill="#2a241c"/>
+                <rect x="0.6" y="0.6" width="26.8" height="16.6" fill="#3a342c"/>
+                <rect x="28.2" y="0.6" width="26.8" height="16.6" fill="#322c24"/>
+                <rect x="0.6" y="18.4" width="18" height="16.8" fill="#262018"/>
+                <rect x="19.4" y="18.4" width="36" height="16.8" fill="#3e382e"/>
+                <path d="M1 1 H27 M29 1 H55 M1 18 H55 M1 35 H55 M28 1 V18 M20 18 V35" stroke="#14100c" stroke-width="1.2" fill="none"/>
+              </pattern>
+              <pattern id="hub-cobble" width="64" height="40" patternUnits="userSpaceOnUse">
+                <rect width="64" height="40" fill="#1c1610"/>
+                <path d="M3 6 Q18 2 30 9 Q28 20 12 22 Q2 16 3 6Z" fill="#3a3226" stroke="#0e0c08" stroke-width="1"/>
+                <path d="M32 4 Q50 1 61 10 Q58 20 42 18 Q31 12 32 4Z" fill="#2e2820" stroke="#0e0c08" stroke-width="1"/>
+                <path d="M8 24 Q24 20 36 28 Q32 38 16 38 Q6 32 8 24Z" fill="#342c22" stroke="#0e0c08" stroke-width="1"/>
+                <path d="M38 22 Q54 18 62 28 Q58 38 44 38 Q36 30 38 22Z" fill="#2a241c" stroke="#0e0c08" stroke-width="1"/>
+              </pattern>
+              <pattern id="hub-grain" width="11" height="48" patternUnits="userSpaceOnUse">
+                <path d="M2 0 C4 12 1 24 3 48" stroke="#0a0604" stroke-width="0.7" fill="none" opacity="0.55"/>
+                <path d="M7 0 C6 16 9 30 6 48" stroke="#6b4424" stroke-width="0.4" fill="none" opacity="0.18"/>
+              </pattern>
+              <clipPath id="hub-arch">
+                <path d="M232 792 L232 528 C232 438 292 396 360 388 C428 396 488 438 488 528 L488 792 Z"/>
+              </clipPath>
+            </defs>
+
+            <rect width="720" height="1280" fill="#120c0a"/>
+            <rect width="720" height="820" fill="url(#hub-ashlar)"/>
+            <rect width="720" height="820" fill="#1a0c08" opacity="0.32"/>
+            <rect x="0" y="780" width="720" height="500" fill="url(#hub-cobble)"/>
+            <rect x="0" y="780" width="720" height="500" fill="#1a1008" opacity="0.22"/>
+
+            <path d="M40 420 C70 560 30 680 90 790" stroke="#1a3a14" stroke-width="18" fill="none" opacity="0.35"/>
+            <path d="M680 400 C650 540 700 670 640 790" stroke="#1a3a14" stroke-width="20" fill="none" opacity="0.32"/>
+            <path d="M18 250 C48 200 28 160 8 210" stroke="#c8c0b0" stroke-width="1.4" fill="none" opacity="0.28"/>
+            <path d="M8 210 C40 180 70 230 24 248" stroke="#c8c0b0" stroke-width="1.1" fill="none" opacity="0.22"/>
+            <path d="M702 240 C672 190 692 150 714 200" stroke="#c8c0b0" stroke-width="1.4" fill="none" opacity="0.26"/>
+
+            <!-- empty plaque; live title sits in HTML -->
+            <rect x="92" y="112" width="536" height="220" fill="#16100c" stroke="#c9a227" stroke-width="7"/>
+            <rect x="108" y="128" width="504" height="188" fill="#1c140e" stroke="#8a6818" stroke-width="2.2"/>
+            <rect x="92" y="112" width="22" height="22" fill="#3a3428"/>
+            <rect x="606" y="112" width="22" height="22" fill="#3a3428"/>
+            <rect x="92" y="310" width="22" height="22" fill="#3a3428"/>
+            <rect x="606" y="310" width="22" height="22" fill="#3a3428"/>
+            <path d="M360 112 L372 132 L360 140 L348 132 Z" fill="#c9a227"/>
+            <path d="M360 332 L372 312 L360 304 L348 312 Z" fill="#c9a227"/>
+
+            <!-- training sign -->
+            <g transform="translate(0 36) rotate(-4 104 420)">
+              <path d="M104 300 L104 318" stroke="#3a3428" stroke-width="6"/>
+              <rect x="10" y="318" width="188" height="200" fill="#1c120c" stroke="#c9a227" stroke-width="5"/>
+              <rect x="22" y="332" width="164" height="172" fill="#2a1810"/>
+              <g transform="translate(104 408)" filter="url(#sign-paint)">
+                <circle r="38" fill="#5a1814" stroke="#c9a227" stroke-width="3"/>
+                <circle r="24" fill="#efe4c8"/>
+                <circle r="12" fill="#5a1814"/>
+                <circle r="4" fill="#1a0808"/>
+              </g>
+              <text x="104" y="498" text-anchor="middle" fill="#f0d8a0" font-family="Cinzel, serif" font-size="18" font-weight="700" letter-spacing="2" filter="url(#ink-type)">TRAINING</text>
+            </g>
+
+            <!-- shop sign -->
+            <g transform="translate(0 36) rotate(4 616 424)">
+              <path d="M616 304 L616 322" stroke="#3a3428" stroke-width="6"/>
+              <rect x="522" y="322" width="188" height="196" fill="#1c120c" stroke="#c9a227" stroke-width="5"/>
+              <rect x="534" y="336" width="164" height="168" fill="#2a1810"/>
+              <g transform="translate(616 414)" filter="url(#sign-paint-b)">
+                <ellipse rx="34" ry="24" fill="#8a6818" stroke="#c9a227" stroke-width="3"/>
+                <path d="M-14 -16 C-14 -30 14 -30 14 -16" fill="none" stroke="#1a1008" stroke-width="4"/>
+                <rect x="-7" y="-5" width="14" height="10" rx="2" fill="#1a1008"/>
+              </g>
+              <text x="616" y="498" text-anchor="middle" fill="#f0d8a0" font-family="Cinzel, serif" font-size="22" font-weight="700" letter-spacing="3" filter="url(#ink-type)">SHOP</text>
+            </g>
+
+            <!-- stone arch -->
+            <path d="M214 792 L214 524 C214 420 286 372 360 364 C434 372 506 420 506 524 L506 792 L488 792 L488 528 C488 438 428 396 360 388 C292 396 232 438 232 528 L232 792 Z" fill="#322c24" stroke="#16120c" stroke-width="3"/>
+            <path d="M226 792 L226 528 C226 444 290 404 360 396 C430 404 494 444 494 528 L494 792 L488 792 L488 528 C488 438 428 396 360 388 C292 396 232 438 232 528 L232 792 Z" fill="#3a342c"/>
+
+            <g clip-path="url(#hub-arch)">
+              <rect x="232" y="388" width="256" height="410" fill="#080402"/>
+              <path d="M300 430 L360 500 L420 430 L420 792 L300 792 Z" fill="#050302"/>
+              <ellipse class="hub-door-glow" cx="360" cy="620" rx="88" ry="130" fill="url(#hub-ember)"/>
+              <g class="hub-door-left">
+                <rect x="232" y="388" width="128" height="410" fill="url(#hub-plankL)"/>
+                <rect x="232" y="388" width="128" height="410" fill="url(#hub-grain)"/>
+                <rect x="232" y="548" width="128" height="18" fill="#120c08"/>
+                <rect x="232" y="668" width="128" height="18" fill="#120c08"/>
+                <g fill="#6a5840"><circle cx="248" cy="557" r="3.4"/><circle cx="344" cy="557" r="3.4"/><circle cx="248" cy="677" r="3.4"/><circle cx="344" cy="677" r="3.4"/></g>
+                <circle cx="348" cy="640" r="16" fill="none" stroke="#3a2a14" stroke-width="6"/>
+                <circle cx="348" cy="640" r="10" fill="none" stroke="#c9a227" stroke-width="1.2" opacity="0.7"/>
+                <rect x="336" y="612" width="22" height="18" rx="2" fill="#2a1a0c" stroke="#c9a227" stroke-width="1.1"/>
+              </g>
+              <g class="hub-door-right">
+                <rect x="360" y="388" width="128" height="410" fill="url(#hub-plankR)"/>
+                <rect x="360" y="388" width="128" height="410" fill="url(#hub-grain)"/>
+                <rect x="360" y="548" width="128" height="18" fill="#120c08"/>
+                <rect x="360" y="668" width="128" height="18" fill="#120c08"/>
+                <g fill="#6a5840"><circle cx="376" cy="557" r="3.4"/><circle cx="472" cy="557" r="3.4"/><circle cx="376" cy="677" r="3.4"/><circle cx="472" cy="677" r="3.4"/></g>
+                <circle cx="372" cy="640" r="16" fill="none" stroke="#3a2a14" stroke-width="6"/>
+                <circle cx="372" cy="640" r="10" fill="none" stroke="#c9a227" stroke-width="1.2" opacity="0.7"/>
+                <rect x="362" y="612" width="22" height="18" rx="2" fill="#2a1a0c" stroke="#c9a227" stroke-width="1.1"/>
+              </g>
+              <line class="hub-door-seam" x1="360" y1="396" x2="360" y2="788" stroke="#080402" stroke-width="4"/>
+            </g>
+
+            <g>
+              <ellipse cx="214" cy="560" rx="36" ry="30" fill="url(#hub-torchGlow)"/>
+              <rect x="206" y="562" width="16" height="40" rx="3" fill="#1a1008"/>
+              <path fill="#ff8a30" d="M202 562 L214 522 L226 562 Z">
+                <animate attributeName="d" dur="1.4s" repeatCount="indefinite"
+                  values="M202 562 L214 522 L226 562 Z;M203 562 L212 512 L225 562 Z;M202 562 L216 530 L226 562 Z;M202 562 L214 522 L226 562 Z"/>
+              </path>
+              <circle cx="214" cy="530" r="10" fill="#ffe0a0" opacity="0.95"/>
+            </g>
+            <g>
+              <ellipse cx="506" cy="560" rx="36" ry="30" fill="url(#hub-torchGlow)"/>
+              <rect x="498" y="562" width="16" height="40" rx="3" fill="#1a1008"/>
+              <path fill="#ff8a30" d="M494 562 L506 522 L518 562 Z">
+                <animate attributeName="d" dur="1.6s" repeatCount="indefinite"
+                  values="M494 562 L506 522 L518 562 Z;M495 562 L508 510 L517 562 Z;M494 562 L504 532 L518 562 Z;M494 562 L506 522 L518 562 Z"/>
+              </path>
+              <circle cx="506" cy="530" r="10" fill="#ffe0a0" opacity="0.95"/>
+            </g>
+
+            <!-- dummy + bow -->
+            <path d="M52 640 C44 720 52 800 58 868" fill="none" stroke="#3a2414" stroke-width="7"/>
+            <path d="M52 640 C78 730 78 810 58 868" fill="none" stroke="#d4c4a0" stroke-width="1.8"/>
+            <line x1="70" y1="730" x2="96" y2="792" stroke="#6b3418" stroke-width="3"/>
+            <rect x="116" y="728" width="16" height="168" fill="#4a2a14" stroke="#1a1008" stroke-width="2"/>
+            <rect x="76" y="786" width="96" height="12" fill="#4a2a14" stroke="#1a1008" stroke-width="2"/>
+            <circle cx="124" cy="714" r="24" fill="#8a5a30" stroke="#1a1008" stroke-width="3"/>
+            <circle cx="116" cy="708" r="4" fill="#1a1008"/>
+            <circle cx="132" cy="708" r="4" fill="#1a1008"/>
+            <ellipse cx="124" cy="828" rx="28" ry="40" fill="#6b4424" stroke="#1a1008" stroke-width="3"/>
+
+            <!-- window -->
+            <rect x="548" y="560" width="110" height="90" fill="#1a1410" stroke="#3a3428" stroke-width="6"/>
+            <rect x="560" y="572" width="38" height="66" fill="#2a2018"/>
+            <rect x="608" y="572" width="38" height="66" fill="#241a12"/>
+            <path d="M560 572 H646 M560 605 H646 M560 638 H646" stroke="#1a1008" stroke-width="3"/>
+
+            <!-- crates -->
+            <g stroke="#1a1008" stroke-width="2.4">
+              <rect x="500" y="700" width="86" height="70" fill="#7a5330"/>
+              <path d="M500 700 L586 770 M586 700 L500 770" stroke="#5a3a1c" stroke-width="2"/>
+              <rect x="548" y="648" width="70" height="58" fill="#8a5a32"/>
+              <path d="M548 648 L618 706 M618 648 L548 706" stroke="#5a3a1c" stroke-width="2"/>
+            </g>
+
+            <!-- urns -->
+            <ellipse cx="64" cy="900" rx="38" ry="14" fill="#2a1408" opacity="0.7"/>
+            <path d="M36 896 C32 840 48 800 64 796 C80 800 96 840 92 896 Z" fill="#4a3a30" stroke="#1a1008" stroke-width="2"/>
+            <ellipse cx="64" cy="804" rx="18" ry="8" fill="#6a5a48"/>
+            <ellipse cx="656" cy="920" rx="42" ry="16" fill="#2a1408" opacity="0.7"/>
+            <path d="M624 914 C618 850 636 806 656 802 C676 806 694 850 688 914 Z" fill="#4a3a30" stroke="#1a1008" stroke-width="2"/>
+            <ellipse cx="656" cy="812" rx="20" ry="8" fill="#6a5a48"/>
+
+            <!-- pack -->
+            <ellipse cx="248" cy="1052" rx="96" ry="24" fill="#0e0a06" opacity="0.5"/>
+            <rect x="176" y="858" width="148" height="48" rx="22" fill="#6b4424" stroke="#1a1008" stroke-width="3"/>
+            <rect x="188" y="870" width="124" height="10" rx="5" fill="#8a5a30"/>
+            <path d="M184 900 L176 1032 Q248 1060 322 1032 L314 900 Z" fill="#4a3018" stroke="#1a1008" stroke-width="3"/>
+            <path d="M184 900 Q248 872 314 900 L314 934 Q248 908 184 934 Z" fill="#5a3a20"/>
+            <path d="M172 896 Q248 948 328 896 L318 922 Q248 962 182 922 Z" fill="#3a2410"/>
+            <rect x="232" y="926" width="32" height="22" rx="3" fill="#c9a227" stroke="#1a1008" stroke-width="1.5"/>
+            <path d="M198 972 H300 M198 1004 H300" stroke="#2a1810" stroke-width="7"/>
+
+            <ellipse cx="360" cy="1220" rx="420" ry="90" fill="#000" opacity="0.45"/>
+          </svg>
           <div class="hub-vignette" aria-hidden="true"></div>
           <div class="hub-play">
             <div class="hub-chrome">
@@ -532,7 +722,7 @@
     <div id="ui-tip" class="ui-tip ink-frame" role="tooltip" hidden></div>
   </div>
 
-  <script type="module" src="src/main.js?v=191"></script>
+  <script type="module" src="src/main.js?v=194"></script>
   <script type="module">
     import { registerPwa } from "./src/pwa.js?v=4";
     registerPwa();
