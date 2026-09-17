@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=147";
+import { DungeonView } from "./engine/DungeonView.js?v=149";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -525,13 +525,9 @@ sim.on("enemy_death", (e) => {
 });
 
 sim.on("arrow_fire", (e) => {
-  dungeon.bowJoltUntil = 0;
   const ang = e.projectile
     ? Math.atan2(e.projectile.vx || 0, e.projectile.vz || 1)
     : 0;
-  dungeon._bowHold = ang;
-  dungeon._bowHoldUntil = performance.now() + 240;
-  dungeon._bowTilt = ang;
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
 
@@ -549,9 +545,6 @@ sim.on("quiver_empty", () => {
 let lastNotReadyAt = 0;
 sim.on("arrow_not_ready", () => {
   const now = performance.now();
-  if (!dungeon.bowJoltUntil || now >= dungeon.bowJoltUntil) {
-    dungeon.bowJoltUntil = now + 280;
-  }
   if (now - lastNotReadyAt < 900) return;
   lastNotReadyAt = now;
   showAmmoAlert("Hold — string recovering", "wait");
@@ -791,7 +784,6 @@ function startDungeonRun() {
     closeElevatorModal();
     closeHubSheets();
     sim.initRun();
-    dungeon.bowJoltUntil = 0;
   } catch (err) {
     console.error("Init error:", err);
   }
@@ -1022,9 +1014,6 @@ function drawCorridor(ctx, dt = 1 / 60) {
     segmentIndex: sim.segmentIndex || 0,
   });
   dungeon.combatYaw = null;
-  const nocked = sim.quiver?.peekQueue?.()?.[0];
-  const nockDef = getArrowDef(nocked ? nocked.type : "wood");
-  dungeon.nockedArrow = nocked ? { type: nockDef.type, color: nockDef.color } : null;
   const viewDt = (sim.hitStop > 0 || overlayBlocksSim()) ? 0 : dt;
   dungeon.drawHall(ctx, cam.playerWorldZ, t, getJunctionView(cam.playerWorldZ), {
     walking: typeof sim.isWalkingView === "function" ? sim.isWalkingView() : !!sim.movingForward,
@@ -1061,7 +1050,7 @@ function drawCorridor(ctx, dt = 1 / 60) {
   }
   ctx.restore();
 
-  dungeon.drawOverlay(ctx, input);
+  dungeon.drawOverlay(ctx);
   input.drawAimLine(ctx);
 }
 

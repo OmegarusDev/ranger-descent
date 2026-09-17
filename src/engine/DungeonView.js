@@ -1,10 +1,10 @@
 /**
  * First-person dungeon hall — Wolfenstein-style raycaster (2.5D).
- * Combat sprites, bow, and path overlay sit on top of the column renderer.
+ * Combat sprites and path overlay sit on top of the column renderer.
  */
 import { CONFIG } from "../data/config.js";
 import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
-import { SPRITES, blitSprite, blitBow } from "./pixelSprites.js?v=138";
+import { SPRITES, blitSprite } from "./pixelSprites.js?v=140";
 
 const NEAR = 6;
 const FAR = 760;
@@ -46,7 +46,6 @@ export class DungeonView {
     this.roll = 0;
     this._walkAmt = 0;
     this._walkPhase = 0;
-    this._bowTilt = 0;
     this.combatYaw = null;
     this.junction = null;
     this._worldHalls = [];
@@ -1573,9 +1572,8 @@ export class DungeonView {
     ctx.restore();
   }
 
-  drawOverlay(ctx, input) {
+  drawOverlay(ctx) {
     this._drawPathOverlay(ctx);
-    this._drawBowOverlay(ctx, input);
   }
 
   _drawPathOverlay(ctx) {
@@ -1709,32 +1707,5 @@ export class DungeonView {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fill();
-  }
-
-  _drawBowOverlay(ctx, input) {
-    if (this.junction && this.junction.pending) return;
-    const pulling = input && input.isDragging && input.power > 2;
-    const pull = pulling ? Math.min(1, input.power / 24) : 0;
-    const maxAim = CONFIG.AIM_MAX || 1.28;
-    const now = performance.now();
-    let target = 0;
-    if (pulling) {
-      target = Math.max(-maxAim, Math.min(maxAim, input.angle || 0));
-    } else if (this._bowHoldUntil && now < this._bowHoldUntil) {
-      target = this._bowHold || 0;
-    }
-    if (this._bowTilt == null) this._bowTilt = 0;
-    if (pulling) this._bowTilt = target;
-    else this._bowTilt += (target - this._bowTilt) * 0.22;
-    let tilt = this._bowTilt;
-    if (this.bowJoltUntil && now < this.bowJoltUntil && !pulling) {
-      tilt += Math.sin(now * 0.064) * 0.02;
-    }
-    const nocked = this.nockedArrow || null;
-    blitBow(ctx, this.cssW, this.cssH, pull, {
-      tilt,
-      type: nocked && nocked.type,
-      color: nocked && nocked.color,
-    });
   }
 }

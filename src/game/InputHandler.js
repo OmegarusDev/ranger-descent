@@ -248,7 +248,7 @@ export class InputHandler {
     const w = this.canvas.clientWidth || this.canvas.width;
     const h = this.canvas.clientHeight || this.canvas.height;
     const ax = w * 0.5;
-    const ay = h * 0.74;
+    const ay = h;
     const fireLen = 36 + this.power * 2.2;
     const tx = Math.sin(this.angle);
     const ty = -Math.cos(this.angle);
