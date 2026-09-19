@@ -46,6 +46,9 @@ export class DungeonView {
     this.roll = 0;
     this._walkAmt = 0;
     this._walkPhase = 0;
+    this._bowRise = 0;
+    this._bowRiseAt = 0;
+    this._bowTilt = 0;
     this.combatYaw = null;
     this.junction = null;
     this._worldHalls = [];
@@ -1506,7 +1509,7 @@ export class DungeonView {
     const dist = p.dist;
     if (dist == null || dist < -6 || dist > FAR) return;
     const ctx = this.ctx;
-    const py = 12;
+    const py = p.worldY != null ? p.worldY : 12;
     if (enemy) {
       const sp = this.project(p.x, dist, py);
       if (sp.behind || sp.occluded) return;
@@ -1524,9 +1527,10 @@ export class DungeonView {
     const speed = Math.hypot(p.vx || 0, p.vz || 0) || 1;
     const ux = (p.vx || 0) / speed;
     const uz = (p.vz || 0) / speed;
-    const shaft = 16;
+    const shaft = p.shaftLen != null ? p.shaftLen : 16;
     const tip = this.project(p.x, dist, py);
-    if (tip.behind || tip.occluded) return;
+    if (tip.behind) return;
+    if (tip.occluded && !p.nocked) return;
     const tail = this.project(p.x - ux * shaft, dist - uz * shaft, py);
     const dx = tip.x - tail.x;
     const dy = tip.y - tail.y;
@@ -1535,30 +1539,51 @@ export class DungeonView {
     const ny = dy / slen;
     const px = -ny;
     const pyx = nx;
-    const head = Math.max(5.5, Math.min(11, 7.2 * Math.max(0.55, tip.s * 0.07)));
-    const fletch = Math.max(3.2, head * 0.55);
+    const head = p.nocked
+      ? Math.max(7, Math.min(16, 4.8 + tip.s * 0.12))
+      : Math.max(5.5, Math.min(11, 7.2 * Math.max(0.55, tip.s * 0.07)));
+    const fletch = p.nocked
+      ? Math.max(6, Math.min(18, 3.2 + tail.s * 0.1))
+      : Math.max(3.2, head * 0.55);
     ctx.save();
-    ctx.strokeStyle = "#e8d8b0";
-    ctx.lineWidth = Math.max(1.6, 2.4 * tip.s * 0.08);
+    ctx.strokeStyle = p.shaftColor || "#e8d8b0";
+    ctx.lineWidth = p.nocked
+      ? Math.max(3.2, 0.22 * (tail.s + tip.s))
+      : Math.max(1.6, 2.4 * tip.s * 0.08);
     ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(tail.x, tail.y);
     ctx.lineTo(tip.x, tip.y);
     ctx.stroke();
-    ctx.fillStyle = "#c9a227";
+    ctx.fillStyle = p.headColor || "#c9a227";
     ctx.beginPath();
     ctx.moveTo(tip.x + nx * 1.2, tip.y + ny * 1.2);
     ctx.lineTo(tip.x - nx * head + px * (head * 0.42), tip.y - ny * head + pyx * (head * 0.42));
     ctx.lineTo(tip.x - nx * head - px * (head * 0.42), tip.y - ny * head - pyx * (head * 0.42));
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = "#8a4a28";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = p.fletchColor || "#8a4a28";
+    ctx.lineWidth = p.nocked ? Math.max(1.6, tail.s * 0.06) : 1.2;
     ctx.beginPath();
     ctx.moveTo(tail.x + px * fletch, tail.y + pyx * fletch);
     ctx.lineTo(tail.x + nx * 1.4, tail.y + ny * 1.4);
     ctx.lineTo(tail.x - px * fletch, tail.y - pyx * fletch);
     ctx.stroke();
+    if (p.nocked && p.sightLen > 0) {
+      const look = this.project(p.x + ux * p.sightLen, dist + uz * p.sightLen, py);
+      if (!look.behind) {
+        ctx.strokeStyle = "rgba(232, 197, 106, 0.42)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 8]);
+        ctx.beginPath();
+        ctx.moveTo(tip.x, tip.y);
+        ctx.lineTo(look.x, look.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(232, 197, 106, 0.7)";
+        ctx.fillRect(look.x - 1, look.y - 1, 2, 2);
+      }
+    }
     const trail = p._trail || [];
     for (let i = 0; i < trail.length; i++) {
       const t = trail[i];
@@ -1572,8 +1597,9 @@ export class DungeonView {
     ctx.restore();
   }
 
-  drawOverlay(ctx) {
+  drawOverlay(ctx, input, nocked) {
     this._drawPathOverlay(ctx);
+    this._drawBowOverlay(ctx, input, nocked);
   }
 
   _drawPathOverlay(ctx) {
@@ -1707,5 +1733,190 @@ export class DungeonView {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.fill();
+  }
+
+  _drawBowOverlay(ctx, input, nocked) {
+    if (this.junction && this.junction.pending) {
+      this._bowRise = 0;
+      return;
+    }
+    this.ctx = ctx;
+    const pulling = !!(input && input.isDragging && input.power > 2);
+    const pull = pulling ? Math.min(1, input.power / 24) : 0;
+    const now = performance.now();
+    const dt = Math.min(0.05, Math.max(0, (now - (this._bowRiseAt || now)) / 1000));
+    this._bowRiseAt = now;
+    let target = 0;
+    let yaw = this._bowTilt || 0;
+    if (pulling) {
+      target = 1;
+      yaw = input.angle || 0;
+      this._bowTilt = yaw;
+      this._bowHoldUntil = 0;
+    } else if (this._bowHoldUntil && now < this._bowHoldUntil) {
+      target = Math.min(1, this._bowHoldRise || 1);
+      yaw = this._bowHold || 0;
+    }
+    const k = 1 - Math.exp(-(pulling ? 18 : 6.5) * dt);
+    this._bowRise += (target - this._bowRise) * k;
+    if (this._bowRise < 0.03 && !pulling) return;
+    let posePull = 0;
+    if (pulling) posePull = pull;
+    else if (this._bowHoldUntil && now < this._bowHoldUntil) posePull = 0.9;
+    const rise = this._bowRise;
+    const nockY = 12 - (1 - rise) * 26;
+    const nockDist = 18;
+    this._drawBow3D(ctx, nockDist, nockY, yaw, posePull);
+    const showArrow = pulling && nocked && nocked.type;
+    if (showArrow) this._drawNockedShot(nocked, yaw, nockDist, nockY, posePull);
+  }
+
+  /**
+   * Corridor-local: x = lateral, dist = hall-forward. Yaw 0 is the shot down the hall.
+   * Left of the arrow is −cos(yaw) in x, +sin(yaw) in dist.
+   */
+  _bowWorld(nockDist, nockY, yaw, left, yOff, fwd) {
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    return this.project(
+      -left * c + fwd * s,
+      nockDist + left * s + fwd * c,
+      nockY + yOff
+    );
+  }
+
+  _bowLimbLocal(s, pull) {
+    const t = Math.abs(s);
+    const up = s >= 0;
+    const len = up ? 22 : 13;
+    const belly = (up ? 5.8 : 3.6) * 4 * t * (1 - t);
+    const flex = (up ? 5 : 3) * pull * t * t;
+    return {
+      left: 4.4 + belly - flex * 0.85,
+      y: (up ? 1 : -1) * (len * t - flex * 0.35),
+      fwd: 0.4 + 2.2 * pull * t * t,
+    };
+  }
+
+  _drawBow3D(ctx, nockDist, nockY, yaw, pull) {
+    const pts = [];
+    const n = 28;
+    for (let i = 0; i <= n; i++) {
+      const s = i / n * 2 - 1;
+      const loc = this._bowLimbLocal(s, pull);
+      const p = this._bowWorld(nockDist, nockY, yaw, loc.left, loc.y, loc.fwd);
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+      pts.push({ p, s, loc });
+    }
+    if (pts.length < 3) return;
+    const grip = [];
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const cur = pts[i];
+      const nxt = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = nxt.p.x - cur.p.x;
+      const dy = nxt.p.y - cur.p.y;
+      const sl = Math.hypot(dx, dy) || 1;
+      const thick = (Math.abs(cur.s) < 0.12 ? 5.4 : 3.6 - Math.abs(cur.s) * 1.4) * Math.max(0.08, cur.p.s * 0.055);
+      const nx = -dy / sl * thick;
+      const ny = dx / sl * thick;
+      if (i === 0) ctx.moveTo(cur.p.x + nx, cur.p.y + ny);
+      else ctx.lineTo(cur.p.x + nx, cur.p.y + ny);
+      if (Math.abs(cur.s) < 0.18) grip.push({ x: cur.p.x, y: cur.p.y, nx, ny, s: cur.p.s });
+    }
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const cur = pts[i];
+      const nxt = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = nxt.p.x - cur.p.x;
+      const dy = nxt.p.y - cur.p.y;
+      const sl = Math.hypot(dx, dy) || 1;
+      const thick = (Math.abs(cur.s) < 0.12 ? 5.4 : 3.6 - Math.abs(cur.s) * 1.4) * Math.max(0.08, cur.p.s * 0.055);
+      const nx = -dy / sl * thick;
+      const ny = dx / sl * thick;
+      ctx.lineTo(cur.p.x - nx, cur.p.y - ny);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#6b4424";
+    ctx.strokeStyle = "#1a1008";
+    ctx.lineWidth = 1.4;
+    ctx.fill();
+    ctx.stroke();
+
+    if (grip.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(grip[0].x + grip[0].nx * 1.15, grip[0].y + grip[0].ny * 1.15);
+      for (let i = 1; i < grip.length; i++) {
+        const g = grip[i];
+        ctx.lineTo(g.x + g.nx * 1.15, g.y + g.ny * 1.15);
+      }
+      for (let i = grip.length - 1; i >= 0; i--) {
+        const g = grip[i];
+        ctx.lineTo(g.x - g.nx * 1.15, g.y - g.ny * 1.15);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "#6b3418";
+      ctx.fill();
+      ctx.strokeStyle = "#2a1408";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    const tipU = this._bowLimbLocal(1, pull);
+    const tipL = this._bowLimbLocal(-1, pull);
+    const pU = this._bowWorld(nockDist, nockY, yaw, tipU.left, tipU.y, tipU.fwd);
+    const pL = this._bowWorld(nockDist, nockY, yaw, tipL.left, tipL.y, tipL.fwd);
+    const pN = this._bowWorld(nockDist, nockY, yaw, 0.6, 0, 0.2);
+    ctx.strokeStyle = "rgba(200, 184, 140, 0.85)";
+    ctx.lineWidth = Math.max(1.2, pN.s * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(pU.x, pU.y);
+    ctx.lineTo(pN.x, pN.y);
+    ctx.lineTo(pL.x, pL.y);
+    ctx.stroke();
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(pU.x - 1.5, pU.y - 1.5, 3, 3);
+    ctx.fillRect(pL.x - 1.5, pL.y - 1.5, 3, 3);
+    ctx.fillRect(pN.x - 2, pN.y - 2, 4, 4);
+    ctx.restore();
+  }
+
+  _drawNockedShot(nocked, yaw, nockDist, nockY, pull) {
+    const type = nocked.type;
+    const len = 54 + pull * 22;
+    const paint = (extra) => {
+      const a = yaw + extra;
+      const ux = Math.sin(a);
+      const uz = Math.cos(a);
+      const ghost = {
+        x: ux * len,
+        dist: nockDist + uz * len,
+        vx: ux,
+        vz: uz,
+        shaftLen: len,
+        nocked: true,
+        sightLen: extra === 0 ? 52 : 0,
+        worldY: nockY,
+        shaftColor: "#e8d8b0",
+        headColor: nocked.color || "#c9a227",
+        fletchColor: "#8a4a28",
+      };
+      if (type === "fire") {
+        ghost.headColor = "#e07030";
+        ghost.fletchColor = "#ffb45a";
+      } else if (type === "ice") {
+        ghost.headColor = "#d8f0ff";
+        ghost.fletchColor = "#6aa0c8";
+      } else if (type === "poison") {
+        ghost.headColor = "#c070e0";
+      } else if (type === "shock") {
+        ghost.headColor = "#f0e878";
+      }
+      this.drawProjectile(ghost);
+    };
+    paint(0);
+    if (type === "double") paint(0.09);
   }
 }

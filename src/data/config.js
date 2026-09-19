@@ -33,7 +33,7 @@ export const CONFIG = {
   SLINGSHOT_MIN_POWER: 2,
   ARROW_SPEED: 400,
   ARROW_COOLDOWN_MULTIPLIER: 1.5,
-  /** Radians off hall-forward. Shared by the bow sprite and the shot. */
+  /** Radians off hall-forward. Shared by the nocked shot and the projectile. */
   AIM_MAX: 1.28,
 
   // Quiver

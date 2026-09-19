@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=149";
+import { DungeonView } from "./engine/DungeonView.js?v=170";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -528,6 +528,10 @@ sim.on("arrow_fire", (e) => {
   const ang = e.projectile
     ? Math.atan2(e.projectile.vx || 0, e.projectile.vz || 1)
     : 0;
+  dungeon._bowHold = ang;
+  dungeon._bowHoldRise = Math.min(1, Math.max(dungeon._bowRise || 0, 0.85));
+  dungeon._bowHoldUntil = performance.now() + 200;
+  dungeon._bowTilt = ang;
   engine.fx.muzzle(0, 0, ang, e.arrow.type);
 });
 
@@ -1014,6 +1018,8 @@ function drawCorridor(ctx, dt = 1 / 60) {
     segmentIndex: sim.segmentIndex || 0,
   });
   dungeon.combatYaw = null;
+  const nocked = sim.quiver?.peekQueue?.()?.[0];
+  const nockDef = getArrowDef(nocked ? nocked.type : "wood");
   const viewDt = (sim.hitStop > 0 || overlayBlocksSim()) ? 0 : dt;
   dungeon.drawHall(ctx, cam.playerWorldZ, t, getJunctionView(cam.playerWorldZ), {
     walking: typeof sim.isWalkingView === "function" ? sim.isWalkingView() : !!sim.movingForward,
@@ -1050,8 +1056,7 @@ function drawCorridor(ctx, dt = 1 / 60) {
   }
   ctx.restore();
 
-  dungeon.drawOverlay(ctx);
-  input.drawAimLine(ctx);
+  dungeon.drawOverlay(ctx, input, nocked ? { type: nockDef.type, color: nockDef.color } : null);
 }
 
 // ─── Game Loop ────────────────────────────────────────────────
