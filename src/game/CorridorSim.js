@@ -3,6 +3,7 @@ import {
   QuiverDeckManager, getArrowDef, getArrowDamage, getArrowFireDamage, getArrowIceDamage,
   lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
 } from "./QuiverDeckManager.js";
+import { getArrowLook } from "./arrowLook.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js";
 import {
@@ -84,6 +85,26 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
   };
 }
 
+function applyPlayerArrowStats(p, arrow) {
+  const type = arrow?.type || "wood";
+  const level = arrow?.level || 1;
+  const def = getArrowDef(type);
+  const pierceRanks = def.pierce != null ? def.pierce : 0;
+  p.damage = getArrowDamage(type, level);
+  p.fireDamage = getArrowFireDamage(type, level);
+  p.iceDamage = getArrowIceDamage(type, level);
+  p.element = type;
+  p.level = level;
+  p.pierceLeft = 1 + pierceRanks;
+  p.punchArmour = pierceRanks > 0;
+  const look = getArrowLook(type, level);
+  p.look = look;
+  p.shaftColor = look.shaftColor;
+  p.headColor = look.headColor;
+  p.fletchColor = look.fletchColor;
+  p.worldY = NOCK_Y;
+}
+
 const CONTACT_DIST = 30;
 const HALF_CORRIDOR = (CONFIG.CORRIDOR_WIDTH * CONFIG.CELL_SIZE) / 2;
 const FIGHT_LANE = HALF_CORRIDOR * 0.68;
@@ -95,6 +116,9 @@ const TURN_INTO_NEW = 52;
 const COMBAT_HOLD = 280;
 /** First pack sits down-hall so a turn already looks into the wave. */
 const PACK_NEAR = 300;
+/** Tip of a player shaft — nocked pose and launch share this hall offset. */
+const NOCK_ALONG = CONFIG.PLAYER_ARROW_ALONG || 18;
+const NOCK_Y = CONFIG.PLAYER_ARROW_Y || 26;
 
 export class CorridorSim {
   constructor() {
@@ -103,6 +127,7 @@ export class CorridorSim {
     this.autoMagic = new AutoMagicSystem();
     this.enemies = [];
     this.projectiles = [];
+    this.nocked = null;
     this.enemyProjectiles = [];
     this.waveIndex = 0;
     this.waveActive = false;
@@ -184,6 +209,7 @@ export class CorridorSim {
   initRun() {
     this.enemies = [];
     this.projectiles = [];
+    this.nocked = null;
     this.enemyProjectiles = [];
     this.waveIndex = 0;
     this.runTime = 0;
@@ -454,12 +480,14 @@ export class CorridorSim {
     this.waveArrowsFired = (this.waveArrowsFired || 0) + 1;
     this.waveSpentArrows = this.waveSpentArrows || [];
     this.waveSpentArrows.push({ type: arrow.type, level: arrow.level });
-    this.projectiles.push(createProjectile(
-      this.playerWorldX, this.playerWorldZ + 18,
+    const burst = createProjectile(
+      this.playerWorldX, this.playerWorldZ + NOCK_ALONG,
       b.vx, b.vz,
       getArrowDamage(arrow.type, arrow.level), arrow.type, "player",
       b.level || arrow.level
-    ));
+    );
+    burst.worldY = NOCK_Y;
+    this.projectiles.push(burst);
   }
 
   _waveCleared() {
@@ -1713,6 +1741,7 @@ export class CorridorSim {
   _tickProjectiles() {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
+      if (p.nocked) continue;
       p.x += p.vx * this.dt;
       p.worldZ += p.vz * this.dt;
       p.life -= this.dt;
@@ -1998,6 +2027,71 @@ export class CorridorSim {
     return true;
   }
 
+  _aimShot(opts = {}) {
+    const aim = opts.vector || { x: 0, y: -1 };
+    const spd = opts.speed || CONFIG.ARROW_SPEED * 0.7;
+    const maxAim = CONFIG.AIM_MAX || 1.28;
+    let yaw = Number.isFinite(opts.angle)
+      ? opts.angle
+      : Math.atan2(aim.x || 0, Math.max(-(aim.y || 0), 1e-3));
+    yaw = Math.max(-maxAim, Math.min(maxAim, yaw));
+    return { yaw, spd, vx: Math.sin(yaw) * spd, vz: Math.cos(yaw) * spd };
+  }
+
+  _nextReadyArrow() {
+    return (this.quiver.peekQueue()[0]) || (this.quiver.peekQuiver()[0]) || null;
+  }
+
+  clearNocked() {
+    const held = this.nocked;
+    this.nocked = null;
+    if (!held) return;
+    held.nocked = false;
+    held.sightLen = 0;
+    const i = this.projectiles.indexOf(held);
+    if (i >= 0) this.projectiles.splice(i, 1);
+  }
+
+  /**
+   * Hold the live player projectile on the string. Fire releases this object;
+   * it does not spawn a second shaft.
+   */
+  nockArrow(opts = {}) {
+    const pulling = !!opts.pulling;
+    if (!pulling
+      || this.lootPending || this._lootDelayT > 0
+      || this.junctionPending || this.turning || this._forwardCommit
+      || this._approachingJunction || this._approachingElevator
+      || this.state.phase !== "run") {
+      this.clearNocked();
+      return null;
+    }
+    const peek = this._nextReadyArrow();
+    if (!peek) {
+      this.clearNocked();
+      return null;
+    }
+    const { vx, vz } = this._aimShot(opts);
+    const x = this.playerWorldX;
+    const z = this.playerWorldZ + NOCK_ALONG;
+    let p = this.nocked;
+    if (!p || p.element !== peek.type || p.level !== peek.level || !this.projectiles.includes(p)) {
+      this.clearNocked();
+      p = createProjectile(x, z, vx, vz, getArrowDamage(peek.type, peek.level), peek.type, "player", peek.level);
+      this.nocked = p;
+      this.projectiles.push(p);
+    }
+    p.x = x;
+    p.worldZ = z;
+    p.vx = vx;
+    p.vz = vz;
+    p.nocked = true;
+    p.sightLen = 52;
+    p.life = 4;
+    applyPlayerArrowStats(p, peek);
+    return p;
+  }
+
   fireArrow(trajectory) {
     if (this.lootPending || this._lootDelayT > 0) return null;
     if (this.junctionPending || this.turning || this._forwardCommit || this._approachingJunction || this._approachingElevator) return null;
@@ -2009,6 +2103,7 @@ export class CorridorSim {
     const arrow = this.quiver.fireArrow();
     if (!arrow) {
       this.emit("quiver_empty");
+      this.clearNocked();
       return null;
     }
     this.state.arrowsFired++;
@@ -2017,36 +2112,46 @@ export class CorridorSim {
     this.waveSpentArrows.push({ type: arrow.type, level: arrow.level });
     this.state.arrowCooldown = this.state.getArrowCooldown();
 
-    const aim = trajectory && trajectory.vector ? trajectory.vector : { x: 0, y: -1 };
-    const spd = (trajectory && trajectory.speed) || CONFIG.ARROW_SPEED * 0.7;
-    const maxAim = CONFIG.AIM_MAX || 1.28;
-    let yaw = trajectory && Number.isFinite(trajectory.angle)
-      ? trajectory.angle
-      : Math.atan2(aim.x || 0, Math.max(-(aim.y || 0), 1e-3));
-    yaw = Math.max(-maxAim, Math.min(maxAim, yaw));
-    const vx = Math.sin(yaw) * spd;
-    const vz = Math.cos(yaw) * spd;
-
+    const { yaw, spd, vx, vz } = this._aimShot(trajectory || {});
     const dmg = getArrowDamage(arrow.type, arrow.level);
-    const proj = createProjectile(
-      this.playerWorldX, this.playerWorldZ + 18,
-      vx, vz,
-      dmg, arrow.type, "player",
-      arrow.level
-    );
-    this.projectiles.push(proj);
+    let proj = this.nocked;
+    if (proj && this.projectiles.includes(proj)) {
+      this.nocked = null;
+      proj.nocked = false;
+      proj.sightLen = 0;
+      proj.x = this.playerWorldX;
+      proj.worldZ = this.playerWorldZ + NOCK_ALONG;
+      proj.vx = vx;
+      proj.vz = vz;
+      proj.life = 4;
+      proj._hitIds = [];
+      proj._trail = [];
+      applyPlayerArrowStats(proj, arrow);
+    } else {
+      this.clearNocked();
+      proj = createProjectile(
+        this.playerWorldX, this.playerWorldZ + NOCK_ALONG,
+        vx, vz,
+        dmg, arrow.type, "player",
+        arrow.level
+      );
+      applyPlayerArrowStats(proj, arrow);
+      this.projectiles.push(proj);
+    }
     const remaining = this.quiver.quiverCount;
     this.emit("arrow_fire", { arrow, projectile: proj, remaining });
     if (remaining === 0) this.emit("last_arrow", { arrow });
     if (arrow.type === "double") {
       const spread = 0.09;
-      this.projectiles.push(createProjectile(
-        this.playerWorldX, this.playerWorldZ + 18,
+      const twin = createProjectile(
+        this.playerWorldX, this.playerWorldZ + NOCK_ALONG,
         Math.sin(yaw + spread) * spd,
         Math.cos(yaw + spread) * spd,
         Math.max(1, Math.floor(dmg * 0.9)), "wood", "player",
         arrow.level
-      ));
+      );
+      twin.worldY = NOCK_Y;
+      this.projectiles.push(twin);
     }
 
     if (this.state.consumeBurst()) {
@@ -2090,6 +2195,7 @@ export class CorridorSim {
     this.elevatorCheckpointPending = false;
     this._pendingElevatorTarget = null;
     this.enemies = [];
+    this.clearNocked();
     this.projectiles = [];
     this.enemyProjectiles = [];
   }

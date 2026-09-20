@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=170";
+import { DungeonView } from "./engine/DungeonView.js?v=177";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -17,6 +17,7 @@ import {
   refillQuiverEmptySlots,
   syncArmorRating,
 } from "./ui/hub.js";
+import { syncQuiverPile, clearQuiverPile } from "./ui/quiverPile.js";
 // Cache-bust only at the HTML entry (main.js?v=N). Nested imports stay unversioned
 // so each module has one identity — mixed ?v= was splitting CONFIG across the graph.
 
@@ -208,6 +209,7 @@ function syncRunInputLock() {
     input.reset();
     input.paused = true;
     input.choiceMode = false;
+    sim.clearNocked();
   } else if (sim.junctionPending && sim.state.phase === "run") {
     input.choiceMode = true;
   }
@@ -597,6 +599,7 @@ sim.on("wave_start", () => {
 
 sim.on("junction_show", () => {
   input.abortDraw();
+  sim.clearNocked();
   setPathChoice(true);
   syncRunInputLock();
   input.blockUntil = 0;
@@ -810,6 +813,28 @@ $("#btn-hub").addEventListener("click", () => {
   sim.state.enterHub();
 });
 
+function nockScreenPos() {
+  const r = canvas.getBoundingClientRect();
+  const p = sim.nocked;
+  if (p && dungeon.cssW) {
+    const spd = Math.hypot(p.vx || 0, p.vz || 0) || 1;
+    const ux = (p.vx || 0) / spd;
+    const uz = (p.vz || 0) / spd;
+    const behind = 7;
+    const dist = p.dist != null ? p.dist : ((p.worldZ || 0) - (sim.playerWorldZ || 0));
+    const sp = dungeon.project(
+      (p.x || 0) - ux * behind,
+      dist - uz * behind,
+      p.worldY != null ? p.worldY : 26
+    );
+    return {
+      x: r.left + sp.x * (r.width / Math.max(1, dungeon.cssW)),
+      y: r.top + sp.y * (r.height / Math.max(1, dungeon.cssH)),
+    };
+  }
+  return { x: r.left + r.width * 0.5, y: r.top + r.height * 0.78 };
+}
+
 // ─── UI Update ────────────────────────────────────────────────
 function updateUI() {
   if (coinsEl) coinsEl.textContent = sim.state.phase === "run" ? (sim.state.runCoins || 0) : sim.state.coins;
@@ -846,6 +871,7 @@ function updateUI() {
   }
 
   const runQuiver = document.getElementById("run-quiver");
+  const runQuiverFly = document.getElementById("run-quiver-fly");
   const runQuiverCount = document.getElementById("run-quiver-count");
   if (runQuiverCount) {
     runQuiverCount.textContent = sim.state.phase === "run"
@@ -854,22 +880,19 @@ function updateUI() {
   }
   if (runQuiver) {
     if (sim.state.phase === "run") {
-      const queue = (sim.quiver.peekQueue ? sim.quiver.peekQueue() : sim.quiver.peekQuiver()).slice(0, 4);
-      const sig = queue.map((a) => `${a.type}:${a.level || 1}`).join(",") || "empty";
-      if (runQuiver.dataset.sig !== sig) {
-        runQuiver.dataset.sig = sig;
-        runQuiver.innerHTML = queue.map((a, i) => {
-          const def = getArrowDef(a.type);
-          const lv = a.level || 1;
-          return `<div class="run-quiver-card ${i === 0 ? "ready" : ""}" style="--shaft:${def.color};border-color:${def.color}" title="${def.name} Lv${lv}">
-            <svg class="rq-icon" viewBox="0 0 16 22" aria-hidden="true"><polygon points="8,0 15,8 10,8 10,22 6,22 6,8 1,8" fill="currentColor"/></svg>
-            <div class="rq-lv">Lv${lv}</div>
-          </div>`;
-        }).join("") || `<div class="run-quiver-card"><div class="rq-lv">Empty</div></div>`;
-      }
-    } else if (runQuiver.dataset.sig !== "off") {
-      runQuiver.dataset.sig = "off";
-      runQuiver.innerHTML = "";
+      const q = sim.quiver.peekQueue ? sim.quiver.peekQueue() : [];
+      const queue = (q.length ? q : sim.quiver.peekQuiver()).slice(0, 4);
+      const ready = queue[0] || null;
+      const holding = !!(sim.nocked && ready
+        && sim.nocked.element === ready.type
+        && (sim.nocked.level || 1) === (ready.level || 1));
+      syncQuiverPile(runQuiver, runQuiverFly, {
+        arrows: holding ? queue.slice(1) : queue,
+        nock: holding ? ready : null,
+        flyTo: holding ? nockScreenPos() : null,
+      });
+    } else {
+      clearQuiverPile(runQuiver, runQuiverFly);
     }
   }
 
@@ -1018,8 +1041,16 @@ function drawCorridor(ctx, dt = 1 / 60) {
     segmentIndex: sim.segmentIndex || 0,
   });
   dungeon.combatYaw = null;
-  const nocked = sim.quiver?.peekQueue?.()?.[0];
-  const nockDef = getArrowDef(nocked ? nocked.type : "wood");
+  const pulling = !!(input.isDragging && input.power > 2) && !overlayBlocksSim() && !sim.junctionPending;
+  const pwr = input.power || 0;
+  const nockSpd = CONFIG.ARROW_SPEED * (0.4 + 0.6 * Math.min(1, pwr / CONFIG.SLINGSHOT_MAX_POWER));
+  sim.nockArrow({
+    pulling,
+    angle: input.angle,
+    power: pwr,
+    speed: nockSpd,
+    vector: input.vector,
+  });
   const viewDt = (sim.hitStop > 0 || overlayBlocksSim()) ? 0 : dt;
   dungeon.drawHall(ctx, cam.playerWorldZ, t, getJunctionView(cam.playerWorldZ), {
     walking: typeof sim.isWalkingView === "function" ? sim.isWalkingView() : !!sim.movingForward,
@@ -1045,7 +1076,7 @@ function drawCorridor(ctx, dt = 1 / 60) {
     }
     try {
       if (ent.type === "enemy") dungeon.drawEnemy(body);
-      else if (ent.type === "projectile") dungeon.drawProjectile(body);
+      else if (ent.type === "projectile" && !body.nocked) dungeon.drawProjectile(body);
       else if (ent.type === "enemy_projectile") dungeon.drawProjectile(body, true);
     } finally {
       if (body && saved) {
@@ -1056,7 +1087,24 @@ function drawCorridor(ctx, dt = 1 / 60) {
   }
   ctx.restore();
 
-  dungeon.drawOverlay(ctx, input, nocked ? { type: nockDef.type, color: nockDef.color } : null);
+  dungeon.drawOverlay(ctx, input, sim.nocked);
+  if (sim.nocked) {
+    const body = sim.nocked;
+    const saved = { x: body.x, dist: body.dist };
+    const posed = typeof sim.poseForTurnView === "function"
+      ? sim.poseForTurnView(body, cam.playerWorldZ)
+      : null;
+    if (posed) {
+      body.x = posed.x;
+      body.dist = posed.dist;
+    }
+    try {
+      dungeon.drawProjectile(body);
+    } finally {
+      body.x = saved.x;
+      body.dist = saved.dist;
+    }
+  }
 }
 
 // ─── Game Loop ────────────────────────────────────────────────

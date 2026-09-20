@@ -283,6 +283,33 @@ test("wide-lane melee foes funnel in and strike instead of walking past", () => 
   assert.ok(hits > 0, "off-axis foe should close in and attack");
 });
 
+test("nocked arrow is the same projectile that flies on release", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.quiver.addToQuiver({ type: "wood", level: 1 });
+  sim.nockArrow({ pulling: true, angle: 0.4, speed: 400 });
+  const held = sim.nocked;
+  assert.ok(held, "nocked projectile exists");
+  assert.equal(held.nocked, true);
+  assert.equal(sim.projectiles.includes(held), true);
+  const x0 = held.x;
+  const z0 = held.worldZ;
+  sim.dt = 0.05;
+  sim._tickProjectiles();
+  assert.equal(held.x, x0);
+  assert.equal(held.worldZ, z0);
+  const shot = sim.fireArrow({ angle: 0.4, speed: 400 });
+  assert.ok(shot);
+  assert.equal(sim.nocked, null);
+  assert.equal(held.nocked, false);
+  assert.equal(sim.projectiles[0], held);
+  assert.ok(Math.abs(held.vx - Math.sin(0.4) * 400) < 1e-6);
+  assert.ok(Math.abs(held.vz - Math.cos(0.4) * 400) < 1e-6);
+  assert.equal(held.worldY, 26);
+  assert.ok(held.look);
+  assert.equal(held.look.head, "point");
+});
+
 test("firing during arrow cooldown emits not-ready feedback", () => {
   const sim = new CorridorSim();
   sim.state.startRun();

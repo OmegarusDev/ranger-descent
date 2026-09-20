@@ -2,42 +2,92 @@
  * Hand-drawn shop / pack glyphs — gold-ink SVGs instead of emoji.
  */
 import { consumableIconSvg, getConsumable } from "../data/consumables.js";
+import { getArrowLook } from "../game/arrowLook.js";
 
 const STROKE = "#c9a227";
 const INK = "#2c1a0c";
 
-function svg(inner) {
-  return `<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${inner}</svg>`;
+function svg(inner, className = "") {
+  const cls = className ? ` class="${className}"` : "";
+  return `<svg viewBox="0 0 24 24" width="24" height="24"${cls} aria-hidden="true">${inner}</svg>`;
 }
 
-function arrowIcon(type, color = "#c4a574") {
-  const c = color || "#c4a574";
-  const fletch = `<path d="M9 20 L12 17 L15 20" fill="none" stroke="${c}" stroke-width="1.3"/>`;
-  const shaft = `<rect x="11.15" y="7.5" width="1.7" height="11.2" fill="${c}"/>`;
-  const heads = {
-    wood: `<path d="M12 3 L16 8 H8 Z" fill="${c}" stroke="${STROKE}" stroke-width="0.7"/>`,
-    flint: `<path d="M12 2.8 L16.2 8.2 L12 7 L7.8 8.2 Z" fill="#8a8478" stroke="${STROKE}" stroke-width="0.7"/>`,
-    iron: `<path d="M12 2.6 L15.6 7.4 H8.4 Z" fill="#9aa0a8" stroke="${STROKE}" stroke-width="0.8"/>`,
-    steel: `<path d="M12 2.4 L16 7.6 H8 Z" fill="#c8d0d8" stroke="${STROKE}" stroke-width="0.8"/>`,
-    fire: `<path d="M12 2.8 C14.8 6 16 8 12 8 C8 8 9.2 6 12 2.8 Z" fill="#e07a3a" stroke="${STROKE}" stroke-width="0.7"/><path d="M12 4.2 C13.2 6 13.6 7.2 12 7.2 C10.4 7.2 10.8 6 12 4.2 Z" fill="#f3ead4"/>`,
-    ice: `<path d="M12 3 L14.8 7.6 L12 6.4 L9.2 7.6 Z" fill="#c8e8f0" stroke="#7eb8c9" stroke-width="0.8"/><path d="M12 3 V8.2 M9.4 5.2 H14.6" stroke="#7eb8c9" stroke-width="0.8"/>`,
-    piercing: `<path d="M12 2.2 L14.2 8 H9.8 Z" fill="#e8d5a0" stroke="${STROKE}" stroke-width="0.7"/>`,
-    double: `<path d="M8.2 3.2 L11 8 H7 Z" fill="${c}" stroke="${STROKE}" stroke-width="0.7"/><path d="M15.8 3.2 L17 8 H13 Z" fill="${c}" stroke="${STROKE}" stroke-width="0.7"/>`,
-    stun: `<circle cx="12" cy="6.2" r="3.4" fill="#c9b070" stroke="${STROKE}" stroke-width="0.9"/>`,
-    poison: `<path d="M12 3 L15.4 8 H8.6 Z" fill="#6a3a78" stroke="${STROKE}" stroke-width="0.7"/><circle cx="12" cy="6.2" r="1.2" fill="#9a6bb8"/>`,
-    oil: `<circle cx="12" cy="6.4" r="3.2" fill="#5a4018" stroke="${STROKE}" stroke-width="0.8"/><path d="M12 4.2 Q13.6 6.4 12 8" fill="#8a7040"/>`,
-    silver: `<path d="M12 2.6 L13.6 6.2 L17.2 6.4 L14.4 8.8 L15.2 12.2 L12 10.2 L8.8 12.2 L9.6 8.8 L6.8 6.4 L10.4 6.2 Z" fill="#e8eef4" stroke="${STROKE}" stroke-width="0.6"/>`,
-    barbed: `<path d="M12 2.8 L15.8 8.2 L12 7 L8.2 8.2 Z" fill="#a85848" stroke="${STROKE}" stroke-width="0.7"/><path d="M8.6 8.4 L7.2 10.6 M15.4 8.4 L16.8 10.6" stroke="#a85848" stroke-width="1.1"/>`,
-    shock: `<path d="M13.4 2.6 L9.2 9.2 H12.2 L10.6 14.2 L16.2 7.2 H13.2 Z" fill="#7ec8e0" stroke="${STROKE}" stroke-width="0.7"/>`,
-  };
-  const head = heads[type] || heads.wood;
-  if (type === "double") {
-    return svg(`<rect x="8.2" y="8" width="1.5" height="10" fill="${c}"/><rect x="14.3" y="8" width="1.5" height="10" fill="${c}"/>${head}<path d="M6.6 20 L8.9 17.2 L11.2 20" fill="none" stroke="${c}" stroke-width="1.1"/><path d="M12.8 20 L15.1 17.2 L17.4 20" fill="none" stroke="${c}" stroke-width="1.1"/>`);
+function elementBg(look) {
+  if (look.element === "flame") {
+    return `<ellipse cx="12" cy="13" rx="8" ry="9" fill="#e07a3a" opacity="0.28"/>`;
   }
-  if (type === "shock") {
-    return svg(`${heads.shock}${fletch}`);
+  if (look.element === "ice") {
+    return `<ellipse cx="12" cy="13" rx="8" ry="9" fill="#7eb8c9" opacity="0.3"/>`;
   }
-  return svg(`${head}${shaft}${fletch}`);
+  if (look.element === "poison") {
+    return `<ellipse cx="12" cy="13" rx="8" ry="9" fill="#9a6bb8" opacity="0.28"/>`;
+  }
+  if (look.element === "oil") {
+    return `<ellipse cx="12" cy="13" rx="8" ry="9" fill="#5a4018" opacity="0.35"/>`;
+  }
+  if (look.element === "shock") {
+    return `<ellipse cx="12" cy="13" rx="8" ry="9" fill="#f0e878" opacity="0.22"/>`;
+  }
+  return "";
+}
+
+function headMarkup(look) {
+  const h = look.headColor;
+  if (look.head === "flint") {
+    return `<path d="M12 2.8 L16.2 8.2 L12 7 L7.8 8.2 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/>`;
+  }
+  if (look.head === "bodkin") {
+    return `<path d="M12 2.2 L14.2 8 H9.8 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/>`;
+  }
+  if (look.head === "ice") {
+    return `<path d="M12 3 L14.8 7.6 L12 6.4 L9.2 7.6 Z" fill="${h}" stroke="#7eb8c9" stroke-width="0.8"/><path d="M12 3 V8.2 M9.4 5.2 H14.6" stroke="#7eb8c9" stroke-width="0.8"/>`;
+  }
+  if (look.head === "flame") {
+    return `<path d="M12 2.8 C14.8 6 16 8 12 8 C8 8 9.2 6 12 2.8 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/><path d="M12 4.2 C13.2 6 13.6 7.2 12 7.2 C10.4 7.2 10.8 6 12 4.2 Z" fill="#f3ead4"/>`;
+  }
+  if (look.head === "blunt") {
+    return `<circle cx="12" cy="6.2" r="3.4" fill="${h}" stroke="${STROKE}" stroke-width="0.9"/>`;
+  }
+  if (look.head === "star") {
+    return `<path d="M12 2.6 L13.6 6.2 L17.2 6.4 L14.4 8.8 L15.2 12.2 L12 10.2 L8.8 12.2 L9.6 8.8 L6.8 6.4 L10.4 6.2 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.6"/>`;
+  }
+  if (look.head === "barbed") {
+    return `<path d="M12 2.8 L15.8 8.2 L12 7 L8.2 8.2 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/><path d="M8.6 8.4 L7.2 10.6 M15.4 8.4 L16.8 10.6" stroke="${h}" stroke-width="1.1"/>`;
+  }
+  if (look.head === "bolt") {
+    return `<path d="M13.4 2.6 L9.2 9.2 H12.2 L10.6 14.2 L16.2 7.2 H13.2 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/>`;
+  }
+  if (look.element === "poison") {
+    return `<path d="M12 3 L15.4 8 H8.6 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/><circle cx="12" cy="6.2" r="1.2" fill="#9a6bb8"/>`;
+  }
+  return `<path d="M12 3 L16 8 H8 Z" fill="${h}" stroke="${STROKE}" stroke-width="0.7"/>`;
+}
+
+function shaftMarkup(look) {
+  const s = look.shaftColor;
+  const f = look.fletchColor;
+  if (look.shafts > 1) {
+    return `<rect x="8.2" y="8" width="1.5" height="10" fill="${s}"/><rect x="14.3" y="8" width="1.5" height="10" fill="${s}"/><path d="M6.6 20 L8.9 17.2 L11.2 20" fill="none" stroke="${f}" stroke-width="1.1"/><path d="M12.8 20 L15.1 17.2 L17.4 20" fill="none" stroke="${f}" stroke-width="1.1"/><path d="M8.2 3.2 L11 8 H7 Z" fill="${look.headColor}" stroke="${STROKE}" stroke-width="0.7"/><path d="M15.8 3.2 L17 8 H13 Z" fill="${look.headColor}" stroke="${STROKE}" stroke-width="0.7"/>`;
+  }
+  if (look.head === "bolt") {
+    return `<path d="M9 20 L12 17 L15 20" fill="none" stroke="${f}" stroke-width="1.3"/>`;
+  }
+  return `<rect x="11.15" y="7.5" width="1.7" height="11.2" fill="${s}"/><path d="M9 20 L12 17 L15 20" fill="none" stroke="${f}" stroke-width="1.3"/>`;
+}
+
+function qualityEdge(look) {
+  if (look.quality < 4) return "";
+  const op = look.quality >= 5 ? "0.7" : "0.4";
+  return `<rect x="1.2" y="1.2" width="21.6" height="21.6" fill="none" stroke="#e8c56a" stroke-width="0.7" opacity="${op}"/>`;
+}
+
+function arrowIcon(type, _color = "#c4a574", level = 1) {
+  const look = getArrowLook(type, level);
+  const layers = [elementBg(look)];
+  if (look.shafts > 1) layers.push(shaftMarkup(look));
+  else layers.push(shaftMarkup(look), headMarkup(look));
+  layers.push(qualityEdge(look));
+  return svg(layers.join(""), "rq-icon");
 }
 
 const ICONS = {
@@ -94,7 +144,7 @@ export function itemIconSvg(item) {
   }
   const type = item.type || item.element;
   if (item.section === "arrows" || item.slot === "ammo" || (type && item.color)) {
-    return arrowIcon(type, item.color);
+    return arrowIcon(type, item.color, item.level || 1);
   }
   if (item.kind === "bag_upgrade" || (item.id && String(item.id).startsWith("bag_slot"))) return ICONS.bag;
   if (item.kind === "pouch_upgrade" || (item.id && String(item.id).startsWith("pouch_slot"))) return ICONS.pouch;
@@ -110,6 +160,6 @@ export function itemIconSvg(item) {
   return ICONS.unknown;
 }
 
-export function arrowIconSvg(type, color) {
-  return arrowIcon(type, color);
+export function arrowIconSvg(type, color, level = 1) {
+  return arrowIcon(type, color, level);
 }

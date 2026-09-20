@@ -35,6 +35,10 @@ export const CONFIG = {
   ARROW_COOLDOWN_MULTIPLIER: 1.5,
   /** Radians off hall-forward. Shared by the nocked shot and the projectile. */
   AIM_MAX: 1.28,
+  /** Hall-forward offset of the player shaft tip — nocked pose and launch. */
+  PLAYER_ARROW_ALONG: 18,
+  /** World Y of the player shaft. Same height while nocked and in flight. */
+  PLAYER_ARROW_Y: 26,
 
   // Quiver
   QUEUE_SIZE: 4,

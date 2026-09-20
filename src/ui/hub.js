@@ -747,7 +747,7 @@ function populatePack(state) {
     if (a) {
       const def = getArrowDef(a.type);
       cells.push(`<button type="button" class="pack-cell pack-cell-arrow" data-q="${i}" style="border-color:${def.color}">
-        <span class="pack-cell-icon">${arrowIconSvg(a.type, def.color)}</span>
+        <span class="pack-cell-icon">${arrowIconSvg(a.type, def.color, a.level)}</span>
         <span class="pack-cell-sub">Lv${a.level}</span>
       </button>`);
     } else {
@@ -821,7 +821,7 @@ function populatePack(state) {
       if (c.kind === "arrow") {
         const def = getArrowDef(c.arrow.type);
         return `<button type="button" class="pack-cell pack-cell-arrow" data-chest-a="${c.i}" style="border-color:${def.color}">
-          <span class="pack-cell-icon">${arrowIconSvg(c.arrow.type, def.color)}</span>
+          <span class="pack-cell-icon">${arrowIconSvg(c.arrow.type, def.color, c.arrow.level)}</span>
           <span class="pack-cell-sub">Lv${c.arrow.level}</span>
         </button>`;
       }

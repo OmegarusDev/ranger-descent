@@ -1863,7 +1863,17 @@ button.shop-buy {
 #phase-run > * { pointer-events: none !important; }
 #phase-run .run-pause-btn,
 #phase-run .run-bag-btn,
-#phase-run .run-pouch-slot {
+#phase-run .run-pouch-slot,
+#phase-run #path-choice,
+#phase-run #path-choice *,
+#phase-run #run-bag,
+#phase-run #run-bag *,
+#phase-run #run-pause,
+#phase-run #run-pause *,
+#phase-run #run-elevator-checkpoint,
+#phase-run #run-elevator-checkpoint *,
+#phase-run #phase-death,
+#phase-run #phase-death * {
   pointer-events: auto !important;
 }
 
@@ -2337,6 +2347,7 @@ button.shop-buy {
   gap: 4px;
   z-index: 2;
   max-width: min(260px, 64vw);
+  overflow: visible;
 }
 .run-bag-btn {
   pointer-events: auto !important;
@@ -2451,6 +2462,8 @@ html.using-keyboard .run-pouch-num { display: block; }
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 #1a1008;
+  position: relative;
+  z-index: 3;
 }
 
 /* Wave loot report */
@@ -2648,21 +2661,28 @@ html.using-keyboard .run-pouch-num { display: block; }
 .run-bag-confirm .btn-row { display: flex; gap: 8px; }
 .run-bag-confirm button { flex: 1; min-height: 40px; padding: 8px; font-size: 0.8em; }
 .run-quiver {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: flex-start;
-  align-items: stretch;
-  padding: 0;
-  min-height: 0;
-  min-width: 0;
+  position: relative;
+  width: 54px;
+  min-height: 56px;
+  pointer-events: none;
+}
+.run-quiver-fly {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
 }
 .run-quiver-card {
-  min-width: 44px;
-  width: 46px;
-  padding: 6px 4px 5px;
-  background: #241610;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  min-width: 52px;
+  width: 52px;
+  height: 56px;
+  padding: 4px 4px 3px;
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.58) 0%, transparent 42%),
+    #241610;
   border: 2px solid #c9a227;
   border-radius: 0;
   color: #f3ead4;
@@ -2672,18 +2692,65 @@ html.using-keyboard .run-pouch-num { display: block; }
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 2px;
+  box-shadow:
+    0 -10px 14px rgba(0, 0, 0, 0.55),
+    0 -2px 0 rgba(12, 8, 4, 0.75);
+  will-change: transform, opacity;
+}
+.run-quiver-card.rq-el-flame {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(224, 112, 48, 0.42), #241610 72%);
+}
+.run-quiver-card.rq-el-ice {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(126, 184, 201, 0.38), #241610 72%);
+}
+.run-quiver-card.rq-el-poison {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(154, 107, 184, 0.4), #241610 72%);
+}
+.run-quiver-card.rq-el-oil {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(90, 64, 24, 0.5), #241610 72%);
+}
+.run-quiver-card.rq-el-shock {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(240, 232, 120, 0.32), #241610 72%);
+}
+.run-quiver-card.rq-q4,
+.run-quiver-card.rq-q5 {
+  box-shadow:
+    0 -10px 14px rgba(0, 0, 0, 0.55),
+    0 -2px 0 rgba(12, 8, 4, 0.75),
+    0 0 10px rgba(232, 197, 106, 0.35);
 }
 .run-quiver-card.ready {
   border-color: #e8c56a !important;
   border-width: 3px;
-  box-shadow: 0 0 0 2px rgba(232, 197, 106, 0.85), 0 0 12px rgba(232, 197, 106, 0.45);
-  transform: none;
-  background: #3a2418;
+  box-shadow:
+    0 -10px 14px rgba(0, 0, 0, 0.5),
+    0 0 0 2px rgba(232, 197, 106, 0.85),
+    0 0 12px rgba(232, 197, 106, 0.45);
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.35) 0%, transparent 40%),
+    #3a2418;
 }
-.run-quiver-card .rq-icon {
-  width: 14px;
-  height: 20px;
+.run-quiver-card.ready.rq-el-flame {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.35) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, rgba(224, 112, 48, 0.42), #3a2418 72%);
+}
+.run-quiver-card .rq-icon,
+.run-quiver-card svg {
+  width: 28px;
+  height: 28px;
   color: var(--shaft, #c4a574);
   display: block;
   filter: drop-shadow(0 1px 0 #1a1208);
@@ -2693,6 +2760,21 @@ html.using-keyboard .run-pouch-num { display: block; }
   font-size: 0.62em;
   letter-spacing: 0.04em;
   margin-top: 0;
+}
+.run-quiver-card-fly {
+  position: fixed !important;
+  pointer-events: none;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+}
+.run-quiver-empty {
+  opacity: 0.45;
+  box-shadow: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-quiver-card,
+  .run-quiver-card-fly {
+    transition: none !important;
+  }
 }
 
 .hp-row {
@@ -2955,6 +3037,15 @@ button.pack-enter:active,
   flex: 0 0 auto;
   align-self: center;
   font-weight: 700;
+  background: #a87840;
+  box-shadow:
+    inset 0 0 0 1px rgba(20, 10, 4, 0.45),
+    0 6px 14px rgba(0, 0, 0, 0.35);
+}
+.death-card #btn-hub:hover,
+.death-card #btn-hub:active {
+  background: #a87840;
+  filter: none;
 }
 #phase-death #btn-hub,
 #phase-death #btn-hub span {

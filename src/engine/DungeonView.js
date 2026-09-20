@@ -3,6 +3,7 @@
  * Combat sprites and path overlay sit on top of the column renderer.
  */
 import { CONFIG } from "../data/config.js";
+import { getArrowLook } from "../game/arrowLook.js";
 import { paintRaycast, updateRayBasis, rayOccluded } from "./raycaster.js";
 import { SPRITES, blitSprite } from "./pixelSprites.js?v=140";
 
@@ -724,6 +725,7 @@ export class DungeonView {
     ctx.fillStyle = "#100c08";
     ctx.fillRect(0, 0, this.cssW, this.cssH);
     paintRaycast(this, ctx);
+    this._paintTorchPools(ctx);
     this._paintDecor(ctx);
     this._paintTorches(ctx);
     this._drawScreenCobwebs(ctx);
@@ -1067,24 +1069,42 @@ export class DungeonView {
     }
   }
 
+  _hallPoint(hall, along, lateral) {
+    if (hall.axis === "z") return { x: hall.c + lateral, z: along };
+    return { x: along, z: hall.c + lateral };
+  }
+
+  /** Same stations as raycaster wall lights: every TORCH_EVERY along each hall. */
+  _torchStations() {
+    const out = [];
+    let n = 0;
+    for (const hall of this._worldHalls || []) {
+      for (let s = hall.a + TORCH_EVERY * 0.5; s < hall.b - 20; s += TORCH_EVERY) {
+        const inset = this.half - 6;
+        const lo = this._hallPoint(hall, s, -inset);
+        const hi = this._hallPoint(hall, s, inset);
+        out.push({ x: lo.x, z: lo.z, n: n++, along: s });
+        out.push({ x: hi.x, z: hi.z, n: n++, along: s });
+      }
+    }
+    return out;
+  }
+
   _paintTorchPools(ctx) {
     ctx.save();
-    for (const slot of this._torchSlots(24, FAR - 60)) {
-      const z = slot.dist;
+    for (const slot of this._torchStations()) {
+      const p = this.projectWorld(slot.x, slot.z, 0);
+      if (p.behind || p.dist < 18 || p.dist > FAR - 40) continue;
       const flicker = 0.7 + Math.sin(this.time * 6.2 + slot.n * 1.7) * 0.18;
-      for (const side of [-1, 1]) {
-        const p = this.project(side * (this.half * 0.72), z, 0);
-        if (p.behind) continue;
-        const r = Math.max(10, 46 * p.s);
-        const g = ctx.createRadialGradient(p.x, p.floorY, 0, p.x, p.floorY, r);
-        g.addColorStop(0, `rgba(255, 150, 50, ${0.2 * flicker})`);
-        g.addColorStop(0.45, `rgba(200, 90, 30, ${0.08 * flicker})`);
-        g.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.ellipse(p.x, p.floorY, r, r * 0.32, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const r = Math.max(10, 46 * p.s);
+      const g = ctx.createRadialGradient(p.x, p.floorY, 0, p.x, p.floorY, r);
+      g.addColorStop(0, `rgba(255, 150, 50, ${0.2 * flicker})`);
+      g.addColorStop(0.45, `rgba(200, 90, 30, ${0.08 * flicker})`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.floorY, r, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.restore();
   }
@@ -1099,50 +1119,73 @@ export class DungeonView {
   }
 
   _paintDecor(ctx) {
-    const z0 = this.playerZ;
-    for (let k = 0; k < 14; k++) {
-      const worldZ = Math.floor(z0 / 58) * 58 + k * 58 + 28;
-      const dist = worldZ - z0;
-      if (dist < 28 || dist > 400) continue;
-      const h = this._hash(Math.floor(worldZ / 11));
-      const side = h > 0.5 ? 1 : -1;
-      const kind = (h * 11) | 0;
-      if (kind % 4 === 0) this._drawBarrel(ctx, side, dist, h);
-      else if (kind % 4 === 1) this._drawCrate(ctx, side, dist, h);
-      else if (kind % 4 === 2) this._drawUrn(ctx, side, dist);
+    const items = [];
+    for (const hall of this._worldHalls || []) {
+      const start = Math.ceil((hall.a + 36) / 58) * 58;
+      for (let along = start; along < hall.b - 28; along += 58) {
+        const h = this._hash(((along / 11) | 0) + ((hall.c / 7) | 0) * 13 + (hall.axis === "z" ? 1 : 4));
+        if (hall.branch && h < 0.38) continue;
+        const side = h > 0.5 ? 1 : -1;
+        const kind = (h * 11) | 0;
+        const inset = kind % 4 === 1 ? 20 : kind % 4 === 2 ? 16 : 18;
+        const pt = this._hallPoint(hall, along, side * (this.half - inset));
+        items.push({ kind: "floor", x: pt.x, z: pt.z, h, variant: kind % 4, side });
+      }
+      const web0 = Math.ceil((hall.a + 50) / 140) * 140;
+      for (let along = web0; along < hall.b - 40; along += 140) {
+        const h = this._hash(((along / 19) | 0) + 3 + ((hall.c / 9) | 0));
+        const side = h > 0.5 ? 1 : -1;
+        const pt = this._hallPoint(hall, along, side * this.half);
+        items.push({ kind: "web", x: pt.x, z: pt.z, h, side });
+      }
+      const chain0 = Math.ceil((hall.a + 90) / 200) * 200;
+      for (let along = chain0; along < hall.b - 50; along += 200) {
+        const h = this._hash(((along / 17) | 0) + 4 + ((hall.c / 5) | 0));
+        const side = h > 0.5 ? 1 : -1;
+        const pt = this._hallPoint(hall, along, side * this.half * 0.35);
+        items.push({ kind: "chain", x: pt.x, z: pt.z, h, side });
+      }
     }
-    for (let k = 0; k < 8; k++) {
-      const worldZ = Math.floor(z0 / 140) * 140 + k * 140 + 50;
-      const dist = worldZ - z0;
-      if (dist < 40 || dist > 320) continue;
-      const h = this._hash(Math.floor(worldZ / 19) + 3);
-      this._drawCobweb(ctx, h > 0.5 ? 1 : -1, dist, h);
+    items.sort((a, b) => {
+      const da = (a.x - this.camX) ** 2 + (a.z - this.camZ) ** 2;
+      const db = (b.x - this.camX) ** 2 + (b.z - this.camZ) ** 2;
+      return db - da;
+    });
+    for (const it of items) {
+      if (it.kind === "floor") {
+        if (it.variant === 0) this._drawBarrel(ctx, it.x, it.z, it.h, it.side);
+        else if (it.variant === 1) this._drawCrate(ctx, it.x, it.z, it.h);
+        else if (it.variant === 2) this._drawUrn(ctx, it.x, it.z);
+      } else if (it.kind === "web") {
+        this._drawCobweb(ctx, it.x, it.z, it.side);
+      } else {
+        this._drawChains(ctx, it.x, it.z);
+      }
     }
-    this._drawChains(ctx);
   }
 
-  _drawBarrel(ctx, side, dist, h) {
-    const p = this.project(side * (this.half - 18), dist, 0);
-    if (p.behind || p.occluded) return;
+  _drawBarrel(ctx, wx, wz, h, side) {
+    const p = this.projectWorld(wx, wz, 0);
+    if (p.behind || p.occluded || p.dist < 22 || p.dist > 400) return;
     blitSprite(ctx, h > 0.7 ? SPRITES.barrelB : SPRITES.barrelA, p.x, p.floorY, 16 * p.s, {
-      alpha: 1 - this._fogK(dist) * 0.7,
+      alpha: 1 - this._fogK(p.dist) * 0.7,
       flip: side < 0,
     });
   }
 
-  _drawCrate(ctx, side, dist, h) {
-    const p = this.project(side * (this.half - 20), dist, 0);
-    if (p.behind || p.occluded) return;
+  _drawCrate(ctx, wx, wz, h) {
+    const p = this.projectWorld(wx, wz, 0);
+    if (p.behind || p.occluded || p.dist < 22 || p.dist > 400) return;
     blitSprite(ctx, h > 0.6 ? SPRITES.crateB : SPRITES.crateA, p.x, p.floorY, 12 * p.s, {
-      alpha: 1 - this._fogK(dist) * 0.7,
+      alpha: 1 - this._fogK(p.dist) * 0.7,
     });
   }
 
-  _drawUrn(ctx, side, dist) {
-    const p = this.project(side * (this.half - 16), dist, 0);
-    if (p.behind || p.occluded) return;
+  _drawUrn(ctx, wx, wz) {
+    const p = this.projectWorld(wx, wz, 0);
+    if (p.behind || p.occluded || p.dist < 22 || p.dist > 400) return;
     blitSprite(ctx, SPRITES.urn, p.x, p.floorY, 14 * p.s, {
-      alpha: 1 - this._fogK(dist) * 0.7,
+      alpha: 1 - this._fogK(p.dist) * 0.7,
     });
   }
 
@@ -1152,44 +1195,35 @@ export class DungeonView {
     blitSprite(ctx, SPRITES.cobweb, this.cssW - s * 0.5, 0, s, { alpha: 0.5, flip: true, anchor: "top" });
   }
 
-  _drawCobweb(ctx, side, dist, h) {
-    const corner = this.project(side * this.half, dist, this.ceilH - 2);
-    if (corner.behind || corner.occluded) return;
+  _drawCobweb(ctx, wx, wz, side) {
+    const corner = this.projectWorld(wx, wz, this.ceilH - 2);
+    if (corner.behind || corner.occluded || corner.dist < 36 || corner.dist > 320) return;
     const size = Math.max(10, 22 * corner.s);
     blitSprite(ctx, SPRITES.cobweb, corner.x, corner.y, size, {
-      alpha: 0.5 * (1 - this._fogK(dist)),
+      alpha: 0.5 * (1 - this._fogK(corner.dist)),
       flip: side > 0,
       anchor: "top",
     });
   }
 
-  _drawChains(ctx) {
-    for (let k = 0; k < 5; k++) {
-      const worldZ = Math.floor(this.playerZ / 200) * 200 + k * 200 + 90;
-      const dist = worldZ - this.playerZ;
-      if (dist < 50 || dist > 280) continue;
-      const side = this._hash(k + 4) > 0.5 ? 1 : -1;
-      const top = this.project(side * this.half * 0.35, dist, this.ceilH - 2);
-      if (top.behind || top.occluded) continue;
-      blitSprite(ctx, SPRITES.chain, top.x, top.y, 22 * top.s, {
-        alpha: 0.7 * (1 - this._fogK(dist)),
-        anchor: "top",
-      });
-    }
+  _drawChains(ctx, wx, wz) {
+    const top = this.projectWorld(wx, wz, this.ceilH - 2);
+    if (top.behind || top.occluded || top.dist < 40 || top.dist > 280) return;
+    blitSprite(ctx, SPRITES.chain, top.x, top.y, 22 * top.s, {
+      alpha: 0.7 * (1 - this._fogK(top.dist)),
+      anchor: "top",
+    });
   }
 
   _paintTorches(ctx) {
-    for (const slot of this._torchSlots(36, FAR - 50)) {
-      const z = slot.dist;
-      for (const side of [-1, 1]) {
-        const p = this.project(side * (this.half - 6), z, 36);
-        if (p.behind) continue;
-        const frame = Math.sin(this.time * 6.2 + slot.n * 1.7 + side) > 0 ? SPRITES.torch1 : SPRITES.torch0;
-        blitSprite(ctx, frame, p.x, p.y + 10 * p.s, 18 * p.s, {
-          alpha: 1 - this._fogK(z) * 0.55,
-          flip: side > 0,
-        });
-      }
+    for (const slot of this._torchStations()) {
+      const p = this.projectWorld(slot.x, slot.z, 36);
+      if (p.behind || p.dist < 22 || p.dist > FAR - 40) continue;
+      const frame = Math.sin(this.time * 6.2 + slot.n * 1.7) > 0 ? SPRITES.torch1 : SPRITES.torch0;
+      blitSprite(ctx, frame, p.x, p.y, 18 * p.s, {
+        alpha: 1 - this._fogK(p.dist) * 0.55,
+        flip: p.x > this.cx,
+      });
     }
   }
 
@@ -1527,11 +1561,27 @@ export class DungeonView {
     const speed = Math.hypot(p.vx || 0, p.vz || 0) || 1;
     const ux = (p.vx || 0) / speed;
     const uz = (p.vz || 0) / speed;
+    const look = p.look || getArrowLook(p.element, p.level || 1);
+    const shafts = (p.nocked && look.shafts > 1) ? 2 : 1;
+    const spread = look.spread || 0;
+    const yaw = Math.atan2(ux, uz);
+    for (let i = 0; i < shafts; i++) {
+      const a = yaw + (i === 0 ? 0 : spread);
+      this._drawPlayerShaft(p, look, Math.sin(a), Math.cos(a), dist, py, i === 0, ux, uz);
+    }
+  }
+
+  _drawPlayerShaft(p, look, ux, uz, dist, py, primary, nockUx = ux, nockUz = uz) {
+    const ctx = this.ctx;
     const shaft = p.shaftLen != null ? p.shaftLen : 16;
-    const tip = this.project(p.x, dist, py);
+    const tailX = p.x - nockUx * shaft;
+    const tailDist = dist - nockUz * shaft;
+    const tipX = primary ? p.x : tailX + ux * shaft;
+    const tipDist = primary ? dist : tailDist + uz * shaft;
+    const tip = this.project(tipX, tipDist, py);
     if (tip.behind) return;
     if (tip.occluded && !p.nocked) return;
-    const tail = this.project(p.x - ux * shaft, dist - uz * shaft, py);
+    const tail = this.project(tailX, tailDist, py);
     const dx = tip.x - tail.x;
     const dy = tip.y - tail.y;
     const slen = Math.hypot(dx, dy) || 1;
@@ -1540,13 +1590,22 @@ export class DungeonView {
     const px = -ny;
     const pyx = nx;
     const head = p.nocked
-      ? Math.max(7, Math.min(16, 4.8 + tip.s * 0.12))
+      ? Math.max(8, Math.min(18, 5.4 + tip.s * 0.14))
       : Math.max(5.5, Math.min(11, 7.2 * Math.max(0.55, tip.s * 0.07)));
     const fletch = p.nocked
       ? Math.max(6, Math.min(18, 3.2 + tail.s * 0.1))
       : Math.max(3.2, head * 0.55);
     ctx.save();
-    ctx.strokeStyle = p.shaftColor || "#e8d8b0";
+    if (look.glow && (p.nocked || primary)) {
+      const g = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, head * 2.4);
+      g.addColorStop(0, look.glow);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, head * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = p.shaftColor || look.shaftColor || "#e8d8b0";
     ctx.lineWidth = p.nocked
       ? Math.max(3.2, 0.22 * (tail.s + tip.s))
       : Math.max(1.6, 2.4 * tip.s * 0.08);
@@ -1555,51 +1614,143 @@ export class DungeonView {
     ctx.moveTo(tail.x, tail.y);
     ctx.lineTo(tip.x, tip.y);
     ctx.stroke();
-    ctx.fillStyle = p.headColor || "#c9a227";
-    ctx.beginPath();
-    ctx.moveTo(tip.x + nx * 1.2, tip.y + ny * 1.2);
-    ctx.lineTo(tip.x - nx * head + px * (head * 0.42), tip.y - ny * head + pyx * (head * 0.42));
-    ctx.lineTo(tip.x - nx * head - px * (head * 0.42), tip.y - ny * head - pyx * (head * 0.42));
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = p.fletchColor || "#8a4a28";
+    this._drawArrowHead(ctx, look, tip.x, tip.y, nx, ny, px, pyx, head, p.headColor || look.headColor);
+    ctx.strokeStyle = p.fletchColor || look.fletchColor || "#8a4a28";
     ctx.lineWidth = p.nocked ? Math.max(1.6, tail.s * 0.06) : 1.2;
     ctx.beginPath();
     ctx.moveTo(tail.x + px * fletch, tail.y + pyx * fletch);
     ctx.lineTo(tail.x + nx * 1.4, tail.y + ny * 1.4);
     ctx.lineTo(tail.x - px * fletch, tail.y - pyx * fletch);
     ctx.stroke();
-    if (p.nocked && p.sightLen > 0) {
-      const look = this.project(p.x + ux * p.sightLen, dist + uz * p.sightLen, py);
-      if (!look.behind) {
+    if (primary && p.nocked && p.sightLen > 0) {
+      const lookPt = this.project(p.x + ux * p.sightLen, dist + uz * p.sightLen, py);
+      if (!lookPt.behind) {
         ctx.strokeStyle = "rgba(232, 197, 106, 0.42)";
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 8]);
         ctx.beginPath();
         ctx.moveTo(tip.x, tip.y);
-        ctx.lineTo(look.x, look.y);
+        ctx.lineTo(lookPt.x, lookPt.y);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = "rgba(232, 197, 106, 0.7)";
-        ctx.fillRect(look.x - 1, look.y - 1, 2, 2);
+        ctx.fillRect(lookPt.x - 1, lookPt.y - 1, 2, 2);
       }
     }
-    const trail = p._trail || [];
-    for (let i = 0; i < trail.length; i++) {
-      const t = trail[i];
-      const td = t.dist != null ? t.dist : t.worldZ - this.playerZ;
-      if (td < 8) continue;
-      const tp = this.project(t.x, td, py);
-      ctx.globalAlpha = ((i + 1) / trail.length) * 0.28;
-      ctx.fillStyle = "#e8d8b0";
-      ctx.fillRect(tp.x, tp.y, 2, 2);
+    if (primary) {
+      const trail = p._trail || [];
+      for (let i = 0; i < trail.length; i++) {
+        const t = trail[i];
+        const td = t.dist != null ? t.dist : t.worldZ - this.playerZ;
+        if (td < 8) continue;
+        const tp = this.project(t.x, td, py);
+        ctx.globalAlpha = ((i + 1) / trail.length) * 0.28;
+        ctx.fillStyle = p.shaftColor || "#e8d8b0";
+        ctx.fillRect(tp.x, tp.y, 2, 2);
+      }
     }
     ctx.restore();
   }
 
-  drawOverlay(ctx, input, nocked) {
+  _drawArrowHead(ctx, look, tx, ty, nx, ny, px, pyx, head, color) {
+    ctx.fillStyle = color || "#c9a227";
+    const shape = look.head || "point";
+    if (shape === "blunt") {
+      ctx.beginPath();
+      ctx.arc(tx - nx * head * 0.2, ty - ny * head * 0.2, head * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
+    if (shape === "bolt") {
+      ctx.beginPath();
+      ctx.moveTo(tx + nx * 1.4, ty + ny * 1.4);
+      ctx.lineTo(tx - nx * head * 0.35 + px * head * 0.55, ty - ny * head * 0.35 + pyx * head * 0.55);
+      ctx.lineTo(tx - nx * head * 0.15, ty - ny * head * 0.15);
+      ctx.lineTo(tx - nx * head * 1.15 - px * head * 0.2, ty - ny * head * 1.15 - pyx * head * 0.2);
+      ctx.lineTo(tx - nx * head * 0.55 + px * head * 0.15, ty - ny * head * 0.55 + pyx * head * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
+    if (shape === "star") {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const r = i % 2 === 0 ? head * 0.85 : head * 0.38;
+        const ox = nx * Math.cos((i * Math.PI) / 4) * r + px * Math.sin((i * Math.PI) / 4) * r;
+        const oy = ny * Math.cos((i * Math.PI) / 4) * r + pyx * Math.sin((i * Math.PI) / 4) * r;
+        if (i === 0) ctx.moveTo(tx + ox, ty + oy);
+        else ctx.lineTo(tx + ox, ty + oy);
+      }
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
+    if (shape === "flame") {
+      ctx.beginPath();
+      ctx.moveTo(tx + nx * 1.3, ty + ny * 1.3);
+      ctx.quadraticCurveTo(
+        tx - nx * head * 0.2 + px * head * 0.7,
+        ty - ny * head * 0.2 + pyx * head * 0.7,
+        tx - nx * head, ty - ny * head
+      );
+      ctx.quadraticCurveTo(
+        tx - nx * head * 0.2 - px * head * 0.7,
+        ty - ny * head * 0.2 - pyx * head * 0.7,
+        tx + nx * 1.3, ty + ny * 1.3
+      );
+      ctx.fill();
+      ctx.fillStyle = "#f3ead4";
+      ctx.beginPath();
+      ctx.moveTo(tx + nx * 0.2, ty + ny * 0.2);
+      ctx.quadraticCurveTo(
+        tx - nx * head * 0.15 + px * head * 0.28,
+        ty - ny * head * 0.15 + pyx * head * 0.28,
+        tx - nx * head * 0.45, ty - ny * head * 0.45
+      );
+      ctx.quadraticCurveTo(
+        tx - nx * head * 0.15 - px * head * 0.28,
+        ty - ny * head * 0.15 - pyx * head * 0.28,
+        tx + nx * 0.2, ty + ny * 0.2
+      );
+      ctx.fill();
+      return;
+    }
+    const long = shape === "bodkin" || shape === "ice" ? 1.28 : 1;
+    const wide = shape === "bodkin" ? 0.22 : shape === "flint" ? 0.5 : 0.42;
+    ctx.beginPath();
+    ctx.moveTo(tx + nx * 1.2, ty + ny * 1.2);
+    ctx.lineTo(tx - nx * head * long + px * (head * wide), ty - ny * head * long + pyx * (head * wide));
+    if (shape === "flint") {
+      ctx.lineTo(tx - nx * head * 0.55, ty - ny * head * 0.55);
+    }
+    ctx.lineTo(tx - nx * head * long - px * (head * wide), ty - ny * head * long - pyx * (head * wide));
+    ctx.closePath();
+    ctx.fill();
+    if (shape === "barbed") {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1.4, head * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(tx - nx * head * 0.55 + px * head * wide, ty - ny * head * 0.55 + pyx * head * wide);
+      ctx.lineTo(tx - nx * head * 1.05 + px * head * 0.78, ty - ny * head * 1.05 + pyx * head * 0.78);
+      ctx.moveTo(tx - nx * head * 0.55 - px * head * wide, ty - ny * head * 0.55 - pyx * head * wide);
+      ctx.lineTo(tx - nx * head * 1.05 - px * head * 0.78, ty - ny * head * 1.05 - pyx * head * 0.78);
+      ctx.stroke();
+    }
+    if (shape === "ice") {
+      ctx.strokeStyle = "#7eb8c9";
+      ctx.lineWidth = Math.max(1, head * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(tx + nx * 0.4, ty + ny * 0.4);
+      ctx.lineTo(tx - nx * head * 0.7, ty - ny * head * 0.7);
+      ctx.moveTo(tx + px * head * 0.28, ty + pyx * head * 0.28);
+      ctx.lineTo(tx - px * head * 0.28, ty - pyx * head * 0.28);
+      ctx.stroke();
+    }
+  }
+
+  drawOverlay(ctx, input, nockedProj) {
     this._drawPathOverlay(ctx);
-    this._drawBowOverlay(ctx, input, nocked);
+    this._drawBowOverlay(ctx, input, nockedProj);
   }
 
   _drawPathOverlay(ctx) {
@@ -1735,7 +1886,7 @@ export class DungeonView {
     ctx.fill();
   }
 
-  _drawBowOverlay(ctx, input, nocked) {
+  _drawBowOverlay(ctx, input, nockedProj) {
     if (this.junction && this.junction.pending) {
       this._bowRise = 0;
       return;
@@ -1764,47 +1915,61 @@ export class DungeonView {
     if (pulling) posePull = pull;
     else if (this._bowHoldUntil && now < this._bowHoldUntil) posePull = 0.9;
     const rise = this._bowRise;
-    const nockY = 12 - (1 - rise) * 26;
-    const nockDist = 18;
-    this._drawBow3D(ctx, nockDist, nockY, yaw, posePull);
-    const showArrow = pulling && nocked && nocked.type;
-    if (showArrow) this._drawNockedShot(nocked, yaw, nockDist, nockY, posePull);
+    const holdY = CONFIG.PLAYER_ARROW_Y || 26;
+    const tipAlong = CONFIG.PLAYER_ARROW_ALONG || 18;
+    const behind = 7;
+    let nockX = 0;
+    let nockDist = tipAlong - behind;
+    let nockY = holdY - (1 - rise) * 26;
+    let ux = 0;
+    let uz = 1;
+    if (nockedProj && nockedProj.dist != null) {
+      const spd = Math.hypot(nockedProj.vx || 0, nockedProj.vz || 0) || 1;
+      ux = (nockedProj.vx || 0) / spd;
+      uz = (nockedProj.vz || 0) / spd;
+      nockX = (nockedProj.x || 0) - ux * behind;
+      nockDist = nockedProj.dist - uz * behind;
+      nockY = nockedProj.worldY != null ? nockedProj.worldY : nockY;
+      if (nockDist < 9) {
+        const push = 9 - nockDist;
+        nockX += ux * push;
+        nockDist = 9;
+      }
+    }
+    this._drawBow3D(ctx, nockX, nockDist, nockY, posePull, ux, uz);
   }
 
   /**
-   * Corridor-local: x = lateral, dist = hall-forward. Yaw 0 is the shot down the hall.
-   * Left of the arrow is −cos(yaw) in x, +sin(yaw) in dist.
+   * Held facing the shot: string at the nock (toward us), stave ahead along
+   * the arrow. `out` is only left-hand offset; the D is depth × height.
    */
-  _bowWorld(nockDist, nockY, yaw, left, yOff, fwd) {
-    const c = Math.cos(yaw);
-    const s = Math.sin(yaw);
+  _bowWorld(nockX, nockDist, nockY, out, up, fwd, ux, uz) {
     return this.project(
-      -left * c + fwd * s,
-      nockDist + left * s + fwd * c,
-      nockY + yOff
+      nockX - out + ux * fwd,
+      nockDist + uz * fwd,
+      nockY + up
     );
   }
 
   _bowLimbLocal(s, pull) {
     const t = Math.abs(s);
-    const up = s >= 0;
-    const len = up ? 22 : 13;
-    const belly = (up ? 5.8 : 3.6) * 4 * t * (1 - t);
-    const flex = (up ? 5 : 3) * pull * t * t;
-    return {
-      left: 4.4 + belly - flex * 0.85,
-      y: (up ? 1 : -1) * (len * t - flex * 0.35),
-      fwd: 0.4 + 2.2 * pull * t * t,
-    };
+    const sign = s >= 0 ? 1 : -1;
+    const len = s >= 0 ? 14.2 : 7.6;
+    const out = 1.9;
+    const gripFwd = 1.1 + pull * 4.2;
+    const belly = 3.05 * Math.sin(Math.PI * t);
+    const tipFwd = 0.18 + (1 - pull) * 1.95;
+    const fwd = gripFwd * (1 - t) + tipFwd * t + belly * (0.35 + 0.65 * pull);
+    return { out, up: sign * len * t, fwd };
   }
 
-  _drawBow3D(ctx, nockDist, nockY, yaw, pull) {
+  _drawBow3D(ctx, nockX, nockDist, nockY, pull, ux = 0, uz = 1) {
     const pts = [];
     const n = 28;
     for (let i = 0; i <= n; i++) {
       const s = i / n * 2 - 1;
       const loc = this._bowLimbLocal(s, pull);
-      const p = this._bowWorld(nockDist, nockY, yaw, loc.left, loc.y, loc.fwd);
+      const p = this._bowWorld(nockX, nockDist, nockY, loc.out, loc.up, loc.fwd, ux, uz);
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
       pts.push({ p, s, loc });
     }
@@ -1820,7 +1985,7 @@ export class DungeonView {
       const dx = nxt.p.x - cur.p.x;
       const dy = nxt.p.y - cur.p.y;
       const sl = Math.hypot(dx, dy) || 1;
-      const thick = (Math.abs(cur.s) < 0.12 ? 5.4 : 3.6 - Math.abs(cur.s) * 1.4) * Math.max(0.08, cur.p.s * 0.055);
+      const thick = (Math.abs(cur.s) < 0.12 ? 7.6 : 5.0 - Math.abs(cur.s) * 1.6) * Math.max(0.08, cur.p.s * 0.055);
       const nx = -dy / sl * thick;
       const ny = dx / sl * thick;
       if (i === 0) ctx.moveTo(cur.p.x + nx, cur.p.y + ny);
@@ -1833,7 +1998,7 @@ export class DungeonView {
       const dx = nxt.p.x - cur.p.x;
       const dy = nxt.p.y - cur.p.y;
       const sl = Math.hypot(dx, dy) || 1;
-      const thick = (Math.abs(cur.s) < 0.12 ? 5.4 : 3.6 - Math.abs(cur.s) * 1.4) * Math.max(0.08, cur.p.s * 0.055);
+      const thick = (Math.abs(cur.s) < 0.12 ? 7.6 : 5.0 - Math.abs(cur.s) * 1.6) * Math.max(0.08, cur.p.s * 0.055);
       const nx = -dy / sl * thick;
       const ny = dx / sl * thick;
       ctx.lineTo(cur.p.x - nx, cur.p.y - ny);
@@ -1866,11 +2031,11 @@ export class DungeonView {
 
     const tipU = this._bowLimbLocal(1, pull);
     const tipL = this._bowLimbLocal(-1, pull);
-    const pU = this._bowWorld(nockDist, nockY, yaw, tipU.left, tipU.y, tipU.fwd);
-    const pL = this._bowWorld(nockDist, nockY, yaw, tipL.left, tipL.y, tipL.fwd);
-    const pN = this._bowWorld(nockDist, nockY, yaw, 0.6, 0, 0.2);
-    ctx.strokeStyle = "rgba(200, 184, 140, 0.85)";
-    ctx.lineWidth = Math.max(1.2, pN.s * 0.04);
+    const pU = this._bowWorld(nockX, nockDist, nockY, tipU.out, tipU.up, tipU.fwd, ux, uz);
+    const pL = this._bowWorld(nockX, nockDist, nockY, tipL.out, tipL.up, tipL.fwd, ux, uz);
+    const pN = this._bowWorld(nockX, nockDist, nockY, 0, 0, 0, ux, uz);
+    ctx.strokeStyle = "rgba(200, 184, 140, 0.88)";
+    ctx.lineWidth = Math.max(1.8, pN.s * 0.055);
     ctx.beginPath();
     ctx.moveTo(pU.x, pU.y);
     ctx.lineTo(pN.x, pN.y);
@@ -1881,42 +2046,5 @@ export class DungeonView {
     ctx.fillRect(pL.x - 1.5, pL.y - 1.5, 3, 3);
     ctx.fillRect(pN.x - 2, pN.y - 2, 4, 4);
     ctx.restore();
-  }
-
-  _drawNockedShot(nocked, yaw, nockDist, nockY, pull) {
-    const type = nocked.type;
-    const len = 54 + pull * 22;
-    const paint = (extra) => {
-      const a = yaw + extra;
-      const ux = Math.sin(a);
-      const uz = Math.cos(a);
-      const ghost = {
-        x: ux * len,
-        dist: nockDist + uz * len,
-        vx: ux,
-        vz: uz,
-        shaftLen: len,
-        nocked: true,
-        sightLen: extra === 0 ? 52 : 0,
-        worldY: nockY,
-        shaftColor: "#e8d8b0",
-        headColor: nocked.color || "#c9a227",
-        fletchColor: "#8a4a28",
-      };
-      if (type === "fire") {
-        ghost.headColor = "#e07030";
-        ghost.fletchColor = "#ffb45a";
-      } else if (type === "ice") {
-        ghost.headColor = "#d8f0ff";
-        ghost.fletchColor = "#6aa0c8";
-      } else if (type === "poison") {
-        ghost.headColor = "#c070e0";
-      } else if (type === "shock") {
-        ghost.headColor = "#f0e878";
-      }
-      this.drawProjectile(ghost);
-    };
-    paint(0);
-    if (type === "double") paint(0.09);
   }
 }
