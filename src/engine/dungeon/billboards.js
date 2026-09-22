@@ -178,12 +178,33 @@ export function drawProjectile(view, p, enemy = false) {
   const speed = Math.hypot(p.vx || 0, p.vz || 0) || 1;
   const ux = (p.vx || 0) / speed;
   const uz = (p.vz || 0) / speed;
-  const look = p.look || getArrowLook(p.element, p.level || 1);
-  const shafts = (p.nocked && look.shafts > 1) ? 2 : 1;
-  const spread = look.spread || 0;
+  const look = p.look || getArrowLook(p.arrowType || p.element, p.level || 1);
+  const count = p.nocked ? (look.shafts || 1) : 1;
   const yaw = Math.atan2(ux, uz);
-  for (let i = 0; i < shafts; i++) {
-    const a = yaw + (i === 0 ? 0 : spread);
+  if (count <= 1) {
+    drawShaft(view, p, look, ux, uz, py, true, ux, uz);
+    return;
+  }
+  const burst = look.flight === "double-burst" || look.flight === "triple-burst";
+  if (burst) {
+    const side = 5;
+    const offs = count === 3 ? [-side, 0, side] : [-side * 0.65, side * 0.65];
+    const px = -uz;
+    const pz = ux;
+    for (let i = 0; i < offs.length; i++) {
+      const ghost = {
+        ...p,
+        x: (p.x || 0) + px * offs[i],
+        dist: (p.dist || 0) + pz * offs[i],
+      };
+      drawShaft(view, ghost, look, ux, uz, py, i === 0, ux, uz);
+    }
+    return;
+  }
+  const spread = look.spread || 0.09;
+  const offs = count === 3 ? [-spread, 0, spread] : [-spread, spread];
+  for (let i = 0; i < offs.length; i++) {
+    const a = yaw + offs[i];
     drawShaft(view, p, look, Math.sin(a), Math.cos(a), py, i === 0, ux, uz);
   }
 }
@@ -198,7 +219,7 @@ function shifted(p, ux, uz, len) {
 
 function drawShaft(view, p, look, ux, uz, py, primary, nockUx, nockUz) {
   const ctx = view.ctx;
-  const shaft = p.shaftLen != null ? p.shaftLen : 16;
+  const shaft = p.shaftLen != null ? p.shaftLen : (look.shape === "sharpened" ? 16 : 8);
   const tip = projectBody(view, primary ? p : shifted(shifted(p, nockUx, nockUz, shaft), -ux, -uz, shaft), py);
   if (tip.behind) return;
   if (tip.occluded && !p.nocked) return;
@@ -212,9 +233,8 @@ function drawShaft(view, p, look, ux, uz, py, primary, nockUx, nockUz) {
   const px = -ny;
   const pyx = nx;
   const head = p.nocked
-    ? Math.max(8, Math.min(18, 5.4 + tip.s * 0.14))
-    : Math.max(5.5, Math.min(11, 7.2 * Math.max(0.55, tip.s * 0.07)));
-  const fletch = p.nocked ? Math.max(6, Math.min(18, 3.2 + tail.s * 0.1)) : Math.max(3.2, head * 0.55);
+    ? Math.max(14, Math.min(28, 9 + tip.s * 0.18))
+    : Math.max(9, Math.min(18, 12 * Math.max(0.55, tip.s * 0.08)));
   ctx.save();
   if (look.glow && (p.nocked || primary)) {
     const g = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, head * 2.4);
@@ -225,21 +245,36 @@ function drawShaft(view, p, look, ux, uz, py, primary, nockUx, nockUz) {
     ctx.arc(tip.x, tip.y, head * 2.4, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.strokeStyle = p.shaftColor || look.shaftColor || "#e8d8b0";
-  ctx.lineWidth = p.nocked ? Math.max(3.2, 0.22 * (tail.s + tip.s)) : Math.max(1.6, 2.4 * tip.s * 0.08);
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(tail.x, tail.y);
-  ctx.lineTo(tip.x, tip.y);
-  ctx.stroke();
-  drawArrowHead(ctx, look, tip.x, tip.y, nx, ny, px, pyx, head, p.headColor || look.headColor);
-  ctx.strokeStyle = p.fletchColor || look.fletchColor || "#8a4a28";
-  ctx.lineWidth = p.nocked ? Math.max(1.6, tail.s * 0.06) : 1.2;
-  ctx.beginPath();
-  ctx.moveTo(tail.x + px * fletch, tail.y + pyx * fletch);
-  ctx.lineTo(tail.x + nx * 1.4, tail.y + ny * 1.4);
-  ctx.lineTo(tail.x - px * fletch, tail.y - pyx * fletch);
-  ctx.stroke();
+  if (look.shape === "sharpened") {
+    const bw = p.nocked ? Math.max(2.4, tail.s * 0.045) : Math.max(1.5, tip.s * 0.055);
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(tail.x + px * bw, tail.y + pyx * bw);
+    ctx.lineTo(tail.x - px * bw, tail.y - pyx * bw);
+    ctx.closePath();
+    ctx.fillStyle = p.headColor || look.fill || "#c4a070";
+    ctx.fill();
+    ctx.strokeStyle = look.outline || look.edgeColor || "#3a2414";
+    ctx.lineWidth = p.nocked ? 1.6 : 1.1;
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = "#3a2818";
+    ctx.lineWidth = p.nocked ? Math.max(2.2, 0.12 * (tail.s + tip.s)) : Math.max(1.2, 1.6 * tip.s * 0.06);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.lineTo(tip.x - nx * head * 0.45, tip.y - ny * head * 0.45);
+    ctx.stroke();
+    drawArrowHead(ctx, look, tip.x, tip.y, nx, ny, px, pyx, head, p.headColor || look.headColor);
+    const vane = Math.max(2.2, head * 0.22);
+    ctx.strokeStyle = p.fletchColor || look.fletchColor || "#8a4a28";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(tail.x + px * vane, tail.y + pyx * vane);
+    ctx.lineTo(tail.x, tail.y);
+    ctx.lineTo(tail.x - px * vane, tail.y - pyx * vane);
+    ctx.stroke();
+  }
   if (primary && p.nocked && p.sightLen > 0) {
     const lookBody = {
       x: (p.x || 0) + ux * p.sightLen,
@@ -262,20 +297,28 @@ function drawShaft(view, p, look, ux, uz, py, primary, nockUx, nockUz) {
 }
 
 function drawArrowHead(ctx, look, tx, ty, nx, ny, px, pyx, head, color) {
+  const shape = look.shape || look.head || "point";
   ctx.fillStyle = color || "#c9a227";
-  const shape = look.head || "point";
-  if (shape === "blunt") {
+  ctx.strokeStyle = look.outline || look.edgeColor || "#2a2018";
+  ctx.lineWidth = Math.max(1, head * 0.08);
+  ctx.lineJoin = "round";
+  const poly = (pts) => {
     ctx.beginPath();
-    ctx.arc(tx - nx * head * 0.2, ty - ny * head * 0.2, head * 0.48, 0, Math.PI * 2);
+    for (let i = 0; i < pts.length; i++) {
+      const x = tx + nx * pts[i][0] * head + px * pts[i][1] * head;
+      const y = ty + ny * pts[i][0] * head + pyx * pts[i][1] * head;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
     ctx.fill();
-    return;
-  }
-  const long = shape === "bodkin" || shape === "ice" ? 1.28 : 1;
-  const wide = shape === "bodkin" ? 0.22 : shape === "flint" ? 0.5 : 0.42;
-  ctx.beginPath();
-  ctx.moveTo(tx + nx * 1.2, ty + ny * 1.2);
-  ctx.lineTo(tx - nx * head * long + px * (head * wide), ty - ny * head * long + pyx * (head * wide));
-  ctx.lineTo(tx - nx * head * long - px * (head * wide), ty - ny * head * long - pyx * (head * wide));
-  ctx.closePath();
-  ctx.fill();
+    ctx.stroke();
+  };
+  if (shape === "bodkin") poly([[0, 0], [-1.2, 0.14], [-1.0, 0], [-1.2, -0.14]]);
+  else if (shape === "broadhead") poly([[0, 0], [-0.15, 0.68], [-0.5, 0.3], [-1.02, 0], [-0.5, -0.3], [-0.15, -0.68]]);
+  else if (shape === "barbed") {
+    poly([[0, 0], [-0.18, 0.46], [-0.5, 0.16], [-0.82, 0], [-0.5, -0.16], [-0.18, -0.46]]);
+    poly([[-0.28, 0.3], [-0.05, 0.62], [-0.62, 0.16]]);
+    poly([[-0.28, -0.3], [-0.05, -0.62], [-0.62, -0.16]]);
+  } else poly([[0, 0], [-0.9, 0.4], [-0.5, 0], [-0.9, -0.4]]);
 }

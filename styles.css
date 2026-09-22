@@ -2724,23 +2724,24 @@ html.using-keyboard .run-pouch-num { display: block; }
     linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
     radial-gradient(ellipse at 50% 85%, rgba(240, 232, 120, 0.32), #241610 72%);
 }
-.run-quiver-card.rq-q4,
-.run-quiver-card.rq-q5 {
-  box-shadow:
-    0 -10px 14px rgba(0, 0, 0, 0.55),
-    0 -2px 0 rgba(12, 8, 4, 0.75),
-    0 0 10px rgba(232, 197, 106, 0.35);
+.run-quiver-card.rq-rusty { border-color: #6b4424; border-style: dashed; }
+.run-quiver-card.rq-shoddy { border-color: #8a6244; border-width: 3px; }
+.run-quiver-card.rq-basic { border-color: #6a645c; }
+.run-quiver-card.rq-fine { border-color: #d5dde6; }
+.run-quiver-card.rq-quality { border-color: #c9a227; }
+.run-quiver-card.rq-epic { border-color: #6a4a8a; }
+.run-quiver-card.rq-legendary { border-color: #f3ead4; }
+.run-quiver-card.rq-el {
+  background:
+    linear-gradient(180deg, rgba(8, 5, 3, 0.55) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 85%, var(--el, transparent), #241610 72%);
 }
 .run-quiver-card.ready {
-  border-color: #e8c56a !important;
   border-width: 3px;
   box-shadow:
     0 -10px 14px rgba(0, 0, 0, 0.5),
     0 0 0 2px rgba(232, 197, 106, 0.85),
     0 0 12px rgba(232, 197, 106, 0.45);
-  background:
-    linear-gradient(180deg, rgba(8, 5, 3, 0.35) 0%, transparent 40%),
-    #3a2418;
 }
 .run-quiver-card.ready.rq-el-flame {
   background:

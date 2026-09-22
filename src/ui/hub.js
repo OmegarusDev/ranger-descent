@@ -1428,7 +1428,7 @@ export function populateHub() {
           if (!state.ownedItems) state.ownedItems = [];
           if (item.section === "arrows") {
             const arrow = {
-              type: item.element || item.type || "wood",
+              type: item.type || item.element || "wood",
               level: item.level || 1,
             };
             sim.quiver.addToStorage(arrow);

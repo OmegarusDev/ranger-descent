@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Arrow card preview</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #100c08;
+      color: #e8dcc4;
+      font-family: "Iowan Old Style", Palatino, "Palatino Linotype", serif;
+    }
+    header { padding: 28px 32px 8px; max-width: 920px; }
+    h1 { font-weight: 500; font-size: 22px; letter-spacing: 0.04em; margin: 0 0 8px; }
+    p { margin: 0; max-width: 68ch; color: #b7a78c; font-size: 15px; line-height: 1.45; }
+    main {
+      display: grid;
+      grid-template-columns: repeat(4, 168px);
+      gap: 22px 18px;
+      padding: 28px 32px 48px;
+    }
+    figure { margin: 0; }
+    .card {
+      width: 168px;
+      height: 168px;
+      background:
+        radial-gradient(ellipse at 50% 100%, rgba(70, 42, 16, 0.28), transparent 62%),
+        linear-gradient(180deg, #e7d09a 0%, #cda86e 48%, #b68a48 100%);
+      display: grid;
+      place-items: center;
+    }
+    .card svg { width: 168px; height: 168px; display: block; }
+    figcaption { margin-top: 8px; font-size: 13px; line-height: 1.3; color: #e8dcc4; }
+    figcaption small { display: block; color: #8d7d66; font-size: 11px; letter-spacing: 0.03em; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Arrow cards</h1>
+    <p>Head shape is the tip. Fill is the metal. The outline is the element. Burst shafts stack, with the middle one on top. Spreads sit on a clear arc. The border is the quality. Wood is only a shaft, sharpened at the end.</p>
+  </header>
+  <main id="board"></main>
+  <script type="module">
+    import { arrowIconSvg } from "../src/ui/itemIcons.js?v=11";
+    import { parseArrow } from "../src/game/arrowCraft.js";
+
+    const samples = [
+      "basic.single.none.wood.point",
+      "basic.single.none.wood.broadhead",
+      "basic.single.none.wood.bodkin",
+      "basic.single.none.wood.barbed",
+      "basic.single.none.iron.point",
+      "basic.single.none.steel.bodkin",
+      "basic.single.none.bronze.broadhead",
+      "basic.single.none.silver.barbed",
+      "rusty.single.flame.iron.broadhead",
+      "shoddy.single.poison.bronze.point",
+      "fine.triple-burst.ice.obsidian.point",
+      "epic.double-spread.lightning.steel.bodkin",
+      "quality.single.enchanted.elven.broadhead",
+      "legendary.single.holy.silver.barbed",
+      "basic.double-burst.none.iron.broadhead",
+      "epic.triple-spread.flame.elven.point",
+    ];
+
+    const board = document.getElementById("board");
+    for (const id of samples) {
+      const spec = parseArrow(id);
+      const fig = document.createElement("figure");
+      const bits = [spec.quality, spec.flight, spec.element, spec.material, spec.head];
+      fig.innerHTML = `<div class="card">${arrowIconSvg(id)}</div><figcaption>${spec.name}<small>${bits.join(" · ")}</small></figcaption>`;
+      board.appendChild(fig);
+    }
+  </script>
+</body>
+</html>

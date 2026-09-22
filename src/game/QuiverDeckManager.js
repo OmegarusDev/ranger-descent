@@ -5,6 +5,7 @@
  * Arrow economy: specials start ~₡10. Ammo buys are the delve backbone.
  */
 import { CONFIG } from "../data/config.js";
+import { arrowDef, parseArrow, rollCraftedArrow } from "./arrowCraft.js";
 
 /**
  * Early-game focused catalog. `tier` gates hub shop rolls.
@@ -99,7 +100,15 @@ const ALIASES = { normal: "wood", kinetic: "wood", frost: "ice", twin: "double" 
 /** Normalize persisted or legacy arrow types at the domain boundary. */
 export function normalizeArrowType(type) {
   const key = ALIASES[type] || type;
-  return ARROW_DEFS[key] ? key : "wood";
+  if (ARROW_DEFS[key]) return key;
+  if (typeof key === "string") {
+    const parts = key.split(".");
+    if (parts.length === 5) {
+      const spec = parseArrow(key);
+      if (spec.id === key) return spec.id;
+    }
+  }
+  return "wood";
 }
 
 export function normalizeArrowLevel(level = 1) {
@@ -108,26 +117,21 @@ export function normalizeArrowLevel(level = 1) {
   return Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, Math.floor(n)));
 }
 
-export function getArrowDef(type) {
-  return ARROW_DEFS[normalizeArrowType(type)];
+export function getArrowDef(type, level = 1) {
+  return arrowDef(type, level);
 }
 
 /** Physical damage only (elemental is applied separately on hit). */
 export function getArrowDamage(type, level = 1) {
-  const def = getArrowDef(type);
-  return (def.damage || 1) + Math.max(0, normalizeArrowLevel(level) - 1);
+  return getArrowDef(type, level).damage;
 }
 
 export function getArrowFireDamage(type, level = 1) {
-  const def = getArrowDef(type);
-  if (!def.fireDamage) return 0;
-  return def.fireDamage + Math.max(0, normalizeArrowLevel(level) - 1);
+  return getArrowDef(type, level).fireDamage || 0;
 }
 
 export function getArrowIceDamage(type, level = 1) {
-  const def = getArrowDef(type);
-  if (!def.iceDamage) return 0;
-  return def.iceDamage + Math.floor(Math.max(0, normalizeArrowLevel(level) - 1) * 0.5);
+  return getArrowDef(type, level).iceDamage || 0;
 }
 
 export function arrowShort(type) {
@@ -136,26 +140,25 @@ export function arrowShort(type) {
 
 /** One display summary for shop cards, inspection, and future arrow previews. */
 export function getArrowStats(type, level = 1) {
-  const def = getArrowDef(type);
-  const lv = normalizeArrowLevel(level);
-  const stats = [`${getArrowDamage(def.type, lv)} phys`];
-  const fire = getArrowFireDamage(def.type, lv);
-  const ice = getArrowIceDamage(def.type, lv);
-  if (fire) stats.push(`${fire} fire`);
-  if (ice) stats.push(`${ice} frost`);
-  if (def.type === "double") stats.push("wood follow-up");
-  if (def.pierce) stats.push(`pierce ${def.pierce} / punch armour`);
-  if (def.hardTip) stats.push("vs armour");
-  if (def.stun) stats.push("stun");
-  if (def.poison) stats.push("poison");
-  if (def.burn) stats.push("burn");
-  if (def.slow) stats.push("chill");
-  if (def.bleed) stats.push("bleed");
-  if (def.vsUndead) stats.push(`+${Math.round((def.vsUndead - 1) * 100)}% undead`);
-  if (def.vsEnergy) stats.push("vs energy");
-  if (def.type === "oil") stats.push("oil coat");
-  if (lv > 1) stats.push(`Lv${lv}`);
+  const def = getArrowDef(type, level);
+  const stats = [`${trimNum(def.damage)} phys`];
+  if (def.fireDamage) stats.push(`${trimNum(def.fireDamage)} fire`, "burn");
+  if (def.iceDamage) stats.push(`${trimNum(def.iceDamage)} frost`, "chill");
+  if (def.element === "poison") stats.push("poison");
+  if (def.element === "lightning") stats.push("shock");
+  if (def.element === "holy") stats.push("holy");
+  if (def.element === "enchanted") stats.push("arcane");
+  if (def.head === "barbed") stats.push("bleed");
+  if (def.head === "bodkin") stats.push("armor pen");
+  if (def.material === "silver") stats.push("vs undead");
+  if (def.flight !== "single") stats.push(def.flight);
+  if (def.quality && def.quality !== "basic") stats.push(def.quality);
   return stats.join(" · ");
+}
+
+function trimNum(n) {
+  const v = Math.round((n || 0) * 10) / 10;
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
 /** Meta progress for hub shop quality (visits + elevators unlocked). */
@@ -211,21 +214,22 @@ export function arrowShopCost(baseCost, level = 1) {
 }
 
 export function toShopArrow(def, level = 1) {
-  const lv = Math.max(1, Math.min(CONFIG.ARROW_MAX_LEVEL, level | 0));
+  const crafted = getArrowDef(def.type || def, level);
   return {
-    id: lv <= 1 ? `${def.type}_arrows` : `${def.type}_arrows_lv${lv}`,
-    name: lv <= 1 ? def.name : `${def.name} Lv${lv}`,
+    id: crafted.type,
+    name: crafted.name,
     slot: "ammo",
-    cost: arrowShopCost(def.cost, lv),
-    desc: def.desc,
-    stats: getArrowStats(def.type, lv),
-    icon: def.icon || "➤",
+    cost: arrowShopCost(crafted.cost, level),
+    desc: crafted.desc,
+    stats: getArrowStats(def.type || def, level),
+    icon: "➤",
+    short: crafted.short,
     section: "arrows",
-    element: def.type,
-    type: def.type,
-    level: lv,
-    color: def.color,
-    tier: def.tier || 1,
+    element: crafted.type,
+    type: crafted.type,
+    level: normalizeArrowLevel(level),
+    color: crafted.color,
+    tier: crafted.tier || 1,
   };
 }
 
@@ -237,35 +241,43 @@ export function getShopArrowCatalog(maxTier = 99) {
 
 /** Weighted early pool — specials and cheap shafts show up often. Levels rise with progress. */
 export function rollShopArrows(n = 3, rand = Math.random, hubVisits = 0, elevUnlocked = 0) {
-  const maxTier = hubVisits < 2 ? 1 : hubVisits < 7 ? 2 : 3;
-  const catalog = Object.values(ARROW_DEFS).filter((d) => d.shop && (d.tier || 1) <= maxTier);
-  const weighted = [];
-  for (const d of catalog) {
-    const w = d.tier === 1 ? (d.cost <= 10 ? 3 : 2) : 1;
-    for (let i = 0; i < w; i++) weighted.push(d);
-  }
-  for (let i = weighted.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    const t = weighted[i];
-    weighted[i] = weighted[j];
-    weighted[j] = t;
-  }
   const score = shopProgressScore(hubVisits, elevUnlocked);
-  const cap = arrowLevelCapForProgress(score, { shop: true });
+  const maxTier = score < 2 ? 3 : score < 8 ? 5 : 7;
+  const maxGrade = score < 2 ? 3 : score < 8 ? 5 : 6;
   const picked = [];
   const seen = new Set();
-  for (const d of weighted) {
-    if (seen.has(d.type)) continue;
-    seen.add(d.type);
-    const level = rollArrowLevel(rand, cap, { favorHigh: true });
-    picked.push(toShopArrow(d, level));
-    if (picked.length >= n) break;
+  for (let guard = 0; guard < 40 && picked.length < n; guard++) {
+    const spec = rollCraftedArrow(rand, { maxTier, maxGrade });
+    if (seen.has(spec.id) || spec.id === "basic.single.none.wood.point") continue;
+    seen.add(spec.id);
+    const def = arrowDef(spec.id);
+    picked.push({
+      id: spec.id,
+      name: spec.name,
+      slot: "ammo",
+      cost: def.cost,
+      desc: spec.name,
+      stats: getArrowStats(spec.id),
+      icon: "➤",
+      short: def.short,
+      section: "arrows",
+      element: spec.id,
+      type: spec.id,
+      level: 1,
+      color: spec.materialDef.color,
+      tier: spec.materialDef.tier,
+    });
   }
   return picked;
 }
 
 export function isWoodType(type) {
-  return normalizeArrowType(type) === "wood";
+  const spec = parseArrow(type);
+  return spec.material === "wood"
+    && spec.element === "none"
+    && spec.head === "point"
+    && spec.flight === "single"
+    && spec.quality === "basic";
 }
 
 export function createArrow(type, level = 1) {

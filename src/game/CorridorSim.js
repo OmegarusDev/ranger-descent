@@ -4,6 +4,7 @@ import {
   lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
 } from "./QuiverDeckManager.js";
 import { getArrowLook } from "./arrowLook.js";
+import { arrowBreak, flightShots, parseArrow } from "./arrowCraft.js";
 import { AutoMagicSystem } from "./AutoMagicSystem.js";
 import { GameStateManager } from "./GameStateManager.js";
 import {
@@ -88,12 +89,17 @@ function createProjectile(worldX, worldZ, vx, vz, damage, element, ownerId, leve
 function applyPlayerArrowStats(p, arrow) {
   const type = arrow?.type || "wood";
   const level = arrow?.level || 1;
-  const def = getArrowDef(type);
-  const pierceRanks = def.pierce != null ? def.pierce : 0;
-  p.damage = getArrowDamage(type, level);
-  p.fireDamage = getArrowFireDamage(type, level);
-  p.iceDamage = getArrowIceDamage(type, level);
-  p.element = type;
+  const def = getArrowDef(type, level);
+  const pierceRanks = def.pierce || 0;
+  p.sourceType = type;
+  p.arrowType = def.type;
+  p.damage = def.damage;
+  p.fireDamage = def.fireDamage || 0;
+  p.iceDamage = def.iceDamage || 0;
+  p.elemDamage = def.elemDamage || 0;
+  p.element = def.element;
+  p.material = def.material;
+  p.head = def.head;
   p.level = level;
   p.pierceLeft = 1 + pierceRanks;
   p.punchArmour = pierceRanks > 0;
@@ -124,12 +130,13 @@ function isGhost(enemy) {
   return enemy?.armor === "energy";
 }
 
-/** Silver bites. Fire, ice, shock, poison, and oil are the enchantments that catch. */
+/** Silver bites. Any element other than a bare shaft catches. */
 function arrowBitesGhost(proj) {
+  if (proj?.material === "silver" || proj?.element === "silver") return true;
+  if ((proj?.fireDamage || 0) > 0 || (proj?.iceDamage || 0) > 0 || (proj?.elemDamage || 0) > 0) return true;
   const el = proj?.element;
-  if (el === "silver") return true;
-  if ((proj?.fireDamage || 0) > 0 || (proj?.iceDamage || 0) > 0) return true;
-  return el === "fire" || el === "ice" || el === "shock" || el === "poison" || el === "oil";
+  return el === "fire" || el === "flame" || el === "ice" || el === "shock" || el === "lightning"
+    || el === "poison" || el === "oil" || el === "holy" || el === "enchanted";
 }
 
 export class CorridorSim {
@@ -1389,6 +1396,10 @@ export class CorridorSim {
     const returned = [];
     const broken = [];
     for (const a of spent) {
+      if (Math.random() < arrowBreak(parseArrow(a.type, a.level || 1))) {
+        broken.push({ type: a.type, level: a.level || 1, reason: "break" });
+        continue;
+      }
       if (Math.random() >= chance) {
         broken.push({ type: a.type, level: a.level || 1 });
         continue;
@@ -1798,88 +1809,79 @@ export class CorridorSim {
   }
 
   _calcDamage(proj, enemy, opts = {}) {
-    let phys = proj.damage;
+    const type = proj.arrowType || proj.element;
+    const def = getArrowDef(type, proj.level || 1);
+    const material = proj.material || def.material;
+    const axis = proj.arrowType ? (proj.element || def.element) : def.element;
+    let phys = proj.damage || 0;
     let fire = proj.fireDamage || 0;
     let frost = proj.iceDamage || 0;
-    const el = proj.element;
-    const def = getArrowDef(el);
-    if (def.vsUndead && /skeleton|ghoul|wight|wraith|lich|vampire/.test(enemy.type || "")) {
-      phys *= def.vsUndead;
-      fire *= def.vsUndead;
-      frost *= def.vsUndead;
-    }
+    let elem = proj.elemDamage || 0;
+    const undead = /skeleton|ghoul|wight|wraith|lich|vampire/.test(enemy.type || "");
+    if (undead && material === "silver") phys *= def.undeadPhys || 2;
+    if (undead && axis === "holy") elem *= def.undeadElem || 3;
     const ghost = isGhost(enemy);
-    const silver = el === "silver";
-    const soft = !def.hardTip && (el === "wood" || el === "flint" || el === "normal" || el === "kinetic"
-      || el === "fire" || el === "ice" || el === "poison" || el === "oil" || el === "stun"
-      || el === "double" || el === "barbed");
-    // Soft shafts half vs heavy — unless this is a pierce armour-punch.
-    if (enemy.armor === "heavy" && soft && !opts.punchArmour) phys *= 0.5;
-    else if (enemy.armor === "heavy" && el === "iron" && !opts.punchArmour) phys *= 0.85;
+    const silver = material === "silver";
+    if (enemy.armor === "heavy" && !def.hardTip && !opts.punchArmour) phys *= 0.5;
     if (enemy.armor === "insulated") {
       fire *= 0.45;
-      if (el === "shock") phys *= 0.55;
+      if (axis === "lightning" || axis === "shock") {
+        elem *= 0.55;
+        if (!proj.arrowType) phys *= 0.55;
+      }
     }
-    if (ghost && el === "shock") {
-      phys = (proj.damage || 0) * (def.vsEnergy || 1);
-    } else if (ghost && !silver) {
-      phys = 0;
-    }
-    if (enemy.shredT > 0 && !ghost) phys = Math.max(phys, proj.damage);
+    if (ghost && !silver) phys = 0;
+    if (enemy.shredT > 0 && !ghost) phys = Math.max(phys, proj.damage || 0);
     let crit = false;
     if (proj.ownerId === "player") {
       const str = this.state.getStrengthBonus();
-      if (!(ghost && !silver && el !== "shock")) phys += str;
-      fire = fire > 0 ? fire + str * 0.35 : 0;
-      frost = frost > 0 ? frost + str * 0.25 : 0;
+      if (!(ghost && !silver)) phys += str;
+      if (fire > 0) fire += str * 0.35;
+      if (frost > 0) frost += str * 0.25;
+      if (elem > 0) elem += str * 0.35;
       const mult = this.state.runBonuses.damageMultiplier || 1;
       phys *= mult;
       fire *= mult;
       frost *= mult;
-      if (Math.random() < this.state.getCritChance()) {
+      elem *= mult;
+      const chance = Math.min(0.95, (this.state.getCritChance() || 0) + (def.critBonus || 0));
+      if (Math.random() < chance) {
         crit = true;
         const critMul = this.state.getCritMultiplier();
         phys *= critMul;
         fire *= critMul;
         frost *= critMul;
+        elem *= critMul;
       }
     }
-    const total = Math.floor(phys + fire + frost);
+    const total = Math.floor(phys + fire + frost + elem);
     return { damage: ghost ? Math.max(0, total) : Math.max(1, total), crit };
   }
 
   _applyStatus(proj, e) {
-    const el = proj.element;
-    const def = getArrowDef(el);
-    if (el === "fire") {
+    const axis = proj.arrowType ? proj.element : (getArrowDef(proj.element, proj.level || 1).element);
+    const def = getArrowDef(proj.arrowType || proj.element, proj.level || 1);
+    const head = proj.head || def.head;
+    if (axis === "flame" || axis === "fire") {
       if (e.slowT > 0) { e.slowT = 0; e.slowFactor = 0.4; }
-      const oiled = e.oiledT > 0;
-      if (oiled) {
-        e.oiledT = 0;
-        e.burnT = Math.max(e.burnT, (def.burn || 3) + 2.5);
-        e.burnDps = Math.max(e.burnDps || 0, (def.burnDps || 3) + 2);
-        e.hp -= 5; // flash ignition
-      } else {
-        e.burnT = Math.max(e.burnT, def.burn || 3.5);
-        e.burnDps = Math.max(e.burnDps || 0, def.burnDps || 3);
-      }
-    } else if (el === "ice" || el === "frost") {
+      e.burnT = Math.max(e.burnT, def.burn || 3.5);
+      e.burnDps = Math.max(e.burnDps || 0, def.burnDps || 2);
+    } else if (axis === "ice" || axis === "frost") {
       if (e.burnT > 0) { e.burnT = 0; e.burnDps = 0; }
       e.slowT = Math.max(e.slowT, def.slow || 3.2);
       e.slowFactor = Math.min(e.slowFactor || 1, def.slowFactor || 0.32);
-    } else if (el === "poison") {
+    } else if (axis === "poison") {
       e.poisonT = Math.max(e.poisonT, def.poison || 4);
-      e.poisonDps = Math.max(e.poisonDps || 0, def.poisonDps || 2.4);
-    } else if (el === "oil") {
-      e.oiledT = Math.max(e.oiledT, 6.5);
-    } else if (el === "acid") {
+      e.poisonDps = Math.max(e.poisonDps || 0, def.poisonDps || 2);
+    } else if (axis === "lightning" || axis === "shock" || axis === "stun") {
+      e._hitStun = Math.max(e._hitStun || 0, def.stun || 0.55);
+      e._charging = false;
+    } else if (proj.element === "acid" || axis === "acid") {
       e.shredT = Math.max(e.shredT, 3);
-    } else if (el === "barbed") {
+    }
+    if (head === "barbed") {
       e.bleedT = Math.max(e.bleedT, def.bleed || 4);
       e.bleedDps = Math.max(e.bleedDps || 0, def.bleedDps || 2);
-    } else if (el === "stun" || el === "shock") {
-      e._hitStun = Math.max(e._hitStun || 0, def.stun || 0.7);
-      e._charging = false;
     }
   }
 
@@ -2082,7 +2084,7 @@ export class CorridorSim {
     const x = this.playerWorldX;
     const z = this.playerWorldZ + NOCK_ALONG;
     let p = this.nocked;
-    if (!p || p.element !== peek.type || p.level !== peek.level || !this.projectiles.includes(p)) {
+    if (!p || p.sourceType !== peek.type || p.level !== peek.level || !this.projectiles.includes(p)) {
       this.clearNocked();
       p = createProjectile(x, z, vx, vz, getArrowDamage(peek.type, peek.level), peek.type, "player", peek.level);
       this.nocked = p;
@@ -2145,21 +2147,32 @@ export class CorridorSim {
       applyPlayerArrowStats(proj, arrow);
       this.projectiles.push(proj);
     }
+    const spec = parseArrow(arrow.type, arrow.level);
+    const shots = flightShots(spec);
+    const vel = spec.vel || 1;
+    proj.vx *= vel;
+    proj.vz *= vel;
+    for (let i = 1; i < shots.length; i++) {
+      const shot = shots[i];
+      const ang = yaw + shot.yaw;
+      const extra = createProjectile(
+        this.playerWorldX,
+        this.playerWorldZ + NOCK_ALONG - shot.back,
+        Math.sin(ang) * spd * vel,
+        Math.cos(ang) * spd * vel,
+        dmg,
+        arrow.type,
+        "player",
+        arrow.level
+      );
+      applyPlayerArrowStats(extra, arrow);
+      extra.nocked = false;
+      extra.worldY = NOCK_Y;
+      this.projectiles.push(extra);
+    }
     const remaining = this.quiver.quiverCount;
     this.emit("arrow_fire", { arrow, projectile: proj, remaining });
     if (remaining === 0) this.emit("last_arrow", { arrow });
-    if (arrow.type === "double") {
-      const spread = 0.09;
-      const twin = createProjectile(
-        this.playerWorldX, this.playerWorldZ + NOCK_ALONG,
-        Math.sin(yaw + spread) * spd,
-        Math.cos(yaw + spread) * spd,
-        Math.max(1, Math.floor(dmg * 0.9)), "wood", "player",
-        arrow.level
-      );
-      twin.worldY = NOCK_Y;
-      this.projectiles.push(twin);
-    }
 
     if (this.state.consumeBurst()) {
       this._pendingBurst = { t: 0.08, vx: vx * 1.1, vz: vz * 1.1, level: arrow.level };

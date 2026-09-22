@@ -189,7 +189,7 @@ export function sellValueFromCost(cost) {
 
 export function getArrowSellValue(type, level = 1) {
   if (isWoodType(type)) return 0;
-  const def = getArrowDef(type);
+  const def = getArrowDef(type, level);
   return sellValueFromCost(arrowShopCost(def.cost, level));
 }
 

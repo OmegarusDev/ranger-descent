@@ -1,8 +1,8 @@
 import { CONFIG } from "../data/config.js";
 import {
-  getArrowDef,
   lootProgressScore, arrowLevelCapForProgress, rollArrowLevel,
 } from "./QuiverDeckManager.js";
+import { rollThemedArrow } from "./arrowCraft.js";
 
 export const ENEMY_DEFS = {
   // coinMin/Max = purse drop on kill (₡).
@@ -105,7 +105,8 @@ function rollEnemyItemDrop(type) {
   for (const entry of table) {
     if (Math.random() >= (entry.chance || 0)) continue;
     if (entry.kind === "arrow") {
-      return { kind: "arrow", type: entry.type, level: 1, label: getArrowDef(entry.type).name || entry.type };
+      const spec = rollThemedArrow(entry.type, 1);
+      return { kind: "arrow", type: spec.id, level: 1, label: spec.name };
     }
     if (entry.kind === "potion") {
       return { kind: "potion", itemId: entry.id, label: POTION_LABELS[entry.id] || entry.id };
@@ -131,12 +132,12 @@ function rollGroundFind(floorIndex, elevatorIndex) {
     const score = lootProgressScore(floorIndex, elevatorIndex);
     const cap = arrowLevelCapForProgress(score, { shop: false });
     const level = rollArrowLevel(Math.random, cap, { favorHigh: false });
-    const def = getArrowDef(type);
+    const spec = rollThemedArrow(type, level);
     return {
       kind: "arrow",
-      type,
-      level,
-      label: level > 1 ? `${def.name} Lv${level}` : def.name,
+      type: spec.id,
+      level: 1,
+      label: spec.name,
       detail: "A shaft kicked under a flagstone.",
     };
   }

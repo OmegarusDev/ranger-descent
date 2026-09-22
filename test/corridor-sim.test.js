@@ -67,7 +67,7 @@ test("settling a wave report replaces wood and records the discarded shaft", () 
   sim._collectWaveReport(report);
 
   assert.deepEqual(sim.quiver.peekQuiver().map((a) => a.type), ["iron"]);
-  assert.deepEqual(report.discarded.map((item) => [item.label, item.reason]), [["Wood Arrow", "replaced"]]);
+  assert.deepEqual(report.discarded.map((item) => [item.label, item.reason]), [["Wood Point Arrow", "replaced"]]);
 });
 
 test("acknowledging a settled report does not collect its loot twice", () => {

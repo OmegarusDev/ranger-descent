@@ -21,18 +21,21 @@ function slotY(i) {
 }
 
 function makeCard(arrow) {
-  const look = getArrowLook(arrow.type, arrow.level);
-  const def = getArrowDef(arrow.type);
   const lv = arrow.level || 1;
+  const look = getArrowLook(arrow.type, lv);
+  const def = getArrowDef(arrow.type, lv);
   const el = document.createElement("div");
-  el.className = `run-quiver-card ink-frame rq-q${look.quality}`;
-  if (look.element !== "none") el.classList.add(`rq-el-${look.element}`);
+  el.className = `run-quiver-card ink-frame rq-${look.quality}`;
+  if (look.element !== "none" && look.glow) {
+    el.classList.add("rq-el");
+    el.style.setProperty("--el", look.glow);
+  }
   if (look.shafts > 1) el.classList.add("rq-multi");
   el.dataset.arrowId = String(arrow.id);
-  el.style.setProperty("--shaft", look.headColor);
-  el.style.borderColor = look.headColor;
-  el.title = `${def.name} Lv${lv}`;
-  el.innerHTML = `${arrowIconSvg(arrow.type, look.headColor, lv)}<div class="rq-lv">Lv${lv}</div>`;
+  el.style.setProperty("--shaft", look.fill);
+  el.title = def.name;
+  const lvMark = lv > 1 ? `<div class="rq-lv">Lv${lv}</div>` : "";
+  el.innerHTML = `${arrowIconSvg(arrow.type, look.fill, lv)}${lvMark}`;
   return el;
 }
 
