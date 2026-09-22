@@ -86,14 +86,15 @@ function oneArrow(look, { stroke = true, mark = false } = {}) {
   const outline = look.outline;
   if (look.shape === "sharpened") {
     const side = `M-0.16,-3.7 L-0.16,${SHAFT_END - 0.5} L-${SHAFT_W - 0.22},${SHAFT_END - 0.5} L-${SHAFT_W * 0.55},-1.7 Z`;
-    const ink = stroke ? `<path d="${WOOD_SHAFT}" fill="none" stroke="${outline}" stroke-width="0.7" stroke-linejoin="round"/>` : "";
+    const ink = `<path d="${WOOD_SHAFT}" fill="none" stroke="${outline}" stroke-width="0.7" stroke-linejoin="round"/>`;
     const glyph = mark ? elementMark(look.element, outline, -4.4) : "";
     return `<path d="${WOOD_SHAFT}" fill="${fill}"/><path d="${side}" fill="${shade}" opacity="0.4"/>${ink}${glyph}`;
   }
   const art = HEAD_ART[look.shape] || HEAD_ART.point;
   const ink = stroke ? `<path d="${art.fill}" fill="none" stroke="${outline}" stroke-width="1.02" stroke-linejoin="round"/>` : "";
   const glyph = mark ? elementMark(look.element, outline, art.tip) : "";
-  return `<rect x="${-SHAFT_W}" y="5.4" width="${SHAFT_W * 2}" height="${SHAFT_END - 5.4}" fill="${SHAFT_COLOR}"/>`
+  const shaft = `M${-SHAFT_W},5.4 L${SHAFT_W},5.4 L${SHAFT_W},${SHAFT_END} L${-SHAFT_W},${SHAFT_END} Z`;
+  return `<path d="${shaft}" fill="${SHAFT_COLOR}" stroke="${outline}" stroke-width="0.7" stroke-linejoin="round"/>`
     + `<path d="${art.fill}" fill="${fill}"/>`
     + `<path d="${art.shade}" fill="${shade}" opacity="0.38"/>`
     + ink
