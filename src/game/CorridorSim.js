@@ -120,6 +120,18 @@ const PACK_NEAR = 300;
 const NOCK_ALONG = CONFIG.PLAYER_ARROW_ALONG || 18;
 const NOCK_Y = CONFIG.PLAYER_ARROW_Y || 26;
 
+function isGhost(enemy) {
+  return enemy?.armor === "energy";
+}
+
+/** Silver bites. Fire, ice, shock, poison, and oil are the enchantments that catch. */
+function arrowBitesGhost(proj) {
+  const el = proj?.element;
+  if (el === "silver") return true;
+  if ((proj?.fireDamage || 0) > 0 || (proj?.iceDamage || 0) > 0) return true;
+  return el === "fire" || el === "ice" || el === "shock" || el === "poison" || el === "oil";
+}
+
 export class CorridorSim {
   constructor() {
     this.state = new GameStateManager();
@@ -1742,6 +1754,11 @@ export class CorridorSim {
         const dx = p.x - e.x;
         const ddist = relDist - e.dist;
         if (Math.abs(dx) > halfW || Math.abs(ddist) > halfD) continue;
+        if (isGhost(e) && !arrowBitesGhost(p)) {
+          if (!p._hitIds) p._hitIds = [];
+          if (!p._hitIds.includes(e.id)) p._hitIds.push(e.id);
+          continue;
+        }
         {
           if (!p._hitIds) p._hitIds = [];
           p._hitIds.push(e.id);
@@ -1791,9 +1808,8 @@ export class CorridorSim {
       fire *= def.vsUndead;
       frost *= def.vsUndead;
     }
-    if (def.vsEnergy && enemy.armor === "energy") {
-      phys *= def.vsEnergy;
-    }
+    const ghost = isGhost(enemy);
+    const silver = el === "silver";
     const soft = !def.hardTip && (el === "wood" || el === "flint" || el === "normal" || el === "kinetic"
       || el === "fire" || el === "ice" || el === "poison" || el === "oil" || el === "stun"
       || el === "double" || el === "barbed");
@@ -1804,15 +1820,16 @@ export class CorridorSim {
       fire *= 0.45;
       if (el === "shock") phys *= 0.55;
     }
-    if (enemy.armor === "energy" && !def.vsEnergy) {
-      phys *= 0.7;
-      if (proj.ownerId === "player") this.state.damagePlayer(Math.floor(proj.damage * 0.25));
+    if (ghost && el === "shock") {
+      phys = (proj.damage || 0) * (def.vsEnergy || 1);
+    } else if (ghost && !silver) {
+      phys = 0;
     }
-    if (enemy.shredT > 0) phys = Math.max(phys, proj.damage);
+    if (enemy.shredT > 0 && !ghost) phys = Math.max(phys, proj.damage);
     let crit = false;
     if (proj.ownerId === "player") {
       const str = this.state.getStrengthBonus();
-      phys += str;
+      if (!(ghost && !silver && el !== "shock")) phys += str;
       fire = fire > 0 ? fire + str * 0.35 : 0;
       frost = frost > 0 ? frost + str * 0.25 : 0;
       const mult = this.state.runBonuses.damageMultiplier || 1;
@@ -1827,7 +1844,8 @@ export class CorridorSim {
         frost *= critMul;
       }
     }
-    return { damage: Math.max(1, Math.floor(phys + fire + frost)), crit };
+    const total = Math.floor(phys + fire + frost);
+    return { damage: ghost ? Math.max(0, total) : Math.max(1, total), crit };
   }
 
   _applyStatus(proj, e) {
@@ -1978,6 +1996,14 @@ export class CorridorSim {
     }
     const best = bestHit || (bestNear && bestNearDist <= 42 ? bestNear : null);
     if (!best) return false;
+
+    const silverDagger = /silver/i.test(this.state.equipped?.dagger || "");
+    if (isGhost(best) && !silverDagger) {
+      this.state.daggerCooldown = this.state.getDaggerCooldown();
+      const relDist = best.worldZ - this.playerWorldZ;
+      this.emit("dagger_hit", { enemy: best, x: best.x, dist: relDist, damage: 0, crit: false, phased: true });
+      return true;
+    }
 
     let raw = this.state.getDaggerDamage();
     let crit = false;

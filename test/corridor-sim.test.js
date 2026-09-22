@@ -525,3 +525,48 @@ test("a turning pack stays on the chosen arm, not on the camera", () => {
   assert.ok(Math.abs(late.x - posed.x) < 0.01, "the pack does not slide with the camera");
   assert.ok(Math.abs(late.z - posed.z) < 0.01);
 });
+
+test("physical arrows and the iron dagger pass through a wraith", () => {
+  const sim = new CorridorSim();
+  sim.state.startRun();
+  sim.playerWorldZ = 0;
+  sim.playerWorldX = 0;
+  sim.dt = 1 / 60;
+  const wraith = {
+    id: 1, type: "wraith", x: 0, worldZ: 40, dist: 40,
+    hp: 40, maxHp: 40, armor: "energy", behavior: "zigzag", size: 1.3,
+  };
+  const shot = (element, extra = {}) => ({
+    id: element, x: 0, worldZ: 40, vx: 0, vz: 0,
+    damage: 6, fireDamage: 0, iceDamage: 0,
+    element, ownerId: "player", life: 4, pierceLeft: 1,
+    _hitIds: [], _trail: [], ...extra,
+  });
+
+  sim.enemies = [{ ...wraith }];
+  sim.projectiles = [shot("wood")];
+  const hp0 = sim.state.playerHp;
+  sim._tickProjectiles();
+  assert.equal(sim.enemies[0].hp, 40, "wood does not chip a wraith");
+  assert.equal(sim.projectiles.length, 1, "the shaft keeps flying");
+  assert.equal(sim.state.playerHp, hp0, "a missed ghost does not bite the ranger");
+
+  sim.enemies = [{ ...wraith }];
+  sim.projectiles = [shot("silver")];
+  sim._tickProjectiles();
+  assert.ok(sim.enemies[0].hp < 40, "silver bites");
+  assert.equal(sim.projectiles.length, 0);
+
+  sim.enemies = [{ ...wraith }];
+  sim.projectiles = [shot("fire", { fireDamage: 4, damage: 2 })];
+  sim._tickProjectiles();
+  assert.ok(sim.enemies[0].hp < 40, "fire catches");
+  assert.equal(sim.projectiles.length, 0);
+
+  sim.enemies = [{ ...wraith, dist: 20, worldZ: 20 }];
+  sim.state.equipped.dagger = "dagger_iron";
+  sim.state.daggerCooldown = 0;
+  const before = sim.enemies[0].hp;
+  assert.equal(sim.tryDaggerAt(10, 10, () => true), true);
+  assert.equal(sim.enemies[0].hp, before, "an iron dagger passes through");
+});

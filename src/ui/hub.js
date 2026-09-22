@@ -432,7 +432,7 @@ const BESTIARY_META = {
   skeleton_archer: { name: "Skeleton Archer", behavior: "Stops at range and fires bone arrows at you" },
   ghoul: { name: "Ghoul", behavior: "Shambling undead" },
   wight: { name: "Wight", behavior: "Tougher ghoul, steady advance" },
-  wraith: { name: "Wraith", behavior: "Phases through attacks, zigzags unpredictably" },
+  wraith: { name: "Wraith", behavior: "Physical shafts pass through. Silver and enchanted arrows catch." },
   vampire: { name: "Vampire", behavior: "Notices player, charges, drains HP" },
   vampire_lord: { name: "Vampire Lord", behavior: "Faster, stronger vampire" },
   lich: { name: "Lich", behavior: "Ranged magic, summons minions" },
