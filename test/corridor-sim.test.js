@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CorridorSim, ENEMY_DEFS } from "../src/game/CorridorSim.js";
+import { placeBody } from "../src/engine/dungeon/world.js";
 
 test("reports absolute floors and repeating floor-local waves", () => {
   const sim = new CorridorSim();
@@ -490,7 +491,7 @@ test("turning walks the camera into a frozen fork then commits heading", () => {
   assert.ok(sim._cornerHold);
 });
 
-test("turning poses next-hall packs in the chosen mouth", () => {
+test("a turning pack stays on the chosen arm, not on the camera", () => {
   const sim = new CorridorSim();
   sim.state.startRun();
   sim.mapX = 0;
@@ -501,17 +502,26 @@ test("turning poses next-hall packs in the chosen mouth", () => {
   sim.junctionPending = true;
   sim.chooseJunction("right");
   const z = sim.segmentStartZ;
-  const posed = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
-  assert.ok(posed);
-  assert.ok(posed.x > 150);
-  assert.ok(posed.dist <= 130);
-  assert.ok(posed.dist >= 12);
+  const frame = {
+    camX: sim.mapX,
+    camZ: sim.mapZ,
+    heading: 0,
+    playerZ: sim.playerWorldZ,
+    seg0: z,
+    corner: sim._cornerMotion(),
+  };
+  const posed = placeBody(frame, { x: 8, worldZ: z + 200, dist: 200 });
+  assert.ok(posed.x > 150, "pack sits down the right-hand arm");
+  assert.ok(Math.abs(posed.z - sim._turnFork.z) < 40);
   sim.turnU = 0.9;
   sim.turnT = sim.turnDur * 0.9;
   sim._applyTurnPose();
-  const late = sim.poseForTurnView({ x: 8, worldZ: z + 200, dist: 200 }, z);
-  assert.ok(late);
+  frame.camX = sim.mapX;
+  frame.camZ = sim.mapZ;
+  frame.corner = sim._cornerMotion();
+  const late = placeBody(frame, { x: 8, worldZ: z + 200, dist: 200 });
   assert.ok(sim.mapZ > 80);
   assert.ok(sim.mapX > 10);
-  assert.ok(late.x > 0);
+  assert.ok(Math.abs(late.x - posed.x) < 0.01, "the pack does not slide with the camera");
+  assert.ok(Math.abs(late.z - posed.z) < 0.01);
 });

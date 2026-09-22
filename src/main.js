@@ -2,7 +2,7 @@
  * main.js — Entry point. Wires DungeonView, CorridorSim, InputHandler.
  */
 import { RenderEngine2D5 } from "./engine/RenderEngine2D5.js?v=4";
-import { DungeonView } from "./engine/DungeonView.js?v=177";
+import { DungeonView } from "./engine/dungeon/view.js?v=3";
 import { CONFIG } from "./data/config.js";
 import { getArrowDef, arrowShort, isWoodType } from "./game/QuiverDeckManager.js";
 import { getConsumable, consumableIconSvg } from "./data/consumables.js";
@@ -1032,15 +1032,13 @@ function drawCorridor(ctx, dt = 1 / 60) {
   dungeon.setPose({
     x: cam.mapX,
     z: cam.mapZ,
-    lookYaw,
-    walkYaw: turning
-      ? (((sim._turnOldHeading ?? sim.heading) || 0) * Math.PI) / 180
-      : headingRad,
+    yaw: lookYaw,
+    heading: headingRad,
     along: cam.playerWorldZ - (sim.segmentStartZ || 0),
     ahead: (sim.segmentEndZ || 0) - cam.playerWorldZ,
     segmentIndex: sim.segmentIndex || 0,
+    seg0: sim.segmentStartZ || 0,
   });
-  dungeon.combatYaw = null;
   const pulling = !!(input.isDragging && input.power > 2) && !overlayBlocksSim() && !sim.junctionPending;
   const pwr = input.power || 0;
   const nockSpd = CONFIG.ARROW_SPEED * (0.4 + 0.6 * Math.min(1, pwr / CONFIG.SLINGSHOT_MAX_POWER));
@@ -1066,45 +1064,14 @@ function drawCorridor(ctx, dt = 1 / 60) {
   for (let i = entities.length - 1; i >= 0; i--) {
     const ent = entities[i];
     const body = ent.entity;
-    const saved = body ? { x: body.x, dist: body.dist } : null;
-    const posed = body && typeof sim.poseForTurnView === "function"
-      ? sim.poseForTurnView(body, cam.playerWorldZ)
-      : null;
-    if (posed) {
-      body.x = posed.x;
-      body.dist = posed.dist;
-    }
-    try {
-      if (ent.type === "enemy") dungeon.drawEnemy(body);
-      else if (ent.type === "projectile" && !body.nocked) dungeon.drawProjectile(body);
-      else if (ent.type === "enemy_projectile") dungeon.drawProjectile(body, true);
-    } finally {
-      if (body && saved) {
-        body.x = saved.x;
-        body.dist = saved.dist;
-      }
-    }
+    if (ent.type === "enemy") dungeon.drawEnemy(body);
+    else if (ent.type === "projectile" && !body.nocked) dungeon.drawProjectile(body);
+    else if (ent.type === "enemy_projectile") dungeon.drawProjectile(body, true);
   }
   ctx.restore();
 
   dungeon.drawOverlay(ctx, input, sim.nocked);
-  if (sim.nocked) {
-    const body = sim.nocked;
-    const saved = { x: body.x, dist: body.dist };
-    const posed = typeof sim.poseForTurnView === "function"
-      ? sim.poseForTurnView(body, cam.playerWorldZ)
-      : null;
-    if (posed) {
-      body.x = posed.x;
-      body.dist = posed.dist;
-    }
-    try {
-      dungeon.drawProjectile(body);
-    } finally {
-      body.x = saved.x;
-      body.dist = saved.dist;
-    }
-  }
+  if (sim.nocked) dungeon.drawProjectile(sim.nocked);
 }
 
 // ─── Game Loop ────────────────────────────────────────────────

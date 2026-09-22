@@ -635,25 +635,6 @@ export class CorridorSim {
     return this._cornerHold || null;
   }
 
-  /** Corridor-local sprite pose while the camera looks into a chosen fork. */
-  poseForTurnView(entity, camZ) {
-    if (!this.turning || !entity || !this._turnFork) return null;
-    const along = (entity.worldZ != null ? entity.worldZ : (this.segmentStartZ || 0) + (entity.dist || 0))
-      - (this.segmentStartZ || 0);
-    if (!Number.isFinite(along) || along < 4) return null;
-    const lat = entity.x || 0;
-    const oldRad = (this._turnOldHeading * Math.PI) / 180;
-    const newRad = ((this._turnOldHeading + this.turnTarget) * Math.PI) / 180;
-    const wx = this._turnFork.x + Math.sin(newRad) * along + Math.cos(newRad) * lat;
-    const wz = this._turnFork.z + Math.cos(newRad) * along - Math.sin(newRad) * lat;
-    const dx = wx - this.mapX;
-    const dz = wz - this.mapZ;
-    return {
-      x: dx * Math.cos(oldRad) - dz * Math.sin(oldRad),
-      dist: dx * Math.sin(oldRad) + dz * Math.cos(oldRad),
-    };
-  }
-
   _offerJunction() {
     if (!this.junctionChoices || !this.junctionChoices.length) this._rollJunction();
     if (!this.junctionChoices || !this.junctionChoices.length) return;
